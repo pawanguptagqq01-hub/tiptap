@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TipTap Super Admin - Multi-Restaurant SaaS Platform</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            display: ['"Outfit"', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- Top Platform Navigation -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-500 to-sky-400 flex items-center justify-center text-white font-black text-base shadow-lg shadow-brand-500/30">
+          TT
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-extrabold text-white text-lg tracking-tight">TipTap</span>
+            <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/40">
+              Super Admin SaaS
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400">Multi-Restaurant Operations HQ</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="/dashboard.html" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition">
+          Switch to Staff POS ➔
+        </a>
+        <button onclick="openOnboardModal()" class="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-lg shadow-brand-500/25 transition flex items-center gap-1.5 active:scale-95">
+          <span>＋</span>
+          <span>Onboard New Restaurant</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+
+    <!-- Platform Hero / Summary -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Registered Restaurants Network</h1>
+        <p class="text-xs sm:text-sm text-slate-400 mt-1">
+          Manage all partner dining brands, provision new restaurants, and monitor platform activity.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Multi-Tenant Engine Online</span>
+      </div>
+    </div>
+
+    <!-- Platform Metric KPI Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      
+      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
+          <span>TOTAL RESTAURANTS</span>
+          <span class="text-lg">🏪</span>
+        </div>
+        <p class="text-3xl font-black text-white" id="statTotalRest">0</p>
+        <p class="text-[11px] text-brand-400 font-semibold mt-1">Active subscriptions</p>
+      </div>
+
+      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
+          <span>TOTAL TABLES DEPLOYED</span>
+          <span class="text-lg">🍽️</span>
+        </div>
+        <p class="text-3xl font-black text-brand-400" id="statTotalTables">0</p>
+        <p class="text-[11px] text-slate-400 font-medium mt-1">NFC enabled tables</p>
+      </div>
+
+      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
+          <span>MONTHLY REVENUE (ARR)</span>
+          <span class="text-lg">💰</span>
+        </div>
+        <p class="text-3xl font-black text-emerald-400" id="statSaaSRevenue">₹0</p>
+        <p class="text-[11px] text-emerald-400/80 font-medium mt-1">@ ₹999/mo per restaurant</p>
+      </div>
+
+      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
+          <span>ACTIVE ORDERS RIGHT NOW</span>
+          <span class="text-lg">⚡</span>
+        </div>
+        <p class="text-3xl font-black text-amber-400" id="statActiveOrders">0</p>
+        <p class="text-[11px] text-slate-400 font-medium mt-1">Across all restaurant kitchens</p>
+      </div>
+
+    </div>
+
+    <!-- Restaurants List -->
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-extrabold text-white">Your Partner Restaurants</h2>
+        <span class="text-xs text-slate-400" id="restaurantCountSubtitle">Loading restaurants...</span>
+      </div>
+
+      <!-- Restaurant Cards Grid -->
+      <div id="restaurantsGrid" class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Onboard New Restaurant Modal -->
+  <div id="onboardModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-6">
+      
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div>
+          <span class="text-[11px] font-bold text-brand-400 uppercase tracking-wider">Fast Onboarding Form</span>
+          <h3 class="text-lg font-extrabold text-white">Onboard a New Restaurant</h3>
+        </div>
+        <button onclick="closeOnboardModal()" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 font-bold">
+          ✕
+        </button>
+      </div>
+
+      <form id="onboardForm" onsubmit="handleOnboardSubmit(event)" class="space-y-4 text-xs">
+        
+        <div>
+          <label class="block font-bold text-slate-300 mb-1">Restaurant Business Name *</label>
+          <input type="text" id="inpName" required placeholder="E.g., Royal Biryani House, Chai Point"
+            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Owner WhatsApp Phone *</label>
+            <input type="text" id="inpPhone" required placeholder="+91 98765 43210"
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Number of Dining Tables *</label>
+            <input type="number" id="inpTables" min="1" max="50" value="8" required
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-300 mb-1">City / Full Address</label>
+          <input type="text" id="inpAddress" placeholder="Shop 4, MG Road, Connaught Place, New Delhi"
+            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">GSTIN Number (Optional)</label>
+            <input type="text" id="inpGstin" placeholder="07AAAAA0000A1Z5"
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Staff 4-Digit Login PIN</label>
+            <input type="text" id="inpPin" maxlength="6" value="1234"
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+          </div>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" id="btnSubmitOnboard" class="w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-sm shadow-lg shadow-brand-500/25 transition flex items-center justify-center gap-2">
+            <span>🚀 Create & Launch Restaurant Account</span>
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
+
+  <script>
+    let restaurants = [];
+
+    async function loadRestaurants() {
+      try {
+        const res = await fetch('/api/restaurants');
+        restaurants = await res.json();
+        renderKPIs();
+        renderRestaurantsList();
+      } catch (err) {
+        console.error('Failed to load restaurants:', err);
+      }
+    }
+
+    function renderKPIs() {
+      document.getElementById('statTotalRest').innerText = restaurants.length;
+      const totalTables = restaurants.reduce((sum, r) => sum + (r.tableCount || 0), 0);
+      document.getElementById('statTotalTables').innerText = totalTables;
+      document.getElementById('statSaaSRevenue').innerText = `₹${(restaurants.length * 999).toLocaleString('en-IN')}`;
+      const activeOrders = restaurants.reduce((sum, r) => sum + (r.activeOrdersCount || 0), 0);
+      document.getElementById('statActiveOrders').innerText = activeOrders;
+      document.getElementById('restaurantCountSubtitle').innerText = `${restaurants.length} active partners`;
+    }
+
+    function renderRestaurantsList() {
+      const grid = document.getElementById('restaurantsGrid');
+      if (restaurants.length === 0) {
+        grid.innerHTML = `<p class="col-span-full py-12 text-center text-slate-400">No restaurants onboarded yet. Click "Onboard New Restaurant" above!</p>`;
+        return;
+      }
+
+      grid.innerHTML = restaurants.map(r => `
+        <div class="bg-slate-800/90 rounded-3xl p-6 border border-slate-700 shadow-xl space-y-5 flex flex-col justify-between hover:border-brand-500/60 transition">
+          
+          <div>
+            <!-- Header -->
+            <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-700/80">
+              <div>
+                <h3 class="font-extrabold text-white text-base leading-tight">${r.name}</h3>
+                <p class="text-xs text-brand-400 font-mono mt-0.5">id: ${r.id}</p>
+              </div>
+              <span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                ${r.plan}
+              </span>
+            </div>
+
+            <!-- Details -->
+            <div class="py-3 space-y-1.5 text-xs text-slate-300">
+              <p class="flex items-center gap-2">
+                <span class="text-slate-500">📍</span>
+                <span class="truncate">${r.address || 'Address not set'}</span>
+              </p>
+              <p class="flex items-center gap-2">
+                <span class="text-slate-500">📞</span>
+                <span>${r.phone || 'Phone not set'}</span>
+              </p>
+              <p class="flex items-center gap-2">
+                <span class="text-slate-500">🍽️</span>
+                <span>${r.tableCount} Dining Tables • ${r.menuItemsCount} Menu Dishes</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="space-y-2 pt-2 border-t border-slate-700/80">
+            <a href="/dashboard.html?restaurant=${r.id}" target="_blank" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow">
+              <span>Open Staff POS & Kitchen</span>
+              <span>➔</span>
+            </a>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <a href="/menu.html?restaurant=${r.id}&table=1" target="_blank" class="py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold text-center transition">
+                📱 Guest Menu (T1)
+              </a>
+              <a href="/nfc-manager.html?restaurant=${r.id}" target="_blank" class="py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold text-center transition">
+                💳 Print NFC Stands
+              </a>
+            </div>
+
+            <button onclick="shareWelcomeOnWhatsApp('${r.name}', '${r.id}', '${r.phone}')" class="w-full py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition">
+              <span>💬</span> Send Login & NFC Pack via WhatsApp
+            </button>
+          </div>
+
+        </div>
+      `).join('');
+    }
+
+    // Onboarding Form
+    function openOnboardModal() {
+      document.getElementById('onboardModal').classList.remove('hidden');
+    }
+
+    function closeOnboardModal() {
+      document.getElementById('onboardModal').classList.add('hidden');
+    }
+
+    async function handleOnboardSubmit(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnSubmitOnboard');
+      btn.disabled = true;
+      btn.innerText = 'Creating Restaurant Account...';
+
+      const payload = {
+        name: document.getElementById('inpName').value.trim(),
+        phone: document.getElementById('inpPhone').value.trim(),
+        tablesCount: parseInt(document.getElementById('inpTables').value, 10) || 8,
+        address: document.getElementById('inpAddress').value.trim(),
+        gstin: document.getElementById('inpGstin').value.trim(),
+        pin: document.getElementById('inpPin').value.trim() || '1234'
+      };
+
+      try {
+        const res = await fetch('/api/restaurants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          closeOnboardModal();
+          document.getElementById('onboardForm').reset();
+          await loadRestaurants();
+          alert(`✅ Restaurant "${payload.name}" successfully created with ${payload.tablesCount} tables!`);
+        } else {
+          const err = await res.json();
+          alert(err.error || 'Failed to create restaurant');
+        }
+      } catch (err) {
+        alert('Server network error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '🚀 Create & Launch Restaurant Account';
+      }
+    }
+
+    function shareWelcomeOnWhatsApp(name, id, phone) {
+      const host = window.location.origin;
+      const message = `*🌟 Welcome to TipTap NFC Dining Platform!*\n\n` +
+        `Dear Owner of *${name}*,\n` +
+        `Your smart NFC table ordering & kitchen POS platform is now live!\n\n` +
+        `*🔑 Your Staff Dashboard Link:*\n` +
+        `${host}/dashboard.html?restaurant=${id}\n` +
+        `PIN: 1234\n\n` +
+        `*📱 Sample Guest Menu (Table 1):*\n` +
+        `${host}/menu.html?restaurant=${id}&table=1\n\n` +
+        `*💳 Printable Table NFC Tent Cards:*\n` +
+        `${host}/nfc-manager.html?restaurant=${id}\n\n` +
+        `Powered by TipTap Technologies 🚀`;
+
+      const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+      const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+      window.open(url, '_blank');
+    }
+
+    loadRestaurants();
+  </script>
+</body>
+</html>

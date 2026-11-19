@@ -1,0 +1,801 @@
+{
+  "superAdmin": {
+    "name": "TipTap Platform Admin",
+    "pin": "0000"
+  },
+  "restaurants": {
+    "tiptap-bistro": {
+      "id": "tiptap-bistro",
+      "name": "TipTap Bistro & Cafe",
+      "tagline": "Smart NFC Table Dining",
+      "phone": "+91 98765 43210",
+      "gstin": "07AAAAA0000A1Z5",
+      "address": "Shop 12, Galleria Market, Cyber City",
+      "gstPercent": 5,
+      "rushMode": false,
+      "tables": [
+        {
+          "id": 1,
+          "name": "Table 1",
+          "capacity": 2,
+          "status": "cleaning",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 2,
+          "name": "Table 2",
+          "capacity": 4,
+          "status": "cleaning",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 3,
+          "name": "Table 3",
+          "capacity": 4,
+          "status": "cleaning",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 4,
+          "name": "Table 4",
+          "capacity": 6,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 5,
+          "name": "Table 5",
+          "capacity": 2,
+          "status": "cleaning",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 6,
+          "name": "Table 6",
+          "capacity": 8,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 7,
+          "name": "Table 7",
+          "capacity": 4,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 8,
+          "name": "Table 8",
+          "capacity": 4,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        }
+      ],
+      "menu": [
+        {
+          "id": "m1",
+          "name": "Paneer Butter Masala",
+          "category": "Main Course",
+          "type": "veg",
+          "isJain": true,
+          "price": 280,
+          "description": "Rich, creamy cottage cheese curry cooked with aromatic butter & spices.",
+          "inStock": false,
+          "variants": [
+            {
+              "name": "Half",
+              "price": 160
+            },
+            {
+              "name": "Full",
+              "price": 280
+            }
+          ],
+          "addons": [
+            {
+              "name": "Extra Butter Cube",
+              "price": 20
+            },
+            {
+              "name": "Garlic Butter Toss",
+              "price": 30
+            }
+          ],
+          "image": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "m2",
+          "name": "Butter Chicken Special",
+          "category": "Main Course",
+          "type": "nonveg",
+          "isJain": false,
+          "price": 340,
+          "description": "Smoked tandoori chicken cooked in velvety tomato-cashew makhani gravy.",
+          "inStock": true,
+          "variants": [
+            {
+              "name": "Half",
+              "price": 210
+            },
+            {
+              "name": "Full",
+              "price": 340
+            }
+          ],
+          "addons": [
+            {
+              "name": "Extra Chicken Piece",
+              "price": 60
+            }
+          ],
+          "image": "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "m3",
+          "name": "Crispy Veg Spring Rolls",
+          "category": "Starters",
+          "type": "veg",
+          "isJain": false,
+          "price": 180,
+          "description": "Crispy golden rolls stuffed with shredded veggies, served with sweet chili dip.",
+          "inStock": true,
+          "variants": [],
+          "addons": [
+            {
+              "name": "Cheesy Mayo Dip",
+              "price": 30
+            }
+          ],
+          "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "m4",
+          "name": "Amritsari Fish Tikka",
+          "category": "Starters",
+          "type": "nonveg",
+          "isJain": false,
+          "price": 320,
+          "description": "Carom seed-flavored crispy fried river sole served with mint chutney.",
+          "inStock": true,
+          "variants": [],
+          "addons": [],
+          "image": "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "m5",
+          "name": "Butter Naan / Garlic Naan",
+          "category": "Breads",
+          "type": "veg",
+          "isJain": true,
+          "price": 55,
+          "description": "Clay oven baked Indian flatbread brushed with fresh butter.",
+          "inStock": true,
+          "variants": [
+            {
+              "name": "Butter Naan",
+              "price": 55
+            },
+            {
+              "name": "Garlic Naan",
+              "price": 75
+            }
+          ],
+          "addons": [],
+          "image": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "m6",
+          "name": "Blueberry Cheesecake",
+          "category": "Desserts",
+          "type": "veg",
+          "isJain": true,
+          "price": 195,
+          "description": "Silky smooth New York style cheesecake topped with wild blueberry glaze.",
+          "inStock": true,
+          "variants": [],
+          "addons": [],
+          "image": "https://images.unsplash.com/photo-1533134242443-d4fd215305ad?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "m7",
+          "name": "Sky Blue Lagoon Mojito",
+          "category": "Beverages",
+          "type": "veg",
+          "isJain": true,
+          "price": 140,
+          "description": "Refreshing blue curacao cooler with fresh mint leaves and sparkling soda.",
+          "inStock": true,
+          "variants": [],
+          "addons": [],
+          "image": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "m8",
+          "name": "Cold Coffee with Ice Cream",
+          "category": "Beverages",
+          "type": "veg",
+          "isJain": true,
+          "price": 160,
+          "description": "Rich blended espresso coffee served chilled with a scoop of vanilla ice cream.",
+          "inStock": true,
+          "variants": [],
+          "addons": [
+            {
+              "name": "Extra Chocolate Drizzle",
+              "price": 20
+            }
+          ],
+          "image": "https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?auto=format&fit=crop&w=600&q=80"
+        }
+      ],
+      "orders": [
+        {
+          "id": "ORD-1885",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "items": [
+            {
+              "id": "m1",
+              "name": "Paneer Butter Masala",
+              "variant": "Half",
+              "price": 160,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 160
+            },
+            {
+              "id": "m2",
+              "name": "Butter Chicken Special",
+              "variant": "Half",
+              "price": 210,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 210
+            }
+          ],
+          "notes": "less papper",
+          "subtotal": 370,
+          "gst": 18.5,
+          "total": 388.5,
+          "status": "served",
+          "paymentMethod": null,
+          "createdAt": "2026-11-19T20:46:41.886Z",
+          "updatedAt": "2026-11-19T20:49:00.345Z"
+        },
+        {
+          "id": "ORD-8662",
+          "orderType": "dinein",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "customerName": "",
+          "customerPhone": "",
+          "deliveryAddress": "",
+          "items": [
+            {
+              "id": "m8",
+              "name": "Cold Coffee with Ice Cream",
+              "variant": "",
+              "price": 160,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 160
+            }
+          ],
+          "notes": "less papper",
+          "subtotal": 160,
+          "discount": 0,
+          "promoCode": "",
+          "packagingCharge": 0,
+          "gst": 8,
+          "total": 168,
+          "status": "received",
+          "paymentMethod": null,
+          "createdAt": "2026-11-19T22:14:48.663Z",
+          "updatedAt": "2026-11-19T22:14:48.663Z"
+        }
+      ],
+      "serviceRequests": [],
+      "completedOrders": [
+        {
+          "id": "ORD-101",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "items": [
+            {
+              "id": "m1",
+              "name": "Paneer Butter Masala",
+              "variant": "Full",
+              "price": 280,
+              "qty": 1,
+              "addons": [
+                "Extra Butter Cube (₹20)"
+              ],
+              "itemTotal": 300
+            },
+            {
+              "id": "m5",
+              "name": "Butter Naan",
+              "variant": "Butter Naan",
+              "price": 55,
+              "qty": 2,
+              "addons": [],
+              "itemTotal": 110
+            },
+            {
+              "id": "m7",
+              "name": "Sky Blue Lagoon Mojito",
+              "variant": "",
+              "price": 140,
+              "qty": 2,
+              "addons": [],
+              "itemTotal": 280
+            }
+          ],
+          "notes": "Make curry medium spicy, bring mojito first.",
+          "subtotal": 690,
+          "gst": 34.5,
+          "total": 724.5,
+          "status": "paid",
+          "paymentMethod": "upi",
+          "createdAt": "2026-11-19T20:15:15.496Z",
+          "updatedAt": "2026-11-19T20:50:42.861Z"
+        },
+        {
+          "id": "ORD-5727",
+          "orderType": "dinein",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "customerName": "Aman Verma",
+          "customerPhone": "9876543210",
+          "deliveryAddress": "",
+          "items": [
+            {
+              "name": "Butter Chicken",
+              "variant": "",
+              "price": 320,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 320
+            }
+          ],
+          "notes": "",
+          "subtotal": 320,
+          "discount": 0,
+          "promoCode": "",
+          "packagingCharge": 0,
+          "gst": 16,
+          "total": 336,
+          "status": "paid",
+          "paymentMethod": "UPI (Instant Auto-Verify)",
+          "createdAt": "2026-11-19T23:17:15.727Z",
+          "updatedAt": "2026-11-19T23:17:15.727Z",
+          "txnId": "TXN_1795130235739_3546",
+          "paidAt": "2026-11-19T23:17:15.743Z",
+          "paymentDetails": {
+            "provider": "Razorpay / Dynamic UPI",
+            "txnId": "TXN_1795130235739_3546",
+            "gatewayTxnId": "RZP_MWO66YQN",
+            "verified": true,
+            "verifiedAt": "2026-11-19T23:17:15.743Z",
+            "simulated": true
+          }
+        },
+        {
+          "id": "ORD-0417",
+          "orderType": "dinein",
+          "tableId": 1,
+          "tableName": "Table 1",
+          "customerName": "",
+          "customerPhone": "",
+          "deliveryAddress": "",
+          "items": [
+            {
+              "id": "m2",
+              "name": "Butter Chicken Special",
+              "variant": "Half",
+              "price": 210,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 210
+            }
+          ],
+          "notes": "",
+          "subtotal": 210,
+          "discount": 0,
+          "promoCode": "",
+          "packagingCharge": 0,
+          "gst": 10.5,
+          "total": 220.5,
+          "status": "paid",
+          "paymentMethod": "UPI (Instant Auto-Verify)",
+          "createdAt": "2026-11-19T23:19:20.418Z",
+          "updatedAt": "2026-11-19T23:19:20.418Z",
+          "txnId": "TXN_1795130369882_3124",
+          "paidAt": "2026-11-19T23:19:45.110Z",
+          "paymentDetails": {
+            "provider": "Razorpay / Dynamic UPI",
+            "txnId": "TXN_1795130369882_3124",
+            "gatewayTxnId": "RZP_MWO6A5ZQ",
+            "verified": true,
+            "verifiedAt": "2026-11-19T23:19:45.110Z",
+            "simulated": true
+          }
+        },
+        {
+          "id": "ORD-7076",
+          "orderType": "dinein",
+          "tableId": 1,
+          "tableName": "Table 1",
+          "customerName": "yera4",
+          "customerPhone": "9536956255",
+          "deliveryAddress": "",
+          "items": [
+            {
+              "id": "m2",
+              "name": "Butter Chicken Special",
+              "variant": "Full",
+              "price": 340,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 340
+            }
+          ],
+          "notes": "",
+          "subtotal": 340,
+          "discount": 0,
+          "promoCode": "",
+          "packagingCharge": 0,
+          "gst": 17,
+          "total": 357,
+          "status": "paid",
+          "paymentMethod": "UPI (Instant Auto-Verify)",
+          "createdAt": "2026-11-19T23:22:47.076Z",
+          "updatedAt": "2026-11-19T23:22:47.076Z",
+          "txnId": "TXN_1795130577840_6031",
+          "paidAt": "2026-11-19T23:23:08.081Z",
+          "paymentDetails": {
+            "provider": "Razorpay / Dynamic UPI",
+            "txnId": "TXN_1795130577840_6031",
+            "gatewayTxnId": "RZP_MWO6EILT",
+            "verified": true,
+            "verifiedAt": "2026-11-19T23:23:08.081Z",
+            "simulated": true
+          }
+        }
+      ],
+      "promoCodes": [
+        {
+          "code": "WELCOME10",
+          "type": "percent",
+          "value": 10,
+          "minOrder": 200,
+          "description": "10% OFF on orders above ₹200"
+        },
+        {
+          "code": "FLAT50",
+          "type": "flat",
+          "value": 50,
+          "minOrder": 400,
+          "description": "Flat ₹50 OFF on orders above ₹400"
+        }
+      ],
+      "customers": [
+        {
+          "phone": "9876543210",
+          "name": "Aman Verma",
+          "visits": 5,
+          "totalSpent": 3186,
+          "loyaltyPoints": 318,
+          "lastVisit": "2026-11-19T23:17:15.727Z"
+        },
+        {
+          "phone": "9811122233",
+          "name": "Priya Verma",
+          "visits": 2,
+          "totalSpent": 1420,
+          "loyaltyPoints": 142,
+          "lastVisit": "2026-11-19T22:12:19.588Z"
+        },
+        {
+          "phone": "9536956255",
+          "name": "yera4",
+          "visits": 1,
+          "totalSpent": 357,
+          "loyaltyPoints": 35,
+          "lastVisit": "2026-11-19T23:22:47.076Z"
+        }
+      ],
+      "reviews": [
+        {
+          "id": "rev-1",
+          "tableId": 2,
+          "customerName": "Rahul Sharma",
+          "rating": 5,
+          "comment": "Paneer Butter Masala was super fresh and creamy! 10/10.",
+          "time": "2026-11-19T21:47:19.588Z"
+        }
+      ]
+    },
+    "pawan": {
+      "id": "pawan",
+      "name": "pawan",
+      "tagline": "Smart NFC Table Dining",
+      "phone": "9536956048",
+      "gstin": "07AAAAA0000A1Z5",
+      "address": "azad road",
+      "gstPercent": 5,
+      "rushMode": false,
+      "pin": "1234",
+      "plan": "Pro Plan (Active)",
+      "createdAt": "2026-11-19T21:48:43.552Z",
+      "tables": [
+        {
+          "id": 1,
+          "name": "Table 1",
+          "capacity": 2,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 2,
+          "name": "Table 2",
+          "capacity": 2,
+          "status": "occupied",
+          "currentOrderId": "ORD-pawan-101",
+          "seatingTime": "2026-11-19T21:33:43.552Z"
+        },
+        {
+          "id": 3,
+          "name": "Table 3",
+          "capacity": 4,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 4,
+          "name": "Table 4",
+          "capacity": 4,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 5,
+          "name": "Table 5",
+          "capacity": 4,
+          "status": "cleaning",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 6,
+          "name": "Table 6",
+          "capacity": 4,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 7,
+          "name": "Table 7",
+          "capacity": 6,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 8,
+          "name": "Table 8",
+          "capacity": 6,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        }
+      ],
+      "menu": [
+        {
+          "id": "pawan_m1",
+          "name": "Paneer Butter Masala",
+          "category": "Main Course",
+          "type": "veg",
+          "isJain": true,
+          "price": 280,
+          "description": "Rich, creamy cottage cheese curry cooked with aromatic butter & spices.",
+          "inStock": true,
+          "variants": [
+            {
+              "name": "Half",
+              "price": 160
+            },
+            {
+              "name": "Full",
+              "price": 280
+            }
+          ],
+          "addons": [
+            {
+              "name": "Extra Butter Cube",
+              "price": 20
+            }
+          ],
+          "image": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "pawan_m2",
+          "name": "Butter Chicken Special",
+          "category": "Main Course",
+          "type": "nonveg",
+          "isJain": false,
+          "price": 340,
+          "description": "Smoked tandoori chicken cooked in velvety tomato-cashew makhani gravy.",
+          "inStock": true,
+          "variants": [
+            {
+              "name": "Half",
+              "price": 210
+            },
+            {
+              "name": "Full",
+              "price": 340
+            }
+          ],
+          "addons": [
+            {
+              "name": "Extra Chicken Piece",
+              "price": 60
+            }
+          ],
+          "image": "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "pawan_m3",
+          "name": "Crispy Veg Spring Rolls",
+          "category": "Starters",
+          "type": "veg",
+          "isJain": false,
+          "price": 180,
+          "description": "Crispy golden rolls stuffed with shredded veggies, served with sweet chili dip.",
+          "inStock": true,
+          "variants": [],
+          "addons": [],
+          "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "pawan_m4",
+          "name": "Butter Naan / Garlic Naan",
+          "category": "Breads",
+          "type": "veg",
+          "isJain": true,
+          "price": 55,
+          "description": "Clay oven baked Indian flatbread brushed with fresh butter.",
+          "inStock": true,
+          "variants": [
+            {
+              "name": "Butter Naan",
+              "price": 55
+            },
+            {
+              "name": "Garlic Naan",
+              "price": 75
+            }
+          ],
+          "addons": [],
+          "image": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=600&q=80"
+        },
+        {
+          "id": "pawan_m5",
+          "name": "Sky Blue Lagoon Cooler",
+          "category": "Beverages",
+          "type": "veg",
+          "isJain": true,
+          "price": 140,
+          "description": "Refreshing blue curacao cooler with fresh mint leaves and sparkling soda.",
+          "inStock": true,
+          "variants": [],
+          "addons": [],
+          "image": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80"
+        }
+      ],
+      "orders": [
+        {
+          "id": "ORD-pawan-101",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "items": [
+            {
+              "id": "pawan_m1",
+              "name": "Paneer Butter Masala",
+              "variant": "Full",
+              "price": 280,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 280
+            },
+            {
+              "id": "pawan_m4",
+              "name": "Butter Naan",
+              "variant": "Butter Naan",
+              "price": 55,
+              "qty": 2,
+              "addons": [],
+              "itemTotal": 110
+            }
+          ],
+          "notes": "Make curry medium spicy",
+          "subtotal": 390,
+          "gst": 19.5,
+          "total": 409.5,
+          "status": "preparing",
+          "paymentMethod": null,
+          "createdAt": "2026-11-19T21:36:43.553Z",
+          "updatedAt": "2026-11-19T21:40:43.553Z"
+        }
+      ],
+      "serviceRequests": [
+        {
+          "id": "SR-pawan-1",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "type": "water",
+          "status": "pending",
+          "time": "2026-11-19T21:45:43.553Z"
+        }
+      ],
+      "completedOrders": [],
+      "promoCodes": [
+        {
+          "code": "WELCOME10",
+          "type": "percent",
+          "value": 10,
+          "minOrder": 200,
+          "description": "10% OFF on orders above ₹200"
+        },
+        {
+          "code": "FLAT50",
+          "type": "flat",
+          "value": 50,
+          "minOrder": 400,
+          "description": "Flat ₹50 OFF on orders above ₹400"
+        }
+      ],
+      "customers": [
+        {
+          "phone": "9876543210",
+          "name": "Rahul Sharma",
+          "visits": 4,
+          "totalSpent": 2850,
+          "loyaltyPoints": 285,
+          "lastVisit": "2026-11-19T22:12:19.588Z"
+        },
+        {
+          "phone": "9811122233",
+          "name": "Priya Verma",
+          "visits": 2,
+          "totalSpent": 1420,
+          "loyaltyPoints": 142,
+          "lastVisit": "2026-11-19T22:12:19.588Z"
+        }
+      ],
+      "reviews": [
+        {
+          "id": "rev-1",
+          "tableId": 2,
+          "customerName": "Rahul Sharma",
+          "rating": 5,
+          "comment": "Paneer Butter Masala was super fresh and creamy! 10/10.",
+          "time": "2026-11-19T21:47:19.588Z"
+        }
+      ]
+    }
+  }
+}

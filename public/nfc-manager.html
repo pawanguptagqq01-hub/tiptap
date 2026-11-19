@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TipTap - NFC Card & Table Stand Manager</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            display: ['"Outfit"', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #printableStands, #printableStands * { visibility: visible; }
+      #printableStands { position: absolute; left: 0; top: 0; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen">
+
+  <!-- Navbar -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/" class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 flex items-center justify-center text-white font-bold text-sm shadow">
+          TT
+        </a>
+        <div class="flex items-center gap-2">
+          <span class="font-extrabold text-slate-900 text-base">TipTap</span>
+          <select id="nfcRestSelect" onchange="switchNfcRest(this.value)" class="text-xs font-bold px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 border border-brand-200 focus:outline-none">
+            <option value="">Loading restaurant...</option>
+          </select>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">NFC Cards</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="/dashboard.html" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs transition">
+          Back to Dashboard
+        </a>
+        <button onclick="window.print()" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5">
+          <span>🖨️</span> Print Table Stands
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-10">
+
+    <!-- Network Configuration Alert (Testing on Phone over Wi-Fi) -->
+    <div class="bg-brand-50 border border-brand-200 rounded-3xl p-6 sm:p-8 no-print shadow-sm">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div class="space-y-2">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-bold">
+            <span>📡 Local Wi-Fi Network Testing</span>
+          </div>
+          <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900">Test NFC Tap on Your Smartphone Right Now</h2>
+          <p class="text-xs sm:text-sm text-slate-600 max-w-2xl leading-relaxed">
+            Connect your smartphone to the same Wi-Fi as this computer. Scan the QR code below or tap your NFC card programmed with the local IP link.
+          </p>
+          <div class="pt-2 flex items-center gap-2 font-mono text-xs">
+            <span class="text-slate-500">Your Base Host URL:</span>
+            <span id="baseHostUrl" class="font-bold bg-white px-3 py-1 rounded-lg border border-brand-300 text-brand-700">Detecting IP...</span>
+          </div>
+        </div>
+
+        <div class="shrink-0 text-center bg-white p-4 rounded-2xl border border-brand-200 shadow-md">
+          <p class="text-[11px] font-bold text-slate-700 mb-2">Scan on Phone (Table 2)</p>
+          <div class="w-32 h-32 mx-auto bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center border border-slate-200">
+            <img id="demoQrCode" src="" alt="Demo QR Code" class="w-full h-full object-contain">
+          </div>
+          <a id="demoLinkPhone" href="#" target="_blank" class="mt-2 block text-[11px] font-bold text-brand-600 hover:underline">
+            Open in New Tab ➔
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step-by-step Hardware Guide -->
+    <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm no-print space-y-6">
+      <h3 class="text-lg font-extrabold text-slate-900">How to Write Links to Physical NFC Cards</h3>
+      
+      <div class="grid sm:grid-cols-3 gap-6 text-xs">
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-2">
+          <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black flex items-center justify-center text-xs">1</span>
+          <h4 class="font-bold text-slate-900 text-sm">Download Free App</h4>
+          <p class="text-slate-600 leading-relaxed">
+            Install <strong>NFC Tools</strong> from Google Play Store or Apple App Store (100% free app).
+          </p>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-2">
+          <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black flex items-center justify-center text-xs">2</span>
+          <h4 class="font-bold text-slate-900 text-sm">Add URL Record</h4>
+          <p class="text-slate-600 leading-relaxed">
+            Open NFC Tools → Tap <strong>Write</strong> → <strong>Add a record</strong> → Choose <strong>URL / URI</strong> → Paste the Table URL from below.
+          </p>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-2">
+          <span class="w-7 h-7 rounded-full bg-brand-600 text-white font-black flex items-center justify-center text-xs">3</span>
+          <h4 class="font-bold text-slate-900 text-sm">Touch Card to Phone</h4>
+          <p class="text-slate-600 leading-relaxed">
+            Tap <strong>Write / 28 Bytes</strong> and touch the blank NTAG213 card to the back of your phone. Done in 1 second!
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Printable Table Stands (Sky Blue Acrylic Design) -->
+    <div class="space-y-4">
+      <div class="flex items-center justify-between no-print">
+        <div>
+          <h3 class="text-lg font-extrabold text-slate-900">Printable Table Cards & Stands</h3>
+          <p class="text-xs text-slate-500">Each card has Table ID, NFC touch target, and backup QR code. Ready for color printing.</p>
+        </div>
+        <button onclick="window.print()" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow">
+          Print All Cards 🖨️
+        </button>
+      </div>
+
+      <!-- Stands Grid -->
+      <div id="printableStands" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    let localIp = 'localhost';
+    let localPort = 3030;
+    let currentRestaurant = 'tiptap-bistro';
+    let restaurantName = 'TipTap Bistro';
+    let tables = [];
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('restaurant')) {
+      currentRestaurant = urlParams.get('restaurant');
+    }
+
+    function switchNfcRest(newId) {
+      if (!newId || newId === currentRestaurant) return;
+      window.location.href = `/nfc-manager.html?restaurant=${newId}`;
+    }
+
+    async function init() {
+      try {
+        const netRes = await fetch('/api/network-ip');
+        const netData = await netRes.json();
+        localIp = netData.localIp || window.location.hostname;
+        localPort = netData.port || window.location.port || 3030;
+
+        // Fetch state of target restaurant
+        const stateRes = await fetch(`/api/state?restaurant=${currentRestaurant}`);
+        const state = await stateRes.json();
+
+        currentRestaurant = state.restaurant.id;
+        restaurantName = state.restaurant.name;
+        tables = state.tables || [];
+
+        // Fill restaurant selector
+        const select = document.getElementById('nfcRestSelect');
+        if (state.allRestaurants && select) {
+          select.innerHTML = state.allRestaurants.map(r => `
+            <option value="${r.id}" ${r.id === currentRestaurant ? 'selected' : ''}>
+              ${r.name}
+            </option>
+          `).join('');
+        }
+
+        const base = `http://${localIp}:${localPort}`;
+        document.getElementById('baseHostUrl').innerText = base;
+
+        // Table 2 demo QR
+        const table2Url = `${base}/menu.html?restaurant=${currentRestaurant}&table=2`;
+        document.getElementById('demoQrCode').src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(table2Url)}`;
+        document.getElementById('demoLinkPhone').href = table2Url;
+
+        renderStands(base);
+
+      } catch (e) {
+        console.error('Failed to init NFC manager:', e);
+      }
+    }
+
+    function renderStands(baseUrl) {
+      const container = document.getElementById('printableStands');
+      container.innerHTML = tables.map(t => {
+        const tableUrl = `${baseUrl}/menu.html?restaurant=${currentRestaurant}&table=${t.id}`;
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(tableUrl)}`;
+
+        return `
+          <div class="bg-white rounded-3xl p-6 border-2 border-brand-200 shadow-lg space-y-5 break-inside-avoid">
+            
+            <!-- Card Header -->
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-brand-600 text-white font-extrabold text-xs flex items-center justify-center">
+                  TT
+                </div>
+                <span class="font-extrabold text-slate-800 text-xs">${restaurantName}</span>
+              </div>
+              <span class="text-xs font-black px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
+                ${t.name.toUpperCase()}
+              </span>
+            </div>
+
+            <!-- NFC Physical Area Design (Sky Blue) -->
+            <div class="p-6 rounded-2xl bg-gradient-to-br from-brand-600 via-brand-500 to-sky-400 text-white text-center shadow-md relative overflow-hidden">
+              <div class="w-16 h-16 mx-auto rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center mb-3">
+                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9a3 3 0 016 0m-8 3a5 5 0 0110 0"></path>
+                </svg>
+              </div>
+
+              <h4 class="text-base font-black tracking-wide">TAP PHONE HERE</h4>
+              <p class="text-[11px] text-brand-100 font-medium">To view menu and place order</p>
+            </div>
+
+            <!-- Backup QR & NFC Link Copy -->
+            <div class="flex items-center justify-between gap-4 pt-2">
+              <div class="text-left space-y-1">
+                <p class="text-[10px] font-bold text-slate-400 uppercase">Backup Camera QR</p>
+                <p class="text-[11px] text-slate-600 leading-snug">For phones without NFC enabled</p>
+                <button onclick="navigator.clipboard.writeText('${tableUrl}'); alert('Copied Table URL for NFC Tools: ${tableUrl}');" class="mt-2 text-[10px] font-bold text-brand-600 bg-brand-50 px-2.5 py-1 rounded-md border border-brand-200 hover:bg-brand-100 transition no-print">
+                  📋 Copy NFC URL
+                </button>
+              </div>
+
+              <div class="w-20 h-20 shrink-0 bg-white p-1 rounded-xl border border-slate-200 shadow-sm flex items-center justify-center">
+                <img src="${qrUrl}" alt="QR Code" class="w-full h-full">
+              </div>
+            </div>
+
+            <div class="text-center text-[10px] text-slate-400 pt-1 border-t border-slate-100">
+              No App Required • TipTap Smart Dining
+            </div>
+
+          </div>
+        `;
+      }).join('');
+    }
+
+    init();
+  </script>
+</body>
+</html>
