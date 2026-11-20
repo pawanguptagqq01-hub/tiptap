@@ -197,7 +197,9 @@
           `).join('');
         }
 
-        const base = `http://${localIp}:${localPort}`;
+        const base = window.location.origin.includes('localhost')
+          ? (localIp ? `http://${localIp}:${localPort}` : window.location.origin)
+          : window.location.origin;
         document.getElementById('baseHostUrl').innerText = base;
 
         // Table 2 demo QR

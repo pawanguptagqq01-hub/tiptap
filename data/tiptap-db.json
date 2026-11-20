@@ -302,7 +302,16 @@
           "updatedAt": "2026-11-19T22:14:48.663Z"
         }
       ],
-      "serviceRequests": [],
+      "serviceRequests": [
+        {
+          "id": "SR-2955",
+          "tableId": 1,
+          "tableName": "Table 1",
+          "type": "waiter",
+          "status": "pending",
+          "time": "2026-11-20T00:01:22.956Z"
+        }
+      ],
       "completedOrders": [
         {
           "id": "ORD-101",
