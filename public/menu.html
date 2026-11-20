@@ -309,9 +309,10 @@
         <div class="grid grid-cols-2 gap-2">
           <input type="text" id="custNameInp" placeholder="Your Name"
             class="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs focus:outline-none">
-          <input type="tel" id="custPhoneInp" placeholder="Mobile Number" maxlength="10"
+          <input type="tel" id="custPhoneInp" oninput="checkLoyaltyOnPhoneInput()" placeholder="Mobile Number" maxlength="10"
             class="px-3 py-2 rounded-xl bg-white border border-slate-200 text-xs focus:outline-none font-mono">
         </div>
+        <p id="customerLoyaltyBadge" class="hidden px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold mt-1.5 animate-fade-in"></p>
       </div>
 
       <!-- Special Cooking Notes -->
@@ -728,6 +729,28 @@
     let appliedPromo = null;
     let selectedRating = 5;
     let customizingItem = null;
+    let appCustomers = [];
+
+    function checkLoyaltyOnPhoneInput() {
+      const phoneInp = document.getElementById('custPhoneInp');
+      const phone = phoneInp ? phoneInp.value.trim() : '';
+      const loyaltyBadge = document.getElementById('customerLoyaltyBadge');
+      if (phone.length === 10 && appCustomers.length > 0) {
+        const found = appCustomers.find(c => c.phone === phone);
+        if (found) {
+          const nameInp = document.getElementById('custNameInp');
+          if (found.name && nameInp && !nameInp.value) {
+            nameInp.value = found.name;
+          }
+          if (loyaltyBadge) {
+            loyaltyBadge.innerHTML = `🪙 Welcome back, <b>${found.name || 'Friend'}</b>! You have <b>${found.loyaltyPoints || 0} TipTap Coins</b> available.`;
+            loyaltyBadge.classList.remove('hidden');
+          }
+          return;
+        }
+      }
+      if (loyaltyBadge) loyaltyBadge.classList.add('hidden');
+    }
 
     function showToast(msg, icon = '🛎️') {
       const toast = document.getElementById('toast');
@@ -777,6 +800,7 @@
         }
 
         menuData = data.menu || [];
+        appCustomers = (data.restaurant && data.restaurant.customers) || data.customers || [];
         renderCategories();
         renderMenu();
 

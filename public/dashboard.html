@@ -106,7 +106,7 @@
         </button>
 
         <button onclick="setRole('kitchen')" id="tab-kitchen" 
-          class="px-5 py-2 rounded-xl text-sky-200 hover:text-white hover:bg-[#112240] transition-all flex items-center gap-2 font-display font-bold text-xs">
+          class="px-4 py-2 rounded-xl text-sky-200 hover:text-white hover:bg-[#112240] transition-all flex items-center gap-2 font-display font-bold text-xs">
           <span>🍳</span>
           <span>Kitchen KDS</span>
           <span id="kitchenBadge" class="hidden px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">0</span>
@@ -118,11 +118,62 @@
           <span>Menu Stock</span>
         </button>
 
+        <button onclick="setRole('crm')" id="tab-crm" 
+          class="px-4 py-2 rounded-xl text-sky-200 hover:text-white hover:bg-[#112240] transition-all flex items-center gap-2 font-display font-bold text-xs">
+          <span>👥</span>
+          <span>Customer CRM</span>
+          <span id="crmCountBadge" class="px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10px] font-mono">0</span>
+        </button>
+
       </div>
 
-      <!-- Right Controls: Super Admin, Sound, Rush, Live status -->
+      <!-- Right Controls: Super Admin, Soundbox, Bell, Rush, Live status -->
       <div class="flex items-center gap-2 shrink-0">
         
+        <!-- Voice Soundbox Dropdown Toggle -->
+        <div class="relative">
+          <button onclick="toggleSoundboxMenu()" id="soundboxBtn" title="Paytm/PhonePe-Style Voice Soundbox"
+            class="px-3 py-2 rounded-xl bg-[#112240] hover:bg-[#1b3457] text-sky-200 hover:text-white text-xs font-bold border border-sky-400/30 hover:border-sky-400 flex items-center gap-1.5 transition">
+            <span class="text-amber-400 text-sm">📢</span>
+            <span class="hidden sm:inline">Soundbox</span>
+            <span id="soundboxWaves" class="hidden text-emerald-400 text-xs font-black animate-pulse">🔊</span>
+          </button>
+          
+          <!-- Soundbox Popover -->
+          <div id="soundboxDropdown" class="hidden absolute right-0 top-12 w-64 bg-slate-900 border border-sky-400/40 rounded-2xl shadow-2xl p-4 z-50 text-white space-y-3 font-sans">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-base">📢</span>
+                <span class="font-extrabold text-xs text-sky-200 font-display">TipTap Voice Soundbox</span>
+              </div>
+              <button onclick="toggleSoundboxMenu()" class="text-xs text-slate-400 hover:text-white">✕</button>
+            </div>
+
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-300 font-bold">Voice Announcements:</span>
+              <button onclick="toggleSoundboxActive()" id="soundboxMasterToggle" class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-[11px]">
+                ACTIVE
+              </button>
+            </div>
+
+            <div class="space-y-1 text-xs">
+              <label class="block text-slate-400 font-bold text-[10px] uppercase">Voice Language:</label>
+              <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-800/80 rounded-xl text-xs font-bold">
+                <button onclick="setSoundboxLang('hi-IN')" id="sbLang-hi" class="py-1 rounded-lg bg-sky-500 text-slate-950 font-black">
+                  🇮🇳 हिन्दी
+                </button>
+                <button onclick="setSoundboxLang('en-IN')" id="sbLang-en" class="py-1 rounded-lg text-slate-300 hover:text-white">
+                  🇬🇧 English
+                </button>
+              </div>
+            </div>
+
+            <button onclick="testSoundboxVoice()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-md transition active:scale-95 flex items-center justify-center gap-1.5 font-display">
+              <span>▶️</span> Test Voice Announcement
+            </button>
+          </div>
+        </div>
+
         <a href="/super-admin.html" class="hidden xl:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#112240] hover:bg-sky-500/20 text-sky-300 text-xs font-bold border border-sky-400/30 hover:border-sky-400 transition hover:shadow-[0_0_12px_rgba(56,189,248,0.3)]">
           <span>🏢</span> <span class="hidden sm:inline">Super Admin</span>
         </a>
@@ -156,6 +207,7 @@
       <button onclick="setRole('counter')" id="m-tab-counter" class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 font-black">👑 Counter</button>
       <button onclick="setRole('kitchen')" id="m-tab-kitchen" class="px-3 py-1.5 rounded-lg text-sky-200">🍳 Kitchen</button>
       <button onclick="setRole('menu')" id="m-tab-menu" class="px-3 py-1.5 rounded-lg text-sky-200">📋 Stock</button>
+      <button onclick="setRole('crm')" id="m-tab-crm" class="px-3 py-1.5 rounded-lg text-sky-200">👥 CRM</button>
     </div>
   </header>
 
@@ -281,7 +333,7 @@
                   <th class="p-3">Last Visit</th>
                 </tr>
               </thead>
-              <tbody id="crmTableBody" class="divide-y divide-slate-100">
+              <tbody id="counterCrmTableBody" class="divide-y divide-slate-100">
                 <!-- Injected by JS -->
               </tbody>
             </table>
@@ -402,6 +454,83 @@
             </tr>
           </thead>
           <tbody id="menuStockTableBody" class="divide-y divide-slate-100">
+            <!-- Injected by JS -->
+          </tbody>
+        </table>
+      </div>
+
+    </section>
+
+    <!-- ======================================================== -->
+    <!-- ROLE 4: CUSTOMER CRM & LOYALTY HUB                       -->
+    <!-- ======================================================== -->
+    <section id="view-crm" class="hidden space-y-6">
+      
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-extrabold text-slate-900 font-display">Customer CRM & Loyalty Rewards</h2>
+          <p class="text-xs text-slate-500">Track guest visit frequency, lifetime spend, and send 1-tap WhatsApp coupons & bills.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="broadcastWhatsAppPromo()" class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5 active:scale-95">
+            <span>📢</span> Send WhatsApp Promo
+          </button>
+        </div>
+      </div>
+
+      <!-- CRM Metrics Row -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Registered Guests</span>
+          <p class="text-3xl font-black text-slate-900 font-display" id="crmMetricTotal">0</p>
+          <p class="text-[11px] text-sky-600 font-bold mt-1">NFC Table & Bill records</p>
+        </div>
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Loyalty Coins Issued</span>
+          <p class="text-3xl font-black text-amber-500 font-display" id="crmMetricCoins">0</p>
+          <p class="text-[11px] text-slate-500 font-bold mt-1">10% cash back in TipTap coins</p>
+        </div>
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">VIP & Regulars</span>
+          <p class="text-3xl font-black text-purple-600 font-display" id="crmMetricVips">0</p>
+          <p class="text-[11px] text-purple-600 font-bold mt-1">2+ visits or ₹1,500+ spend</p>
+        </div>
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Customer Retention</span>
+          <p class="text-3xl font-black text-emerald-600 font-display">68%</p>
+          <p class="text-[11px] text-emerald-600 font-bold mt-1">High repeat dining</p>
+        </div>
+      </div>
+
+      <!-- Search & Tier Filter Bar -->
+      <div class="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="relative w-full sm:w-80">
+          <input type="text" id="crmSearchInput" oninput="filterCrmTable()" placeholder="Search guest name or phone..."
+            class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-sky-400">
+          <span class="absolute left-3 top-3 text-xs text-slate-400">🔍</span>
+        </div>
+        <div class="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto text-xs font-bold">
+          <button onclick="setCrmTierFilter('all')" id="crmFilter-all" class="px-3 py-1.5 rounded-xl bg-slate-900 text-white font-black">All Guests</button>
+          <button onclick="setCrmTierFilter('vip')" id="crmFilter-vip" class="px-3 py-1.5 rounded-xl text-slate-600 hover:bg-slate-100">👑 Gold VIP</button>
+          <button onclick="setCrmTierFilter('regular')" id="crmFilter-regular" class="px-3 py-1.5 rounded-xl text-slate-600 hover:bg-slate-100">⭐ Regular</button>
+        </div>
+      </div>
+
+      <!-- Customers Table -->
+      <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-50 text-slate-500 uppercase tracking-wider font-bold border-b border-slate-200">
+            <tr>
+              <th class="p-4">Customer</th>
+              <th class="p-4">Tier</th>
+              <th class="p-4 text-center">Visits</th>
+              <th class="p-4">Total Spent</th>
+              <th class="p-4">Loyalty Coins</th>
+              <th class="p-4">Last Visit</th>
+              <th class="p-4 text-center">WhatsApp Action</th>
+            </tr>
+          </thead>
+          <tbody id="crmTableBody" class="divide-y divide-slate-100 font-sans">
             <!-- Injected by JS -->
           </tbody>
         </table>
@@ -716,6 +845,71 @@
       }, 5000);
     }
 
+    // Voice Soundbox Logic (Paytm / PhonePe Style Soundbox)
+    let soundboxActive = true;
+    let soundboxLang = 'hi-IN';
+
+    function toggleSoundboxMenu() {
+      const dd = document.getElementById('soundboxDropdown');
+      if (dd) dd.classList.toggle('hidden');
+    }
+
+    function toggleSoundboxActive() {
+      soundboxActive = !soundboxActive;
+      const btn = document.getElementById('soundboxMasterToggle');
+      if (btn) {
+        btn.innerText = soundboxActive ? 'ACTIVE' : 'MUTED';
+        btn.className = soundboxActive 
+          ? 'px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold text-[11px]'
+          : 'px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold text-[11px]';
+      }
+    }
+
+    function setSoundboxLang(lang) {
+      soundboxLang = lang;
+      const btnHi = document.getElementById('sbLang-hi');
+      const btnEn = document.getElementById('sbLang-en');
+      if (lang === 'hi-IN') {
+        if (btnHi) btnHi.className = 'py-1 rounded-lg bg-sky-500 text-slate-950 font-black';
+        if (btnEn) btnEn.className = 'py-1 rounded-lg text-slate-300 hover:text-white';
+      } else {
+        if (btnEn) btnEn.className = 'py-1 rounded-lg bg-sky-500 text-slate-950 font-black';
+        if (btnHi) btnHi.className = 'py-1 rounded-lg text-slate-300 hover:text-white';
+      }
+    }
+
+    function speakVoice(text) {
+      if (!soundboxActive || !('speechSynthesis' in window)) return;
+      try {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = soundboxLang;
+        utter.rate = 0.95;
+        utter.pitch = 1.05;
+        
+        const wave = document.getElementById('soundboxWaves');
+        if (wave) wave.classList.remove('hidden');
+        utter.onend = () => { if (wave) wave.classList.add('hidden'); };
+        utter.onerror = () => { if (wave) wave.classList.add('hidden'); };
+
+        const voices = window.speechSynthesis.getVoices();
+        const voice = voices.find(v => v.lang === soundboxLang || v.lang.replace('_', '-').startsWith(soundboxLang.slice(0, 2)));
+        if (voice) utter.voice = voice;
+
+        window.speechSynthesis.speak(utter);
+      } catch (e) {
+        console.warn('Speech error:', e);
+      }
+    }
+
+    function testSoundboxVoice() {
+      if (soundboxLang === 'hi-IN') {
+        speakVoice('TipTap Voice Soundbox chalu hai! TipTap Pay par teen sau chalis rupaye prapt hue!');
+      } else {
+        speakVoice('TipTap Voice Soundbox active! Payment of rupees 340 received on TipTap Pay!');
+      }
+    }
+
     function testChime() {
       playDing();
     }
@@ -726,19 +920,19 @@
       document.getElementById('soundBtn').classList.toggle('text-slate-500', !soundEnabled);
     }
 
-    // 2-Role Switcher Logic (Counter / Kitchen / Menu)
+    // Role Switcher Logic (Counter / Kitchen / Menu / CRM)
     function setRole(role) {
       currentRole = role;
-      ['counter', 'kitchen', 'menu'].forEach(r => {
+      ['counter', 'kitchen', 'menu', 'crm'].forEach(r => {
         const view = document.getElementById(`view-${r}`);
         const tab = document.getElementById(`tab-${r}`);
         const mTab = document.getElementById(`m-tab-${r}`);
         if (view) view.classList.toggle('hidden', r !== role);
         if (tab) {
           if (r === role) {
-            tab.className = 'px-5 py-2 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 font-display font-black text-xs shadow-md shadow-sky-400/30 transition-all flex items-center gap-2';
+            tab.className = 'px-4 py-2 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 font-display font-black text-xs shadow-md shadow-sky-400/30 transition-all flex items-center gap-2';
           } else {
-            tab.className = 'px-5 py-2 rounded-xl text-sky-200 hover:text-white hover:bg-[#112240] transition-all flex items-center gap-2 font-display font-bold text-xs';
+            tab.className = 'px-4 py-2 rounded-xl text-sky-200 hover:text-white hover:bg-[#112240] transition-all flex items-center gap-2 font-display font-bold text-xs';
           }
         }
         if (mTab) {
@@ -822,6 +1016,7 @@
       renderCounterView();
       renderKitchenView();
       renderMenuView();
+      renderCrmView();
     }
 
     // 1. BILLING COUNTER & OWNER POS VIEW
@@ -978,7 +1173,7 @@
       }
 
       // 2. Customers CRM & Loyalty
-      const crmTbody = document.getElementById('crmTableBody');
+      const crmTbody = document.getElementById('counterCrmTableBody');
       const custs = appState.customers || [];
       if (custs.length === 0) {
         crmTbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">No customers registered yet.</td></tr>`;
@@ -1302,76 +1497,6 @@
       const chosen = templates[Math.floor(Math.random() * templates.length)];
       document.getElementById('dishDescInp').value = chosen;
     }
-        const orderTime = new Date(order.createdAt).getTime();
-        const elapsedMins = Math.floor((now - orderTime) / 60000);
-        const isLate = elapsedMins >= 15;
-        const isWarning = elapsedMins >= 8 && !isLate;
-
-        let statusBorder = 'border-slate-200';
-        let statusTag = 'bg-slate-100 text-slate-700';
-
-        if (isLate) {
-          statusBorder = 'border-rose-500 shadow-rose-500/20';
-          statusTag = 'bg-rose-500 text-white animate-pulse';
-        } else if (isWarning) {
-          statusBorder = 'border-amber-400';
-          statusTag = 'bg-amber-100 text-amber-800';
-        }
-
-        return `
-          <div class="bg-white rounded-3xl p-5 border-2 ${statusBorder} shadow-sm space-y-4 flex flex-col justify-between">
-            <div>
-              <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div>
-                  <span class="text-base font-black text-slate-900">${order.tableName}</span>
-                  <p class="text-[11px] text-slate-400 font-mono">#${order.id}</p>
-                </div>
-                <div class="text-right">
-                  <span class="text-xs font-black px-2.5 py-1 rounded-full ${statusTag}">
-                    ${isLate ? '⚠️ LATE ' : ''}${elapsedMins}m ago
-                  </span>
-                </div>
-              </div>
-
-              <!-- Notes -->
-              ${order.notes ? `
-                <div class="my-2.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 font-bold">
-                  ✍️ ${order.notes}
-                </div>
-              ` : ''}
-
-              <!-- Items -->
-              <div class="py-2 space-y-2 divide-y divide-slate-100 text-xs">
-                ${(order.items || []).map(i => `
-                  <div class="pt-1.5 flex items-start justify-between gap-2">
-                    <div>
-                      <span class="font-black text-slate-900 text-sm">${i.qty}x</span>
-                      <span class="font-bold text-slate-800 text-sm ml-1">${i.name}</span>
-                      ${i.variant ? `<p class="text-[11px] text-slate-500 ml-5 font-semibold">Portion: ${i.variant}</p>` : ''}
-                      ${(i.addons && i.addons.length) ? `<p class="text-[11px] text-brand-600 ml-5">+ ${i.addons.join(', ')}</p>` : ''}
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-
-            <!-- Single streamlined Kitchen Action: Start Cooking -> Ready & Served -->
-            <div class="pt-3 border-t border-slate-100">
-              ${order.status === 'received' ? `
-                <button onclick="updateOrderStatus('${order.id}', 'preparing')" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-xs transition shadow-sm">
-                  🍳 Start Cooking
-                </button>
-              ` : `
-                <button onclick="updateOrderStatus('${order.id}', 'served')" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition shadow-sm">
-                  🍽️ Ready & Food Served ✓
-                </button>
-              `}
-            </div>
-
-          </div>
-        `;
-      }).join('');
-    }
 
     // 3. MENU STOCK VIEW
     function renderMenuView() {
@@ -1397,6 +1522,129 @@
           </td>
         </tr>
       `).join('');
+    }
+
+    // 4. CUSTOMER CRM & LOYALTY VIEW
+    let crmTierFilter = 'all';
+
+    function setCrmTierFilter(tier) {
+      crmTierFilter = tier;
+      ['all', 'vip', 'regular'].forEach(t => {
+        const btn = document.getElementById(`crmFilter-${t}`);
+        if (btn) {
+          if (t === tier) {
+            btn.className = 'px-3 py-1.5 rounded-xl bg-slate-900 text-white font-black';
+          } else {
+            btn.className = 'px-3 py-1.5 rounded-xl text-slate-600 hover:bg-slate-100';
+          }
+        }
+      });
+      renderCrmView();
+    }
+
+    function filterCrmTable() {
+      renderCrmView();
+    }
+
+    function renderCrmView() {
+      if (!appState) return;
+      const customers = appState.customers || appState.restaurant.customers || [];
+      
+      const badge = document.getElementById('crmCountBadge');
+      if (badge) badge.innerText = customers.length;
+
+      document.getElementById('crmMetricTotal').innerText = customers.length;
+      const totalCoins = customers.reduce((sum, c) => sum + (c.loyaltyPoints || 0), 0);
+      document.getElementById('crmMetricCoins').innerText = totalCoins.toLocaleString('en-IN');
+      const vipsCount = customers.filter(c => (c.visits >= 3 || (c.totalSpent || 0) >= 1500)).length;
+      document.getElementById('crmMetricVips').innerText = vipsCount;
+
+      const query = (document.getElementById('crmSearchInput')?.value || '').toLowerCase().trim();
+
+      let filtered = customers.filter(c => {
+        const nameMatch = (c.name || '').toLowerCase().includes(query);
+        const phoneMatch = (c.phone || '').includes(query);
+        const matchesQuery = !query || nameMatch || phoneMatch;
+
+        const isVip = c.visits >= 3 || (c.totalSpent || 0) >= 1500;
+        const isRegular = c.visits >= 2 && !isVip;
+
+        if (crmTierFilter === 'vip') return matchesQuery && isVip;
+        if (crmTierFilter === 'regular') return matchesQuery && isRegular;
+        return matchesQuery;
+      });
+
+      const tbody = document.getElementById('crmTableBody');
+      if (!tbody) return;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="p-8 text-center text-slate-400 font-bold">
+              No matching guests found.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(c => {
+        const isVip = c.visits >= 3 || (c.totalSpent || 0) >= 1500;
+        const isRegular = c.visits >= 2 && !isVip;
+        let tierBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">🥉 Bronze Guest</span>';
+        if (isVip) {
+          tierBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-xs">👑 Gold VIP</span>';
+        } else if (isRegular) {
+          tierBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">⭐ Silver Regular</span>';
+        }
+
+        const dateStr = c.lastVisit ? new Date(c.lastVisit).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recently';
+
+        return `
+          <tr class="hover:bg-slate-50/80 transition">
+            <td class="p-4">
+              <p class="font-extrabold text-slate-900">${c.name || 'Dine-In Guest'}</p>
+              <p class="text-[11px] text-slate-400 font-mono">${c.phone}</p>
+            </td>
+            <td class="p-4">${tierBadge}</td>
+            <td class="p-4 text-center font-bold text-slate-700">${c.visits || 1}</td>
+            <td class="p-4 font-black text-slate-900">₹${(c.totalSpent || 0).toLocaleString('en-IN')}</td>
+            <td class="p-4 font-black text-amber-600">🪙 ${c.loyaltyPoints || 0}</td>
+            <td class="p-4 text-slate-500">${dateStr}</td>
+            <td class="p-4 text-center">
+              <button onclick="sendCustomerWhatsAppOffer('${c.phone}', '${encodeURIComponent(c.name || 'Guest')}', '${isVip ? 'VIP' : 'Regular'}')" 
+                class="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 font-black text-xs transition flex items-center justify-center gap-1 mx-auto">
+                <span>💬</span> WhatsApp Offer
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function sendCustomerWhatsAppOffer(phone, encName, tier) {
+      const name = decodeURIComponent(encName);
+      const discount = tier === 'VIP' ? '20% OFF' : '10% OFF';
+      const code = tier === 'VIP' ? 'GOLDVIP20' : 'WELCOME10';
+      const msg = `*🌟 Special Invitation from ${appState.restaurant.name}! 🌟*\n\n` +
+        `Hello ${name},\n` +
+        `As our valued ${tier} guest, we have unlocked a special *${discount}* for your next visit!\n\n` +
+        `🎁 *Use Coupon Code:* ${code}\n` +
+        `📍 *Table NFC Order:* https://tiptap-y2rs.onrender.com/menu.html?restaurant=${currentRestaurantId}\n\n` +
+        `We look forward to serving you again! 😊🍽️`;
+
+      const cleanPhone = phone.replace(/[^0-9]/g, '');
+      const waUrl = `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msg)}`;
+      window.open(waUrl, '_blank');
+    }
+
+    function broadcastWhatsAppPromo() {
+      const promoText = prompt('Enter the Promo Message to broadcast on WhatsApp (or use default):', 
+        `🔥 WEEKEND SPECIAL at ${appState.restaurant.name}! Flat 15% OFF on all Dine-In orders. Show code: WEEKEND15 at your table!`);
+      if (!promoText) return;
+
+      const waUrl = `https://wa.me/?text=${encodeURIComponent(promoText)}`;
+      window.open(waUrl, '_blank');
     }
 
     async function toggleStock(dishId, inStock) {
@@ -1499,22 +1747,28 @@
       window.print();
     }
 
-    // WhatsApp Bill Send
+    // WhatsApp Bill Send with Auto Phone & Loyalty Rewards Cashback
     function sendWhatsAppBill() {
       if (!settlingOrder) return;
-      const phone = prompt('Enter customer WhatsApp 10-digit phone number (without +91):');
+      const defaultPhone = settlingOrder.customerPhone || '';
+      const phone = prompt('Enter customer WhatsApp 10-digit phone number (without +91):', defaultPhone);
       if (!phone) return;
 
+      const coinsEarned = Math.floor(settlingOrder.total / 10);
       const itemsText = settlingOrder.items.map(i => `• ${i.qty}x ${i.name} = ₹${i.itemTotal}`).join('\n');
-      const message = `*🧾 GST INVOICE - ${appState.restaurant.name}*\n` +
-        `Order: #${settlingOrder.id} | Table: ${settlingOrder.tableId}\n` +
-        `--------------------------\n` +
+      const message = `*🧾 TAX INVOICE - ${appState.restaurant.name}*\n` +
+        `Order: #${settlingOrder.id} | ${settlingOrder.tableName || 'Table ' + settlingOrder.tableId}\n` +
+        `GSTIN: ${appState.restaurant.gstin || '07AAAAA0000A1Z5'}\n` +
+        `--------------------------------\n` +
         `${itemsText}\n` +
-        `--------------------------\n` +
+        `--------------------------------\n` +
         `Subtotal: ₹${settlingOrder.subtotal}\n` +
         `GST (5%): ₹${settlingOrder.gst}\n` +
         `*Grand Total: ₹${settlingOrder.total}*\n` +
         `Paid via: ${selectedPayMode.toUpperCase()}\n\n` +
+        `*🪙 Loyalty Rewards:* Earned ${coinsEarned} TipTap Coins!\n` +
+        `*🎁 Cashback:* ₹${coinsEarned} off on your next table order.\n` +
+        `Menu Link: https://tiptap-y2rs.onrender.com/menu.html?restaurant=${currentRestaurantId}\n\n` +
         `Thank you for dining with us! 🌟`;
 
       const cleanPhone = phone.replace(/[^0-9]/g, '');
@@ -1570,21 +1824,61 @@
       a.click();
     }
 
-    // SSE
+    // SSE Real-Time Event Listener & Voice Soundbox Dispatcher
     function setupSSE() {
       const evt = new EventSource(`/api/events?restaurant=${currentRestaurantId}`);
-      evt.addEventListener('order:new', () => { playDing(); fetchState(); });
+      
+      evt.addEventListener('order:new', (e) => { 
+        playDing(); 
+        try {
+          const payload = JSON.parse(e.data).payload || JSON.parse(e.data);
+          const tName = payload.tableName || `Table ${payload.tableId || ''}`;
+          if (soundboxLang === 'hi-IN') {
+            speakVoice(`${tName} se naya order prapt hua!`);
+          } else {
+            speakVoice(`New order received from ${tName}!`);
+          }
+        } catch(err) {
+          speakVoice('Naya order prapt hua!');
+        }
+        fetchState(); 
+      });
+
       evt.addEventListener('order:update', () => fetchState());
       evt.addEventListener('table:update', () => fetchState());
       evt.addEventListener('menu:update', () => fetchState());
-      evt.addEventListener('service:call', () => { playDing(); fetchState(); });
+
+      evt.addEventListener('service:call', (e) => { 
+        playDing(); 
+        try {
+          const payload = JSON.parse(e.data).payload || JSON.parse(e.data);
+          const tName = payload.tableName || `Table ${payload.tableId || ''}`;
+          const isWater = payload.type === 'water';
+          if (soundboxLang === 'hi-IN') {
+            speakVoice(isWater ? `${tName} par peene ka paani manga gaya hai!` : `${tName} par waiter ko bulaya gaya hai!`);
+          } else {
+            speakVoice(isWater ? `Drinking water requested at ${tName}!` : `Waiter service requested at ${tName}!`);
+          }
+        } catch(err) {
+          speakVoice('Table par service ki mang ki gayi hai!');
+        }
+        fetchState(); 
+      });
+
       evt.addEventListener('service:resolved', () => fetchState());
       evt.addEventListener('settings:update', () => fetchState());
+
       evt.addEventListener('payment:success', (e) => {
         try {
           const payload = JSON.parse(e.data).payload || JSON.parse(e.data);
           playCashRegisterChime();
           showPaymentSuccessToast(payload);
+          const amt = payload.total || payload.amount || payload.amountPaid || 0;
+          if (soundboxLang === 'hi-IN') {
+            speakVoice(`TipTap Pay par ${amt} rupaye prapt hue!`);
+          } else {
+            speakVoice(`Payment of rupees ${amt} received on TipTap Pay!`);
+          }
           fetchState();
         } catch(err) {
           fetchState();
