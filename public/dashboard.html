@@ -125,6 +125,12 @@
           <span id="crmCountBadge" class="px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 text-[10px] font-mono">0</span>
         </button>
 
+        <button onclick="setRole('analytics')" id="tab-analytics" 
+          class="px-4 py-2 rounded-xl text-sky-200 hover:text-white hover:bg-[#112240] transition-all flex items-center gap-2 font-display font-bold text-xs">
+          <span>📊</span>
+          <span>Reports</span>
+        </button>
+
       </div>
 
       <!-- Right Controls: Super Admin, Soundbox, Bell, Rush, Live status -->
@@ -208,6 +214,7 @@
       <button onclick="setRole('kitchen')" id="m-tab-kitchen" class="px-3 py-1.5 rounded-lg text-sky-200">🍳 Kitchen</button>
       <button onclick="setRole('menu')" id="m-tab-menu" class="px-3 py-1.5 rounded-lg text-sky-200">📋 Stock</button>
       <button onclick="setRole('crm')" id="m-tab-crm" class="px-3 py-1.5 rounded-lg text-sky-200">👥 CRM</button>
+      <button onclick="setRole('analytics')" id="m-tab-analytics" class="px-3 py-1.5 rounded-lg text-sky-200">📊 Reports</button>
     </div>
   </header>
 
@@ -278,6 +285,23 @@
             <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> Reserved</span>
             <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Cleaning</span>
           </div>
+        </div>
+
+        <!-- Floor Area Section Pills -->
+        <div class="flex items-center gap-2 pt-1 border-t border-slate-100 overflow-x-auto text-xs font-bold">
+          <span class="text-slate-400 uppercase tracking-wider text-[10px] shrink-0">Area:</span>
+          <button onclick="setFloorSection('all')" id="secFilter-all" class="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-black shadow-xs shrink-0">
+            🏢 All Tables
+          </button>
+          <button onclick="setFloorSection('ac')" id="secFilter-ac" class="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 shrink-0">
+            ❄️ AC Hall (T1-T4)
+          </button>
+          <button onclick="setFloorSection('garden')" id="secFilter-garden" class="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 shrink-0">
+            🌿 Garden (T5-T6)
+          </button>
+          <button onclick="setFloorSection('rooftop')" id="secFilter-rooftop" class="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 shrink-0">
+            🍸 Rooftop (T7-T8)
+          </button>
         </div>
 
         <div id="tablesGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 pt-2">
@@ -538,6 +562,156 @@
 
     </section>
 
+    <!-- ======================================================== -->
+    <!-- ROLE 5: BUSINESS ANALYTICS & SALES INTELLIGENCE         -->
+    <!-- ======================================================== -->
+    <section id="view-analytics" class="hidden space-y-6">
+      
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-xl font-extrabold text-slate-900 font-display">Business Analytics & Peak Sales Reports</h2>
+          <p class="text-xs text-slate-500">Live revenue breakdown, top best-selling dishes, peak dining rush, and official Z-Report.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="printZReport()" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5 active:scale-95">
+            <span>🖨️</span> Print Day-End Z-Report
+          </button>
+          <button onclick="exportCsv()" class="px-4 py-2.5 rounded-xl bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 font-extrabold text-xs transition flex items-center gap-1.5">
+            <span>⬇️</span> Export CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Financial Metrics Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Gross Sales Revenue</span>
+          <p class="text-3xl font-black text-slate-900 font-display">₹<span id="anaMetricGross">0</span></p>
+          <p class="text-[11px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span>Real-time Settled Orders</span>
+          </p>
+        </div>
+
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Orders Completed</span>
+          <p class="text-3xl font-black text-brand-600 font-display" id="anaMetricOrders">0</p>
+          <p class="text-[11px] text-slate-500 font-bold mt-1">Dine-in table turnovers</p>
+        </div>
+
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Avg. Order Value (AOV)</span>
+          <p class="text-3xl font-black text-amber-500 font-display">₹<span id="anaMetricAov">0</span></p>
+          <p class="text-[11px] text-slate-500 font-bold mt-1">Per seated party average</p>
+        </div>
+
+        <div class="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-sm">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Total GST Collected</span>
+          <p class="text-3xl font-black text-purple-600 font-display">₹<span id="anaMetricGst">0</span></p>
+          <p class="text-[11px] text-purple-600 font-bold mt-1">5% Tax (CGST + SGST)</p>
+        </div>
+
+      </div>
+
+      <!-- Analytics Main Split Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Left: Payment Methods & Hourly Rush -->
+        <div class="space-y-6">
+
+          <!-- Payment Methods Breakdown -->
+          <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <h3 class="font-black text-slate-900 text-sm font-display flex items-center justify-between">
+              <span>💳 Payment Channels Breakdown</span>
+              <span class="text-xs text-slate-400 font-normal">Real-time collections</span>
+            </h3>
+
+            <div class="space-y-3 text-xs">
+              <div>
+                <div class="flex justify-between font-bold mb-1">
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Online UPI / QR</span>
+                  <span class="text-slate-900 font-black">₹<span id="anaPayUpi">0</span> (<span id="anaPayUpiPct">0%</span>)</span>
+                </div>
+                <div class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div id="anaPayUpiBar" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between font-bold mb-1">
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Cash Counter</span>
+                  <span class="text-slate-900 font-black">₹<span id="anaPayCash">0</span> (<span id="anaPayCashPct">0%</span>)</span>
+                </div>
+                <div class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div id="anaPayCashBar" class="h-full bg-amber-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between font-bold mb-1">
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Card / Razorpay</span>
+                  <span class="text-slate-900 font-black">₹<span id="anaPayCard">0</span> (<span id="anaPayCardPct">0%</span>)</span>
+                </div>
+                <div class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div id="anaPayCardBar" class="h-full bg-sky-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Peak Hourly Dining Rush -->
+          <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+            <h3 class="font-black text-slate-900 text-sm font-display flex items-center justify-between">
+              <span>⏰ Peak Dining Meal Rush Distribution</span>
+              <span class="text-xs text-slate-400 font-normal">Table turn volume</span>
+            </h3>
+
+            <div class="grid grid-cols-4 gap-2 text-center text-xs">
+              <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                <span class="text-lg">🌅</span>
+                <p class="font-black text-slate-900 text-sm" id="rushMorningCount">0</p>
+                <p class="text-[10px] text-slate-500 font-semibold">Morning<br>8AM - 12PM</p>
+              </div>
+              <div class="p-3 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-1">
+                <span class="text-lg">☀️</span>
+                <p class="font-black text-amber-950 text-sm" id="rushLunchCount">0</p>
+                <p class="text-[10px] text-amber-800 font-semibold">Lunch Rush<br>12PM - 4PM</p>
+              </div>
+              <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
+                <span class="text-lg">☕</span>
+                <p class="font-black text-slate-900 text-sm" id="rushSnacksCount">0</p>
+                <p class="text-[10px] text-slate-500 font-semibold">Tea & Snacks<br>4PM - 7PM</p>
+              </div>
+              <div class="p-3 rounded-2xl bg-rose-50/80 border border-rose-200 space-y-1">
+                <span class="text-lg">🌙</span>
+                <p class="font-black text-rose-950 text-sm" id="rushDinnerCount">0</p>
+                <p class="text-[10px] text-rose-800 font-semibold">Dinner Peak<br>7PM - 11PM</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right: Top 5 Best-Selling Dishes Leaderboard -->
+        <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <h3 class="font-black text-slate-900 text-sm font-display">🏆 Top 5 Best-Selling Dishes</h3>
+              <p class="text-[11px] text-slate-400">Ranked by plates sold & revenue earned</p>
+            </div>
+            <span class="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-black">Best Sellers</span>
+          </div>
+
+          <div id="anaTopDishesList" class="space-y-3">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
   </main>
 
   <!-- Bill Settlement Modal (POS) -->
@@ -740,6 +914,71 @@
     </div>
   </div>
 
+  <!-- Table Transfer / Shift Order Modal -->
+  <div id="transferTableModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-fade-in">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div>
+          <span class="text-[10px] font-black uppercase text-sky-600 tracking-wider">Floor Operations</span>
+          <h3 class="font-black text-slate-900 text-base font-display" id="transferModalTitle">Shift / Move Table</h3>
+        </div>
+        <button onclick="closeTransferModal()" class="w-8 h-8 rounded-full bg-slate-100 font-bold text-slate-600">✕</button>
+      </div>
+      <p class="text-xs text-slate-600">Guest is shifting seats? Move this running order ticket to another available table:</p>
+      
+      <div>
+        <label class="block font-bold text-slate-700 text-xs mb-1.5">Select Destination Table:</label>
+        <select id="transferTargetTableSelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-sky-400">
+          <!-- Injected by JS -->
+        </select>
+      </div>
+
+      <div class="pt-2 flex gap-2">
+        <button type="button" onclick="confirmTableTransfer()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-sky-500 to-[#0284c7] hover:from-sky-400 hover:to-sky-500 text-white font-black text-xs shadow-md shadow-sky-500/25 transition active:scale-95">
+          🔀 Confirm & Move Order
+        </button>
+        <button type="button" onclick="closeTransferModal()" class="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Day-End Z-Report Printable Area -->
+  <div id="printZReportArea" class="hidden print:block font-mono text-xs p-4 leading-tight">
+    <div class="text-center pb-2 border-b-2 border-black">
+      <h2 class="font-bold text-base" id="zRepRestName">TipTap Bistro</h2>
+      <p id="zRepRestAddress">Main Road, City Center</p>
+      <p>GSTIN: <span id="zRepGstin">07AAAAA0000A1Z5</span></p>
+      <p class="font-black text-sm mt-1">*** OFFICIAL DAY-END Z-REPORT ***</p>
+      <p id="zRepDate">Date: 20-Nov-2026 | Time: 11:59 PM</p>
+    </div>
+
+    <div class="py-2 border-b border-black space-y-1">
+      <div class="flex justify-between font-bold"><span>Total Orders Closed:</span><span id="zRepTotalOrders">0</span></div>
+      <div class="flex justify-between font-bold"><span>Gross Sales Revenue:</span><span id="zRepGrossRevenue">₹0</span></div>
+      <div class="flex justify-between"><span>Net Sales (Excl. Tax):</span><span id="zRepNetSales">₹0</span></div>
+      <div class="flex justify-between"><span>CGST 2.5%:</span><span id="zRepCgst">₹0</span></div>
+      <div class="flex justify-between"><span>SGST 2.5%:</span><span id="zRepSgst">₹0</span></div>
+      <div class="flex justify-between font-black text-sm pt-1 border-t border-black">
+        <span>TOTAL COLLECTED:</span><span id="zRepTotalAmount">₹0</span>
+      </div>
+    </div>
+
+    <div class="py-2 border-b border-black space-y-1">
+      <p class="font-bold uppercase tracking-wider text-[10px]">Payment Summary Breakdown:</p>
+      <div class="flex justify-between"><span>UPI / Online QR:</span><span id="zRepPayUpi">₹0</span></div>
+      <div class="flex justify-between"><span>Cash Drawer:</span><span id="zRepPayCash">₹0</span></div>
+      <div class="flex justify-between"><span>Card Terminal:</span><span id="zRepPayCard">₹0</span></div>
+    </div>
+
+    <div class="py-4 text-center text-[10px] space-y-3">
+      <p>Cashier Signature: _______________________</p>
+      <p>Manager Signature: _______________________</p>
+      <p class="pt-1">Powered by TipTap Smart Restaurant Cloud</p>
+    </div>
+  </div>
+
   <!-- Real-Time Online Payment Alert Banner (Cha-Ching Toast) -->
   <div id="paymentAlertToast" class="fixed top-20 right-6 z-50 pointer-events-none transition-all duration-500 opacity-0 transform translate-y-4 max-w-md">
     <div class="bg-gradient-to-r from-[#06101e] to-[#0a192f] text-white p-4 rounded-2xl shadow-2xl border-2 border-emerald-400/80 flex items-center gap-4">
@@ -759,7 +998,9 @@
 
   <script>
     let appState = null;
-    let currentRole = 'counter'; // 'counter' | 'kitchen' | 'menu'
+    let currentRole = 'counter'; // 'counter' | 'kitchen' | 'menu' | 'crm' | 'analytics'
+    let currentFloorSection = 'all'; // 'all' | 'ac' | 'garden' | 'rooftop'
+    let currentTransferSourceId = null;
     let soundEnabled = true;
     let selectedPayMode = 'upi';
     let settlingOrder = null;
@@ -920,10 +1161,10 @@
       document.getElementById('soundBtn').classList.toggle('text-slate-500', !soundEnabled);
     }
 
-    // Role Switcher Logic (Counter / Kitchen / Menu / CRM)
+    // Role Switcher Logic (Counter / Kitchen / Menu / CRM / Analytics)
     function setRole(role) {
       currentRole = role;
-      ['counter', 'kitchen', 'menu', 'crm'].forEach(r => {
+      ['counter', 'kitchen', 'menu', 'crm', 'analytics'].forEach(r => {
         const view = document.getElementById(`view-${r}`);
         const tab = document.getElementById(`tab-${r}`);
         const mTab = document.getElementById(`m-tab-${r}`);
@@ -940,6 +1181,22 @@
         }
       });
       renderCurrentRoleView();
+    }
+
+    // Floor Area Section Filter (AC Hall / Garden / Rooftop)
+    function setFloorSection(sec) {
+      currentFloorSection = sec;
+      ['all', 'ac', 'garden', 'rooftop'].forEach(s => {
+        const btn = document.getElementById(`secFilter-${s}`);
+        if (btn) {
+          if (s === sec) {
+            btn.className = 'px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-black shadow-xs shrink-0';
+          } else {
+            btn.className = 'px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 shrink-0';
+          }
+        }
+      });
+      renderCounterView();
     }
 
     // Clock (Runs immediately on load so 'Loading clock' never flashes)
@@ -1017,6 +1274,7 @@
       renderKitchenView();
       renderMenuView();
       renderCrmView();
+      renderAnalyticsView();
     }
 
     // 1. BILLING COUNTER & OWNER POS VIEW
@@ -1042,9 +1300,18 @@
       document.getElementById('ledgerCash').innerText = cash.toLocaleString('en-IN');
       document.getElementById('ledgerCard').innerText = card.toLocaleString('en-IN');
 
-      // Tables Grid (Bada Bada & Animated POS Floor)
+      // Tables Grid (Bada Bada & Animated POS Floor with Area Filtering)
       const grid = document.getElementById('tablesGrid');
-      grid.innerHTML = appState.tables.map(table => {
+      let tablesToDisplay = appState.tables || [];
+      if (currentFloorSection === 'ac') {
+        tablesToDisplay = tablesToDisplay.filter(t => t.id >= 1 && t.id <= 4);
+      } else if (currentFloorSection === 'garden') {
+        tablesToDisplay = tablesToDisplay.filter(t => t.id >= 5 && t.id <= 6);
+      } else if (currentFloorSection === 'rooftop') {
+        tablesToDisplay = tablesToDisplay.filter(t => t.id >= 7 && t.id <= 8);
+      }
+
+      grid.innerHTML = tablesToDisplay.map(table => {
         let bg = 'bg-white border-slate-200 hover:border-brand-300';
         let badgeColor = 'bg-emerald-100 text-emerald-800 border border-emerald-300';
         let statusDot = 'bg-emerald-500';
@@ -1116,10 +1383,14 @@
 
             <div class="pt-2 flex flex-col gap-2">
               ${order ? `
-                <button onclick="openSettleModal('${order.id}')" class="w-full py-3 rounded-2xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-display font-black text-sm shadow-md shadow-sky-400/30 hover:shadow-[0_0_20px_rgba(56,189,248,0.5)] transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2">
-                  <span>💳 Settle Bill & Collect</span>
-                  <span class="text-xs">➔</span>
-                </button>
+                <div class="grid grid-cols-2 gap-2">
+                  <button onclick="openTransferTableModal(${table.id})" class="py-2.5 rounded-2xl border-2 border-sky-300 hover:border-sky-500 hover:bg-sky-50 text-xs font-black text-sky-800 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-1 shadow-xs">
+                    <span>🔀 Shift</span>
+                  </button>
+                  <button onclick="openSettleModal('${order.id}')" class="py-2.5 rounded-2xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-display font-black text-xs shadow-md shadow-sky-400/30 hover:shadow-[0_0_15px_rgba(56,189,248,0.5)] transition-all transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-1">
+                    <span>💳 Settle</span>
+                  </button>
+                </div>
               ` : (table.status === 'reserved' ? `
                 <button onclick="openReserveModal(${table.id})" class="w-full py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-sm transition">
                   View Reservation 📅
@@ -1822,6 +2093,203 @@
       a.href = URL.createObjectURL(blob);
       a.download = `${currentRestaurantId}-Sales-${new Date().toISOString().slice(0,10)}.csv`;
       a.click();
+    }
+
+    // Table Transfer / Shift Functions
+    function openTransferTableModal(fromTableId) {
+      currentTransferSourceId = fromTableId;
+      const sourceTable = appState.tables.find(t => t.id === fromTableId);
+      if (!sourceTable) return;
+
+      document.getElementById('transferModalTitle').innerText = `Shift ${sourceTable.name} to another table`;
+
+      const select = document.getElementById('transferTargetTableSelect');
+      const candidateTables = appState.tables.filter(t => t.id !== fromTableId);
+
+      select.innerHTML = candidateTables.map(t => {
+        const isFree = t.status === 'free';
+        const statusLabel = isFree ? '🟢 Free' : (t.status === 'cleaning' ? '🧹 Cleaning' : '⚠️ Occupied');
+        return `<option value="${t.id}">${t.name} (Capacity: ${t.capacity}) - ${statusLabel}</option>`;
+      }).join('');
+
+      document.getElementById('transferTableModal').classList.remove('hidden');
+    }
+
+    function closeTransferModal() {
+      document.getElementById('transferTableModal').classList.add('hidden');
+      currentTransferSourceId = null;
+    }
+
+    async function confirmTableTransfer() {
+      if (!currentTransferSourceId) return;
+      const select = document.getElementById('transferTargetTableSelect');
+      const toTableId = parseInt(select.value, 10);
+      if (!toTableId) return;
+
+      try {
+        const res = await fetch(`/api/tables/transfer?restaurant=${currentRestaurantId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fromTableId: currentTransferSourceId, toTableId })
+        });
+        const result = await res.json();
+        if (result.success) {
+          closeTransferModal();
+          await fetchState();
+        } else {
+          alert(result.error || 'Failed to shift table');
+        }
+      } catch(e) {
+        alert('Network error while transferring table');
+      }
+    }
+
+    // Business Analytics & Peak Sales Reports View
+    function renderAnalyticsView() {
+      if (!appState) return;
+      const completed = appState.completedOrders || [];
+
+      // 1. Financial KPI Cards
+      const gross = completed.reduce((sum, o) => sum + (o.total || 0), 0);
+      const totalOrders = completed.length;
+      const aov = totalOrders > 0 ? Math.round(gross / totalOrders) : 0;
+      const totalGst = completed.reduce((sum, o) => sum + (o.gst || 0), 0);
+
+      const elGross = document.getElementById('anaMetricGross');
+      if (elGross) elGross.innerText = gross.toLocaleString('en-IN');
+      const elOrders = document.getElementById('anaMetricOrders');
+      if (elOrders) elOrders.innerText = totalOrders;
+      const elAov = document.getElementById('anaMetricAov');
+      if (elAov) elAov.innerText = aov.toLocaleString('en-IN');
+      const elGst = document.getElementById('anaMetricGst');
+      if (elGst) elGst.innerText = totalGst.toLocaleString('en-IN');
+
+      // 2. Payment Channels Breakdown
+      let upiTotal = 0, cashTotal = 0, cardTotal = 0;
+      completed.forEach(o => {
+        const pm = (o.paymentMethod || 'upi').toLowerCase();
+        if (pm === 'cash') cashTotal += (o.total || 0);
+        else if (pm === 'card') cardTotal += (o.total || 0);
+        else upiTotal += (o.total || 0);
+      });
+
+      const upiPct = gross > 0 ? Math.round((upiTotal / gross) * 100) : 0;
+      const cashPct = gross > 0 ? Math.round((cashTotal / gross) * 100) : 0;
+      const cardPct = gross > 0 ? Math.max(0, 100 - upiPct - cashPct) : 0;
+
+      const elUpi = document.getElementById('anaPayUpi');
+      if (elUpi) elUpi.innerText = upiTotal.toLocaleString('en-IN');
+      const elUpiPct = document.getElementById('anaPayUpiPct');
+      if (elUpiPct) elUpiPct.innerText = `${upiPct}%`;
+      const elUpiBar = document.getElementById('anaPayUpiBar');
+      if (elUpiBar) elUpiBar.style.width = `${upiPct}%`;
+
+      const elCash = document.getElementById('anaPayCash');
+      if (elCash) elCash.innerText = cashTotal.toLocaleString('en-IN');
+      const elCashPct = document.getElementById('anaPayCashPct');
+      if (elCashPct) elCashPct.innerText = `${cashPct}%`;
+      const elCashBar = document.getElementById('anaPayCashBar');
+      if (elCashBar) elCashBar.style.width = `${cashPct}%`;
+
+      const elCard = document.getElementById('anaPayCard');
+      if (elCard) elCard.innerText = cardTotal.toLocaleString('en-IN');
+      const elCardPct = document.getElementById('anaPayCardPct');
+      if (elCardPct) elCardPct.innerText = `${cardPct}%`;
+      const elCardBar = document.getElementById('anaPayCardBar');
+      if (elCardBar) elCardBar.style.width = `${cardPct}%`;
+
+      // 3. Peak Hourly Dining Rush
+      let morning = 0, lunch = 0, snacks = 0, dinner = 0;
+      const allOrdersList = [...completed, ...(appState.orders || [])];
+      allOrdersList.forEach(o => {
+        const t = o.createdAt ? new Date(o.createdAt) : new Date();
+        const hr = t.getHours();
+        if (hr >= 8 && hr < 12) morning++;
+        else if (hr >= 12 && hr < 16) lunch++;
+        else if (hr >= 16 && hr < 19) snacks++;
+        else dinner++;
+      });
+
+      const elMorning = document.getElementById('rushMorningCount');
+      if (elMorning) elMorning.innerText = morning;
+      const elLunch = document.getElementById('rushLunchCount');
+      if (elLunch) elLunch.innerText = lunch;
+      const elSnacks = document.getElementById('rushSnacksCount');
+      if (elSnacks) elSnacks.innerText = snacks;
+      const elDinner = document.getElementById('rushDinnerCount');
+      if (elDinner) elDinner.innerText = dinner;
+
+      // 4. Top 5 Best-Selling Dishes Leaderboard
+      const dishStats = {};
+      allOrdersList.forEach(o => {
+        (o.items || []).forEach(item => {
+          if (!dishStats[item.name]) {
+            dishStats[item.name] = { name: item.name, qty: 0, revenue: 0 };
+          }
+          dishStats[item.name].qty += (item.qty || 1);
+          dishStats[item.name].revenue += (item.itemTotal || (item.price * item.qty) || 0);
+        });
+      });
+
+      const sortedDishes = Object.values(dishStats).sort((a, b) => b.qty - a.qty).slice(0, 5);
+      const dishesContainer = document.getElementById('anaTopDishesList');
+      if (dishesContainer) {
+        if (sortedDishes.length === 0) {
+          dishesContainer.innerHTML = `<p class="text-xs text-slate-400 py-4">No dish sales recorded yet.</p>`;
+        } else {
+          const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+          dishesContainer.innerHTML = sortedDishes.map((d, idx) => `
+            <div class="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:border-amber-300 transition-colors">
+              <div class="flex items-center gap-3">
+                <span class="text-lg">${medals[idx] || '⭐'}</span>
+                <div>
+                  <p class="font-extrabold text-slate-900 text-xs">${d.name}</p>
+                  <p class="text-[10px] text-slate-500 font-semibold">${d.qty} plates ordered</p>
+                </div>
+              </div>
+              <div class="text-right">
+                <p class="font-black text-slate-900 text-xs font-display">₹${d.revenue.toLocaleString('en-IN')}</p>
+                <p class="text-[10px] text-emerald-600 font-bold">Revenue</p>
+              </div>
+            </div>
+          `).join('');
+        }
+      }
+    }
+
+    // Thermal Day-End Z-Report Print
+    function printZReport() {
+      if (!appState) return;
+      const completed = appState.completedOrders || [];
+      const gross = completed.reduce((sum, o) => sum + (o.total || 0), 0);
+      const gst = completed.reduce((sum, o) => sum + (o.gst || 0), 0);
+      const net = gross - gst;
+
+      let upi = 0, cash = 0, card = 0;
+      completed.forEach(o => {
+        const pm = (o.paymentMethod || 'upi').toLowerCase();
+        if (pm === 'cash') cash += (o.total || 0);
+        else if (pm === 'card') card += (o.total || 0);
+        else upi += (o.total || 0);
+      });
+
+      document.getElementById('zRepRestName').innerText = appState.restaurant.name;
+      document.getElementById('zRepRestAddress').innerText = appState.restaurant.address || 'City Center';
+      document.getElementById('zRepGstin').innerText = appState.restaurant.gstin || '07AAAAA0000A1Z5';
+      document.getElementById('zRepDate').innerText = `Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} | Time: ${new Date().toLocaleTimeString('en-IN')}`;
+
+      document.getElementById('zRepTotalOrders').innerText = completed.length;
+      document.getElementById('zRepGrossRevenue').innerText = `₹${gross.toLocaleString('en-IN')}`;
+      document.getElementById('zRepNetSales').innerText = `₹${net.toLocaleString('en-IN')}`;
+      document.getElementById('zRepCgst').innerText = `₹${(gst / 2).toFixed(2)}`;
+      document.getElementById('zRepSgst').innerText = `₹${(gst / 2).toFixed(2)}`;
+      document.getElementById('zRepTotalAmount').innerText = `₹${gross.toLocaleString('en-IN')}`;
+
+      document.getElementById('zRepPayUpi').innerText = `₹${upi.toLocaleString('en-IN')}`;
+      document.getElementById('zRepPayCash').innerText = `₹${cash.toLocaleString('en-IN')}`;
+      document.getElementById('zRepPayCard').innerText = `₹${card.toLocaleString('en-IN')}`;
+
+      window.print();
     }
 
     // SSE Real-Time Event Listener & Voice Soundbox Dispatcher

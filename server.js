@@ -951,6 +951,46 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // 9b. Transfer / Shift Table: POST /api/tables/transfer
+    if (pathname.includes('/tables/transfer') && req.method === 'POST') {
+      readJsonBody((err, data) => {
+        const fromTableId = parseInt(data.fromTableId, 10);
+        const toTableId = parseInt(data.toTableId, 10);
+
+        const fromTable = restaurant.tables.find(t => t.id === fromTableId);
+        const toTable = restaurant.tables.find(t => t.id === toTableId);
+
+        if (!fromTable || !toTable) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Source or destination table not found' }));
+          return;
+        }
+
+        // Find active order of fromTable
+        const activeOrder = restaurant.orders.find(o => o.tableId === fromTableId && o.status !== 'paid');
+        if (activeOrder) {
+          activeOrder.tableId = toTableId;
+          activeOrder.tableName = toTable.name;
+          toTable.currentOrderId = activeOrder.id;
+        }
+
+        toTable.status = 'occupied';
+        toTable.seatingTime = fromTable.seatingTime || new Date().toISOString();
+
+        fromTable.status = 'cleaning';
+        fromTable.currentOrderId = null;
+        fromTable.seatingTime = null;
+
+        saveDb(db);
+        broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
+        if (activeOrder) broadcastEvent(restaurant.id, 'order:update', activeOrder);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, fromTable, toTable, order: activeOrder }));
+      });
+      return;
+    }
+
     // 10. Add New Dish: POST /api/menu
     if (pathname.endsWith('/menu') && req.method === 'POST') {
       readJsonBody((err, data) => {
