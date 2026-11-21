@@ -458,6 +458,51 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // 2b. Delete Restaurant (Super Admin): DELETE /api/restaurants/:id
+    const deleteRestMatch = pathname.match(/^\/api\/restaurants\/([A-Za-z0-9_-]+)$/);
+    if (deleteRestMatch && req.method === 'DELETE') {
+      const delId = deleteRestMatch[1];
+      if (Object.keys(db.restaurants).length <= 1) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Cannot delete the only remaining restaurant' }));
+        return;
+      }
+      if (!db.restaurants[delId]) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Restaurant not found' }));
+        return;
+      }
+      delete db.restaurants[delId];
+      saveDb(db);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, deletedId: delId }));
+      return;
+    }
+
+    // 2c. Reset Data / Orders (Super Admin): POST /api/admin/reset
+    if (pathname === '/api/admin/reset' && req.method === 'POST') {
+      const restId = searchParams.get('restaurant');
+      const targets = restId && db.restaurants[restId] ? [db.restaurants[restId]] : Object.values(db.restaurants);
+      targets.forEach(r => {
+        r.orders = [];
+        r.completedOrders = [];
+        r.serviceRequests = [];
+        (r.tables || []).forEach(t => {
+          t.status = 'free';
+          t.currentOrderId = null;
+          t.seatingTime = null;
+          t.reservedFor = null;
+          t.reservedTime = null;
+        });
+        broadcastEvent(r.id, 'order:update', {});
+        broadcastEvent(r.id, 'table:update', r.tables);
+      });
+      saveDb(db);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Data reset successfully! All tables are free.' }));
+      return;
+    }
+
     // 3. Network IP (for physical NFC card programming)
     if (pathname === '/api/network-ip' && req.method === 'GET') {
       const localIp = getLocalIpAddress();

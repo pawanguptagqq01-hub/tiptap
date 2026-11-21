@@ -58,6 +58,10 @@
       </div>
 
       <div class="flex items-center gap-3">
+        <button onclick="resetAllData()" class="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs transition flex items-center gap-1.5" title="Clear all orders and make all tables free">
+          <span>🧹</span>
+          <span>Reset All Orders</span>
+        </button>
         <a href="/dashboard.html" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition">
           Switch to Staff POS ➔
         </a>
@@ -291,6 +295,15 @@
             <button onclick="shareWelcomeOnWhatsApp('${r.name}', '${r.id}', '${r.phone}')" class="w-full py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition">
               <span>💬</span> Send Login & NFC Pack via WhatsApp
             </button>
+
+            <div class="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-700/60">
+              <button onclick="resetRestaurantData('${r.id}', '${r.name}')" class="py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-amber-300 font-bold text-center transition flex items-center justify-center gap-1">
+                <span>🧹</span> Reset Orders
+              </button>
+              <button onclick="deleteRestaurant('${r.id}', '${r.name}')" class="py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 text-rose-300 font-bold text-center transition flex items-center justify-center gap-1">
+                <span>🗑️</span> Delete
+              </button>
+            </div>
           </div>
 
         </div>
@@ -363,6 +376,46 @@
       const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
       const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
       window.open(url, '_blank');
+    }
+
+    async function resetAllData() {
+      if (!confirm('Are you sure you want to clear ALL test orders and reset all tables to FREE across all restaurants?')) return;
+      try {
+        const res = await fetch('/api/admin/reset', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || 'All test orders cleared! All tables are now free.');
+        await loadRestaurants();
+      } catch (e) {
+        alert('Failed to reset data');
+      }
+    }
+
+    async function resetRestaurantData(id, name) {
+      if (!confirm(`Clear all orders and free all tables for "${name}"?`)) return;
+      try {
+        const res = await fetch(`/api/admin/reset?restaurant=${id}`, { method: 'POST' });
+        const data = await res.json();
+        alert(`All orders cleared for ${name}! Tables are now free.`);
+        await loadRestaurants();
+      } catch (e) {
+        alert('Failed to reset restaurant orders');
+      }
+    }
+
+    async function deleteRestaurant(id, name) {
+      if (!confirm(`Are you sure you want to delete restaurant "${name}"? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`/api/restaurants/${id}`, { method: 'DELETE' });
+        if (res.ok) {
+          alert(`Restaurant "${name}" has been deleted.`);
+          await loadRestaurants();
+        } else {
+          const err = await res.json();
+          alert(err.error || 'Failed to delete restaurant');
+        }
+      } catch (e) {
+        alert('Failed to delete restaurant');
+      }
     }
 
     loadRestaurants();
