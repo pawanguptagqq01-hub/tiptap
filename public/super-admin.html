@@ -267,7 +267,7 @@
         </button>
 
         <p class="text-[11px] text-slate-500">
-          Default Master PIN: <span class="font-mono text-slate-400">0000</span> or <span class="font-mono text-slate-400">pawan999</span>
+          Restricted to authorized Super Admin personnel only.
         </p>
       </form>
 
@@ -441,7 +441,7 @@
                 <span>💳</span> <span class="truncate">Print NFC Stands</span>
               </a>
               <a href="/menu.html?restaurant=${r.id}&table=1" target="_blank" class="py-2 px-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-bold text-center transition flex items-center justify-center gap-1 truncate">
-                <span>🍽️</span> <span class="truncate">Test Menu (T1)</span>
+                <span>🍽️</span> <span class="truncate">Preview Menu (T1)</span>
               </a>
             </div>
 
@@ -472,6 +472,10 @@
       document.getElementById('onboardModal').classList.add('hidden');
     }
 
+    function getAdminPin() {
+      return sessionStorage.getItem('tiptap_admin_pin') || '';
+    }
+
     async function handleOnboardSubmit(e) {
       e.preventDefault();
       const btn = document.getElementById('btnSubmitOnboard');
@@ -486,13 +490,17 @@
         gstin: document.getElementById('inpGstin').value.trim(),
         pin: document.getElementById('inpPin').value.trim() || '1234',
         kitchenPin: document.getElementById('inpKitchenPin').value.trim() || '5678',
-        upiVpa: document.getElementById('inpUpi').value.trim() || 'tiptap.merchant@icici'
+        upiVpa: document.getElementById('inpUpi').value.trim() || 'tiptap.merchant@icici',
+        masterPin: getAdminPin()
       };
 
       try {
         const res = await fetch('/api/restaurants', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-master-pin': getAdminPin()
+          },
           body: JSON.stringify(payload)
         });
 
@@ -525,7 +533,7 @@
         `*🍳 Kitchen KDS Station Link (Chef Only - No Billing Access):*\n` +
         `${host}/kds.html?restaurant=${id}\n` +
         `Chef Passkey: ${kitchenPin}\n\n` +
-        `*🍽️ Sample Table 1 NFC Menu Demo:*\n` +
+        `*🍽️ Table 1 NFC Menu Preview:*\n` +
         `${host}/menu.html?restaurant=${id}&table=1\n\n` +
         `Physical NFC Table Cards are being configured and dispatched from Super Admin HQ.\n\n` +
         `Powered by TipTap Technologies 🚀`;
@@ -536,33 +544,78 @@
     }
 
     async function resetAllData() {
-      if (!confirm('Are you sure you want to clear ALL test orders and reset all tables to FREE across all restaurants?')) return;
+      let pin = getAdminPin();
+      if (!pin) {
+        pin = prompt('Enter Master PIN to confirm clearing all live orders across all restaurants:');
+        if (!pin) return;
+      } else {
+        if (!confirm('⚠️ DANGER: Are you sure you want to clear ALL orders and reset all tables to FREE across all restaurants?')) return;
+      }
       try {
-        const res = await fetch('/api/admin/reset', { method: 'POST' });
+        const res = await fetch('/api/admin/reset', { 
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-master-pin': pin
+          },
+          body: JSON.stringify({ pin })
+        });
         const data = await res.json();
-        alert(data.message || 'All test orders cleared! All tables are now free.');
-        await loadRestaurants();
+        if (res.ok) {
+          alert(data.message || 'All test orders cleared! All tables are now free.');
+          await loadRestaurants();
+        } else {
+          alert(data.error || 'Failed to reset data');
+        }
       } catch (e) {
-        alert('Failed to reset data');
+        alert('Failed to reset data: ' + e.message);
       }
     }
 
     async function resetRestaurantData(id, name) {
-      if (!confirm(`Clear all orders and free all tables for "${name}"?`)) return;
+      let pin = getAdminPin();
+      if (!pin) {
+        pin = prompt(`Enter Master PIN to confirm order reset for "${name}":`);
+        if (!pin) return;
+      } else {
+        if (!confirm(`Clear all orders and free all tables for "${name}"?`)) return;
+      }
       try {
-        const res = await fetch(`/api/admin/reset?restaurant=${id}`, { method: 'POST' });
+        const res = await fetch(`/api/admin/reset?restaurant=${id}`, { 
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-master-pin': pin
+          },
+          body: JSON.stringify({ pin, restaurant: id })
+        });
         const data = await res.json();
-        alert(`All orders cleared for ${name}! Tables are now free.`);
-        await loadRestaurants();
+        if (res.ok) {
+          alert(`All orders cleared for ${name}! Tables are now free.`);
+          await loadRestaurants();
+        } else {
+          alert(data.error || 'Failed to reset restaurant orders');
+        }
       } catch (e) {
-        alert('Failed to reset restaurant orders');
+        alert('Failed to reset restaurant orders: ' + e.message);
       }
     }
 
     async function deleteRestaurant(id, name) {
-      if (!confirm(`Are you sure you want to delete restaurant "${name}"? This cannot be undone.`)) return;
+      let pin = getAdminPin();
+      if (!pin) {
+        pin = prompt(`Enter Master PIN to confirm DELETION of restaurant "${name}":`);
+        if (!pin) return;
+      } else {
+        if (!confirm(`⚠️ Are you sure you want to delete restaurant "${name}"? This cannot be undone.`)) return;
+      }
       try {
-        const res = await fetch(`/api/restaurants/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/restaurants/${id}`, { 
+          method: 'DELETE',
+          headers: {
+            'x-master-pin': pin
+          }
+        });
         if (res.ok) {
           alert(`Restaurant "${name}" has been deleted.`);
           await loadRestaurants();
@@ -605,6 +658,7 @@
         const data = await res.json();
         if (res.ok && data.success) {
           sessionStorage.setItem('tiptap_admin_auth', 'true');
+          sessionStorage.setItem('tiptap_admin_pin', pin);
           localStorage.setItem('tiptap_admin_auth', 'true');
           document.getElementById('superAdminGateModal').classList.add('hidden');
           initSuperAdmin();
@@ -625,6 +679,7 @@
 
     function lockAdminSession() {
       sessionStorage.removeItem('tiptap_admin_auth');
+      sessionStorage.removeItem('tiptap_admin_pin');
       localStorage.removeItem('tiptap_admin_auth');
       location.reload();
     }
@@ -722,7 +777,10 @@
     async function approveLead(leadId) {
       if (!confirm('Approve this restaurant application and provision its live dashboard + NFC ordering system?')) return;
       try {
-        const res = await fetch(`/api/leads/${leadId}/approve`, { method: 'POST' });
+        const res = await fetch(`/api/leads/${leadId}/approve`, { 
+          method: 'POST',
+          headers: { 'x-master-pin': getAdminPin() }
+        });
         const data = await res.json();
         if (res.ok && data.success) {
           alert(`🎉 Restaurant "${data.restaurant.name}" is now LIVE!\n\nStaff Dashboard: /dashboard.html?restaurant=${data.restaurant.id}\nNFC Cards: /nfc-manager.html?restaurant=${data.restaurant.id}`);
@@ -739,7 +797,10 @@
     async function rejectLead(leadId, restName) {
       if (!confirm(`Are you sure you want to remove the application for "${restName}"?`)) return;
       try {
-        const res = await fetch(`/api/leads/${leadId}`, { method: 'DELETE' });
+        const res = await fetch(`/api/leads/${leadId}`, { 
+          method: 'DELETE',
+          headers: { 'x-master-pin': getAdminPin() }
+        });
         if (res.ok) {
           await loadLeads();
         } else {

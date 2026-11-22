@@ -229,6 +229,7 @@
         if (res.ok && data.success) {
           if (data.role === 'superadmin') {
             sessionStorage.setItem('tiptap_admin_auth', 'true');
+            sessionStorage.setItem('tiptap_admin_pin', pin);
             localStorage.setItem('tiptap_admin_auth', 'true');
             btn.innerText = '✓ Master PIN Verified! Opening Super Admin HQ...';
             btn.className = 'w-full py-3.5 rounded-xl bg-amber-500 text-slate-950 font-black text-sm shadow-xl flex items-center justify-center gap-2';
