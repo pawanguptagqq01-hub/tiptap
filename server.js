@@ -146,6 +146,35 @@ function createDefaultRestaurant(id, name, phone, address, gstin, tableCount = 8
         inStock: true,
         variants: [],
         addons: [{ name: 'Extra Chocolate Drizzle', price: 20 }]
+      },
+      {
+        id: `${id}_m9`,
+        name: 'Packaged Mineral Water Bottle (1L)',
+        category: 'Beverages',
+        type: 'veg',
+        isJain: true,
+        price: 20,
+        image: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&w=600&q=80',
+        description: 'Sealed 1 Litre chilled / room temperature mineral drinking water bottle.',
+        inStock: true,
+        variants: [
+          { name: 'Chilled', price: 20 },
+          { name: 'Room Temp', price: 20 }
+        ],
+        addons: []
+      },
+      {
+        id: `${id}_m10`,
+        name: 'Tandoori Butter Roti',
+        category: 'Breads',
+        type: 'veg',
+        isJain: true,
+        price: 25,
+        image: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?auto=format&fit=crop&w=600&q=80',
+        description: 'Fresh crisp tandoor-baked whole wheat roti brushed with pure desi butter.',
+        inStock: true,
+        variants: [],
+        addons: []
       }
     ],
     orders: isSample ? [
@@ -264,6 +293,25 @@ function loadDb() {
                 m.image = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80';
               }
             });
+            const hasWater = r.menu.some(m => m.name.toLowerCase().includes('water bottle') || m.name.toLowerCase().includes('mineral water'));
+            if (!hasWater) {
+              r.menu.push({
+                id: `${r.id}_m_water`,
+                name: 'Packaged Mineral Water Bottle (1L)',
+                category: 'Beverages',
+                type: 'veg',
+                isJain: true,
+                price: 20,
+                image: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&w=600&q=80',
+                description: 'Sealed 1 Litre chilled / room temperature mineral drinking water bottle.',
+                inStock: true,
+                variants: [
+                  { name: 'Chilled', price: 20 },
+                  { name: 'Room Temp', price: 20 }
+                ],
+                addons: []
+              });
+            }
           }
           if (!r.promoCodes) {
             r.promoCodes = [
@@ -1163,6 +1211,90 @@ const server = http.createServer((req, res) => {
         const gst = Math.round((taxableSubtotal * (restaurant.gstPercent / 100)) * 100) / 100;
         const total = taxableSubtotal + gst + packagingCharge;
 
+        // Check if Table already has an active, unpaid dining session (Round 2+ Multi-Round KOT)
+        if (orderType === 'dinein') {
+          const activeOrder = restaurant.orders.find(o => 
+            o.tableId === tableId && 
+            !o.isPaid && 
+            o.paymentStatus !== 'paid' && 
+            o.status !== 'cancelled' && 
+            o.status !== 'settled'
+          );
+
+          if (activeOrder) {
+            // MULTI-ROUND TABLE RUNNING TAB
+            if (!activeOrder.kots || !Array.isArray(activeOrder.kots)) {
+              activeOrder.kots = [
+                {
+                  kotNumber: 1,
+                  items: (activeOrder.items || []).map(it => ({ ...it, kotNumber: 1 })),
+                  orderedAt: activeOrder.createdAt,
+                  status: activeOrder.kitchenStatus || 'served'
+                }
+              ];
+            }
+
+            const kotNumber = activeOrder.kots.length + 1;
+            const kotItems = items.map(it => ({ ...it, kotNumber }));
+
+            const newKot = {
+              kotNumber,
+              items: kotItems,
+              orderedAt: new Date().toISOString(),
+              status: 'received'
+            };
+            activeOrder.kots.push(newKot);
+
+            // Append items to consolidated items list
+            kotItems.forEach(it => activeOrder.items.push(it));
+
+            // Recalculate financial totals
+            activeOrder.subtotal = (activeOrder.subtotal || 0) + subtotal;
+            const curDiscount = Number(activeOrder.discount) || 0;
+            const newTaxable = Math.max(0, activeOrder.subtotal - curDiscount);
+            activeOrder.gst = Math.round((newTaxable * (restaurant.gstPercent / 100)) * 100) / 100;
+            activeOrder.total = newTaxable + activeOrder.gst;
+            activeOrder.kitchenStatus = 'received'; // chef has new items to cook
+            activeOrder.status = 'received';
+            activeOrder.updatedAt = new Date().toISOString();
+            if (data.notes) {
+              activeOrder.notes = activeOrder.notes 
+                ? `${activeOrder.notes} | R${kotNumber}: ${data.notes}` 
+                : `R${kotNumber}: ${data.notes}`;
+            }
+
+            saveDb(db);
+
+            // Broadcast real-time notifications
+            broadcastEvent(restaurant.id, 'order:kot', {
+              orderId: activeOrder.id,
+              tableId,
+              tableName: targetTable.name,
+              kot: newKot,
+              order: activeOrder
+            });
+            broadcastEvent(restaurant.id, 'order:update', activeOrder);
+            broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              ...activeOrder,
+              isMultiRound: true,
+              currentKotNumber: kotNumber,
+              newKot
+            }));
+            return;
+          }
+        }
+
+        // New Session (Round 1 KOT)
+        const initialKot = {
+          kotNumber: 1,
+          items: items.map(it => ({ ...it, kotNumber: 1 })),
+          orderedAt: new Date().toISOString(),
+          status: 'received'
+        };
+
         const newOrder = {
           id: newId,
           orderType, // 'dinein' | 'takeaway' | 'delivery'
@@ -1171,7 +1303,8 @@ const server = http.createServer((req, res) => {
           customerName: data.customerName || '',
           customerPhone: data.customerPhone || '',
           deliveryAddress: data.deliveryAddress || '',
-          items,
+          items: initialKot.items,
+          kots: [initialKot],
           notes: data.notes || '',
           subtotal,
           discount,

@@ -875,11 +875,60 @@
             <span>💬</span> <span>WhatsApp</span>
           </button>
         </div>
+        <button onclick="closeSettleModal(); if(settlingOrder) openPosQuickAddModal(settlingOrder.tableId)" class="w-full py-2.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 font-extrabold text-xs transition flex items-center justify-center gap-1.5">
+          <span>➕ Add Dishes / Water Bottle to this Table</span>
+        </button>
         <button onclick="cancelRunningOrder()" class="w-full py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition flex items-center justify-center gap-1">
           <span>✕ Cancel & Free Table</span>
         </button>
       </div>
 
+    </div>
+  </div>
+
+  <!-- POS Quick Add Dish / Water Bottle Modal (Punches KOT to Active Table) -->
+  <div id="posQuickAddModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">➕</span>
+          <div>
+            <h3 class="font-extrabold text-slate-900 text-base" id="posQuickAddTitle">Table 1 • Quick Add Item (KOT)</h3>
+            <p class="text-[11px] text-slate-500 font-medium">Add dishes, rotis, or mineral water directly to table's bill</p>
+          </div>
+        </div>
+        <button onclick="closePosQuickAddModal()" class="w-8 h-8 rounded-full bg-slate-100 font-bold text-slate-600 hover:bg-slate-200">✕</button>
+      </div>
+
+      <!-- Search & Fast Filters -->
+      <div class="space-y-2">
+        <input type="text" id="posDishSearchInp" oninput="filterPosQuickDishes()" placeholder="🔍 Quick search dishes or mineral water..."
+          class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500 text-xs">
+        
+        <div class="flex gap-1.5 overflow-x-auto pb-1 text-[11px] no-scrollbar">
+          <button type="button" onclick="quickPunchItemByName('Packaged Mineral Water Bottle')" class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold hover:bg-amber-200 shrink-0">
+            🍾 + Mineral Water (₹20)
+          </button>
+          <button type="button" onclick="quickPunchItemByName('Roti')" class="px-2.5 py-1 rounded-lg bg-sky-100 text-sky-900 font-bold hover:bg-sky-200 shrink-0">
+            🫓 + Roti
+          </button>
+          <button type="button" onclick="quickPunchItemByName('Naan')" class="px-2.5 py-1 rounded-lg bg-sky-100 text-sky-900 font-bold hover:bg-sky-200 shrink-0">
+            🫓 + Naan
+          </button>
+        </div>
+      </div>
+
+      <!-- Menu Items List to Pick -->
+      <div id="posQuickMenuItemsList" class="space-y-2 max-h-64 overflow-y-auto pr-1 divide-y divide-slate-100">
+        <!-- Rendered by JS -->
+      </div>
+
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <span>KOT automatically dispatches to Kitchen.</span>
+        <button onclick="closePosQuickAddModal()" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">
+          Close
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1688,6 +1737,9 @@
                     <span>${(order.isPaid || order.paymentStatus === 'paid') ? '✓' : '💳'}</span> <span class="truncate">${(order.isPaid || order.paymentStatus === 'paid') ? 'Paid Bill' : 'Settle'}</span>
                   </button>
                 </div>
+                <button onclick="event.stopPropagation(); openPosQuickAddModal(${table.id})" class="w-full py-1.5 px-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300/80 text-amber-900 font-extrabold text-[11px] sm:text-xs transition flex items-center justify-center gap-1.5 active:scale-95">
+                  <span>➕</span> <span>Add Dish / Water (KOT)</span>
+                </button>
               ` : (table.status === 'reserved' ? `
                 <button onclick="event.stopPropagation(); openReserveModal(${table.id})" class="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-sm transition truncate">
                   View Reservation 📅
@@ -2402,12 +2454,29 @@
       document.getElementById('settleGst').innerText = settlingOrder.gst;
       document.getElementById('settleTotal').innerText = settlingOrder.total;
 
-      document.getElementById('settleItemsList').innerHTML = settlingOrder.items.map(i => `
-        <div class="flex justify-between py-1">
-          <span>${i.qty}x ${i.name}</span>
-          <span class="font-bold">₹${i.itemTotal}</span>
-        </div>
-      `).join('');
+      if (settlingOrder.kots && settlingOrder.kots.length > 1) {
+        document.getElementById('settleItemsList').innerHTML = settlingOrder.kots.map(k => `
+          <div class="border-b border-slate-200/80 pb-2 mb-2 last:border-0 last:mb-0 space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-black uppercase text-sky-800 bg-sky-100 px-2 py-0.5 rounded">KOT Round ${k.kotNumber}</span>
+              <span class="text-[9px] text-slate-400">${k.orderedAt ? new Date(k.orderedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+            </div>
+            ${(k.items || []).map(i => `
+              <div class="flex justify-between py-0.5 text-xs text-slate-700">
+                <span>${i.qty}x ${i.name} ${i.variant ? `(${i.variant})` : ''}</span>
+                <span class="font-bold">₹${i.itemTotal || (i.price * i.qty)}</span>
+              </div>
+            `).join('')}
+          </div>
+        `).join('');
+      } else {
+        document.getElementById('settleItemsList').innerHTML = settlingOrder.items.map(i => `
+          <div class="flex justify-between py-1 text-xs text-slate-700">
+            <span>${i.qty}x ${i.name} ${i.variant ? `(${i.variant})` : ''}</span>
+            <span class="font-bold">₹${i.itemTotal || (i.price * i.qty)}</span>
+          </div>
+        `).join('');
+      }
 
       const isPaid = settlingOrder.isPaid || settlingOrder.paymentStatus === 'paid' || settlingOrder.status === 'paid';
       const paidNotice = document.getElementById('settlePaidNotice');
@@ -2447,6 +2516,100 @@
     function closeSettleModal() {
       document.getElementById('settleModal').classList.add('hidden');
       settlingOrder = null;
+    }
+
+    // POS Quick Add Item (Dishes & Mineral Water)
+    let posTargetTableId = null;
+
+    function openPosQuickAddModal(tableId) {
+      posTargetTableId = tableId;
+      const modal = document.getElementById('posQuickAddModal');
+      const table = (appState.tables || []).find(t => t.id === tableId) || { name: `Table ${tableId}` };
+      document.getElementById('posQuickAddTitle').innerText = `${table.name} • Add Dish / Water (KOT)`;
+      document.getElementById('posDishSearchInp').value = '';
+      renderPosQuickDishes('');
+      modal.classList.remove('hidden');
+    }
+
+    function closePosQuickAddModal() {
+      document.getElementById('posQuickAddModal').classList.add('hidden');
+      posTargetTableId = null;
+    }
+
+    function filterPosQuickDishes() {
+      const q = document.getElementById('posDishSearchInp').value.toLowerCase().trim();
+      renderPosQuickDishes(q);
+    }
+
+    function renderPosQuickDishes(filterQuery = '') {
+      const list = document.getElementById('posQuickMenuItemsList');
+      if (!list) return;
+      const menu = appState.restaurant?.menu || appState.menu || [];
+      const filtered = menu.filter(m => !filterQuery || m.name.toLowerCase().includes(filterQuery) || m.category?.toLowerCase().includes(filterQuery));
+
+      if (filtered.length === 0) {
+        list.innerHTML = `<p class="py-4 text-center text-slate-400 text-xs">No matching dishes found in menu.</p>`;
+        return;
+      }
+
+      list.innerHTML = filtered.map(m => `
+        <div class="flex items-center justify-between py-2 gap-2">
+          <div class="min-w-0">
+            <p class="font-bold text-slate-900 text-xs truncate">${m.name}</p>
+            <p class="text-[10px] text-slate-500 font-mono">₹${m.price} • ${m.category || 'General'}</p>
+          </div>
+          <button onclick="punchItemToTable('${m.id}')" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-white font-extrabold text-[11px] shrink-0 shadow-xs active:scale-95 transition">
+            ＋ Add
+          </button>
+        </div>
+      `).join('');
+    }
+
+    async function quickPunchItemByName(keyword) {
+      const menu = appState.restaurant?.menu || appState.menu || [];
+      const item = menu.find(m => m.name.toLowerCase().includes(keyword.toLowerCase()));
+      if (item) {
+        await punchItemToTable(item.id);
+      } else {
+        alert(`Item matching "${keyword}" not found in restaurant menu.`);
+      }
+    }
+
+    async function punchItemToTable(menuItemId) {
+      if (!posTargetTableId) return;
+      const menu = appState.restaurant?.menu || appState.menu || [];
+      const item = menu.find(m => m.id === menuItemId);
+      if (!item) return;
+
+      try {
+        const res = await fetch(`/api/orders?restaurant=${currentRestaurantId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tableId: posTargetTableId,
+            orderType: 'dinein',
+            items: [{
+              id: item.id,
+              name: item.name,
+              variant: item.variants?.[0]?.name || '',
+              price: item.price,
+              qty: 1
+            }],
+            notes: 'POS Counter Punch'
+          })
+        });
+
+        if (res.ok) {
+          const updated = await res.json();
+          alert(`✅ Added 1x "${item.name}" (₹${item.price}) to Table ${posTargetTableId}!\n\nNew Running Total: ₹${updated.total}\nKOT dispatched to Kitchen.`);
+          closePosQuickAddModal();
+          await fetchState();
+        } else {
+          alert('Failed to add item to table.');
+        }
+      } catch (err) {
+        alert('Network error while adding item.');
+      }
     }
 
     function selectPayMode(mode) {

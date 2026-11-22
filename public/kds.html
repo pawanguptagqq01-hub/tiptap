@@ -521,6 +521,11 @@
                     <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${order.orderType === 'takeaway' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-sky-500/20 text-sky-300 border border-sky-500/40'}">
                       ${order.orderType === 'takeaway' ? '🥡 TAKEAWAY' : '🍽️ DINE-IN'}
                     </span>
+                    ${(order.kots && order.kots.length > 1) ? `
+                      <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-orange-500/25 text-orange-300 border border-orange-500/50 flex items-center gap-1 shadow-sm animate-pulse">
+                        <span>🔥</span> <span>ROUND ${order.kots.length} (NEW KOT)</span>
+                      </span>
+                    ` : ''}
                     ${isPaid ? `
                       <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 inline-flex items-center gap-1 shadow-sm font-sans">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -560,22 +565,49 @@
                 </div>
               ` : ''}
 
-              <!-- Ordered Items List (Bada Bada Typography for Kitchen Display) -->
-              <div class="space-y-2.5 divide-y divide-slate-800/80">
-                ${(order.items || []).map((i, idx) => `
-                  <div onclick="toggleItemStrike(this)" class="pt-2.5 flex items-start gap-3 cursor-pointer select-none group/item hover:bg-slate-800/40 p-1.5 rounded-xl transition">
-                    <span class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-amber-400 font-display font-black text-base flex items-center justify-center shrink-0 shadow-inner group-hover/item:border-amber-400">
-                      ${i.qty}x
-                    </span>
-                    <div class="flex-1">
-                      <p class="font-display font-black text-white text-base leading-snug tracking-tight">${i.name}</p>
-                      <div class="flex items-center gap-2 mt-1 flex-wrap">
-                        ${i.variant ? `<span class="text-[11px] font-extrabold text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded-md border border-sky-500/30">Portion: ${i.variant}</span>` : ''}
-                        ${(i.addons && i.addons.length) ? `<span class="text-[11px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/30">Add: ${i.addons.join(', ')}</span>` : ''}
+              <!-- Ordered Items List (Grouped by KOT Round if multi-round) -->
+              <div class="space-y-3">
+                ${(order.kots && order.kots.length > 1) ? order.kots.map((k, kIdx) => {
+                  const isLatestKot = kIdx === order.kots.length - 1;
+                  return `
+                    <div class="rounded-2xl p-3 border ${isLatestKot ? 'bg-amber-950/20 border-amber-500/40 ring-1 ring-amber-500/30' : 'bg-slate-950/40 border-slate-800/80'} space-y-2">
+                      <div class="flex items-center justify-between text-[11px] pb-1 border-b ${isLatestKot ? 'border-amber-500/30 text-amber-300' : 'border-slate-800 text-slate-400'}">
+                        <span class="font-black uppercase tracking-wider">${isLatestKot ? '🔥 KOT ROUND ' + k.kotNumber + ' (NEW ITEMS TO COOK)' : '✓ KOT Round ' + k.kotNumber}</span>
+                        <span class="font-mono text-[10px]">${k.orderedAt ? new Date(k.orderedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                      </div>
+                      <div class="space-y-2">
+                        ${(k.items || []).map(i => `
+                          <div onclick="toggleItemStrike(this)" class="flex items-start gap-3 cursor-pointer select-none group/item hover:bg-slate-800/40 p-1.5 rounded-xl transition">
+                            <span class="w-8 h-8 rounded-xl bg-slate-800 border ${isLatestKot ? 'border-amber-400 text-amber-300 font-black' : 'border-slate-700 text-slate-300'} font-display text-sm flex items-center justify-center shrink-0 shadow-inner">
+                              ${i.qty}x
+                            </span>
+                            <div class="flex-1">
+                              <p class="font-display font-black ${isLatestKot ? 'text-amber-100' : 'text-slate-200'} text-base leading-snug tracking-tight">${i.name}</p>
+                              ${i.variant ? `<span class="text-[10px] font-extrabold text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded-md border border-sky-500/30 mt-0.5 inline-block">${i.variant}</span>` : ''}
+                            </div>
+                          </div>
+                        `).join('')}
                       </div>
                     </div>
+                  `;
+                }).join('') : `
+                  <div class="space-y-2.5 divide-y divide-slate-800/80">
+                    ${(order.items || []).map((i, idx) => `
+                      <div onclick="toggleItemStrike(this)" class="pt-2.5 flex items-start gap-3 cursor-pointer select-none group/item hover:bg-slate-800/40 p-1.5 rounded-xl transition">
+                        <span class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-amber-400 font-display font-black text-base flex items-center justify-center shrink-0 shadow-inner group-hover/item:border-amber-400">
+                          ${i.qty}x
+                        </span>
+                        <div class="flex-1">
+                          <p class="font-display font-black text-white text-base leading-snug tracking-tight">${i.name}</p>
+                          <div class="flex items-center gap-2 mt-1 flex-wrap">
+                            ${i.variant ? `<span class="text-[11px] font-extrabold text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded-md border border-sky-500/30">Portion: ${i.variant}</span>` : ''}
+                            ${(i.addons && i.addons.length) ? `<span class="text-[11px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/30">Add: ${i.addons.join(', ')}</span>` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    `).join('')}
                   </div>
-                `).join('')}
+                `}
               </div>
             </div>
 
@@ -732,6 +764,19 @@
             speakVoice(`${tName} se naya order!`);
           } catch(err) {
             speakVoice('Naya kitchen order!');
+          }
+          fetchKdsState();
+        });
+
+        kdsEvtSource.addEventListener('order:kot', (e) => {
+          playChime(true);
+          try {
+            const data = JSON.parse(e.data).payload || JSON.parse(e.data);
+            const tName = data.tableName || `Table ${data.tableId || ''}`;
+            const rNo = data.kot?.kotNumber || '';
+            speakVoice(`${tName} se Round ${rNo} ka naya KOT ticket!`);
+          } catch(err) {
+            speakVoice('Naya KOT ticket!');
           }
           fetchKdsState();
         });

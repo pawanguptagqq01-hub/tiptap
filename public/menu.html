@@ -172,7 +172,7 @@
 
       <!-- Quick Waiter & Water Buttons (Navy + Sky Glow) -->
       <div class="flex items-center gap-1.5">
-        <button onclick="requestService('water')" title="Request Drinking Water" class="p-2.5 rounded-2xl bg-[#112240] hover:bg-sky-500/20 text-sky-300 border border-sky-400/30 hover:border-sky-400 hover:shadow-[0_0_15px_rgba(56,189,248,0.4)] transition text-sm font-bold flex items-center gap-1 active:scale-90">
+        <button onclick="openWaterSelectionModal()" title="Request Drinking Water or Mineral Water Bottle" class="p-2.5 rounded-2xl bg-[#112240] hover:bg-sky-500/20 text-sky-300 border border-sky-400/30 hover:border-sky-400 hover:shadow-[0_0_15px_rgba(56,189,248,0.4)] transition text-sm font-bold flex items-center gap-1 active:scale-90">
           <span>💧</span>
         </button>
         <button onclick="requestService('waiter')" class="px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-slate-950 font-black text-xs shadow-lg shadow-sky-500/30 hover:shadow-sky-400/50 hover:scale-[1.02] active:scale-95 transition flex items-center gap-1.5">
@@ -458,6 +458,64 @@
           Add More Items ＋
         </button>
       </div>
+
+    </div>
+  </div>
+
+  <!-- Drinking Water Preference Modal (Free RO Water vs Billed Packaged Mineral Water) -->
+  <div id="waterSelectionModal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col justify-end sm:justify-center sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-md mx-auto w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-slide-up text-slate-900">
+      
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">💧</span>
+          <div>
+            <h3 class="font-black text-slate-900 text-base font-display">Drinking Water Options</h3>
+            <p class="text-[11px] text-slate-500 font-medium">Table <span id="waterModalTableNo">1</span> • Choose preferred water</p>
+          </div>
+        </div>
+        <button onclick="closeWaterSelectionModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold">✕</button>
+      </div>
+
+      <div class="space-y-3 pt-1">
+        <!-- Option 1: Free RO Water -->
+        <div class="p-4 rounded-2xl border-2 border-slate-200 hover:border-sky-400 bg-sky-50/50 transition cursor-pointer flex items-center justify-between gap-3 active:scale-[0.99]" onclick="confirmFreeRoWater()">
+          <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center text-xl shrink-0 font-bold">
+              🥛
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-extrabold text-slate-900 text-sm">Regular RO Filtered Water</span>
+                <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">FREE ₹0</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5">Complimentary clean RO drinking water served by waiter.</p>
+            </div>
+          </div>
+          <span class="text-xs font-black text-sky-600 shrink-0">Notify ➔</span>
+        </div>
+
+        <!-- Option 2: Mineral Water Bottle (Billable) -->
+        <div class="p-4 rounded-2xl border-2 border-amber-300 hover:border-amber-400 bg-amber-50/50 transition cursor-pointer flex items-center justify-between gap-3 active:scale-[0.99]" onclick="confirmMineralWaterBottle()">
+          <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center text-xl shrink-0 font-bold">
+              🍾
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-extrabold text-slate-900 text-sm">Packaged Mineral Water Bottle</span>
+                <span class="text-xs font-black font-display text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-full border border-amber-300">₹20</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5">1L sealed chilled bottle. Added directly to your Table bill.</p>
+            </div>
+          </div>
+          <span class="text-xs font-black text-amber-700 shrink-0">Add to Bill ➔</span>
+        </div>
+      </div>
+
+      <p class="text-[10px] text-slate-400 text-center pt-1">
+        Tip: As per FSSAI regulations, regular RO water is always free of charge.
+      </p>
 
     </div>
   </div>
@@ -808,6 +866,64 @@
         toast.classList.remove('opacity-100', 'translate-y-0');
         toast.classList.add('opacity-0', '-translate-y-4');
       }, 3500);
+    }
+
+    // Water Selection Modal Logic
+    function openWaterSelectionModal() {
+      const el = document.getElementById('waterModalTableNo');
+      if (el) el.innerText = currentTableId;
+      document.getElementById('waterSelectionModal').classList.remove('hidden');
+    }
+
+    function closeWaterSelectionModal() {
+      document.getElementById('waterSelectionModal').classList.add('hidden');
+    }
+
+    async function confirmFreeRoWater() {
+      closeWaterSelectionModal();
+      await requestService('water');
+    }
+
+    async function confirmMineralWaterBottle() {
+      closeWaterSelectionModal();
+      showToast('Adding 1L Mineral Water Bottle to Table bill...', '🍾');
+
+      const waterItem = (menuData || []).find(m => m.name.toLowerCase().includes('water bottle') || m.name.toLowerCase().includes('mineral water')) || {
+        id: `${currentRestaurantId}_m_water`,
+        name: 'Packaged Mineral Water Bottle (1L)',
+        price: 20
+      };
+
+      try {
+        const res = await fetch(`/api/orders?restaurant=${currentRestaurantId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tableId: currentTableId,
+            orderType: 'dinein',
+            items: [{
+              id: waterItem.id,
+              name: waterItem.name,
+              variant: 'Chilled',
+              price: 20,
+              qty: 1
+            }],
+            notes: 'Quick Mineral Water Bottle'
+          })
+        });
+
+        if (res.ok) {
+          const updated = await res.json();
+          currentOrder = updated;
+          updateDynamicIslandUI(currentOrder);
+          showToast(`🍾 1x Mineral Water Bottle added to Table ${currentTableId} bill! Waiter alerted.`, '✓');
+          await loadState();
+        } else {
+          showToast('Failed to add water bottle. Please ask waiter directly.', '⚠️');
+        }
+      } catch (err) {
+        showToast('Network error adding water bottle.', '⚠️');
+      }
     }
 
     async function requestService(type) {
@@ -1304,6 +1420,20 @@
       document.getElementById('billSubtotal').innerText = subtotal;
       document.getElementById('billGst').innerText = gst;
       document.getElementById('billTotal').innerText = total;
+
+      // Check if table has an active running order (Round 2+)
+      const btn = document.getElementById('btnPlaceOrder');
+      if (btn) {
+        const isRunning = currentOrder && !currentOrder.isPaid && currentOrder.paymentStatus !== 'paid' && currentOrder.status !== 'settled';
+        if (isRunning && currentOrderType === 'dinein') {
+          const nextRound = (currentOrder.kots?.length || 1) + 1;
+          btn.innerHTML = `<span>➕ Send Round ${nextRound} to Kitchen (Add to Bill)</span>`;
+          btn.className = 'w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm sm:text-base shadow-xl shadow-amber-500/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display';
+        } else {
+          btn.innerHTML = `<span>🚀 Place Order to Kitchen</span>`;
+          btn.className = 'w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-[#0284c7] hover:from-sky-300 hover:to-sky-400 text-slate-950 font-black text-sm sm:text-base shadow-xl shadow-sky-400/40 hover:shadow-[0_0_25px_rgba(56,189,248,0.7)] transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display';
+        }
+      }
     }
 
     async function placeOrder() {
@@ -1336,14 +1466,16 @@
         });
 
         if (res.ok) {
-          const newOrder = await res.json();
-          currentOrder = newOrder;
+          const resOrder = await res.json();
+          currentOrder = resOrder;
           cart = [];
           updateCartUI();
           closeCartModal();
-          updateDynamicIslandUI(newOrder);
-          showToast(`Order #${newOrder.id} sent to kitchen!`, '🚀');
+          updateDynamicIslandUI(resOrder);
+          const roundText = resOrder.isMultiRound ? `Round ${resOrder.currentKotNumber}` : `Order #${resOrder.id}`;
+          showToast(`🚀 ${roundText} sent to kitchen & added to Table ${currentTableId}'s running bill!`, '✓');
           openLiveOrderModal();
+          await loadState();
         } else {
           const errData = await res.json();
           alert(errData.error || 'Failed to place order');
@@ -1360,24 +1492,26 @@
       if (!order) return;
       const bar = document.getElementById('dynamicIslandBar');
       bar.classList.remove('hidden');
-      document.getElementById('islandOrderNo').innerText = `Order #${order.id} • Table ${order.tableId || currentTableId}`;
+      const roundCount = order.kots?.length || 1;
+      const roundSuffix = roundCount > 1 ? ` • Round ${roundCount}` : '';
+      document.getElementById('islandOrderNo').innerText = `Table ${order.tableId || currentTableId} • Running Bill: ₹${order.total}${roundSuffix}`;
 
       const text = document.getElementById('islandStatusText');
       const isPaid = order.isPaid || order.paymentStatus === 'paid' || order.status === 'paid';
       const kStatus = order.kitchenStatus || order.status;
       const paidPrefix = isPaid ? '🟢 Paid • ' : '';
 
-      if (kStatus === 'received') text.innerText = `${paidPrefix}📝 Order placed with chef`;
-      else if (kStatus === 'preparing') text.innerText = `${paidPrefix}🍳 Cooking in progress...`;
-      else if (kStatus === 'ready') text.innerText = `${paidPrefix}🍽️ Food is ready for pickup!`;
-      else if (kStatus === 'served') text.innerText = `${paidPrefix}✅ Meal served! Enjoy`;
+      if (kStatus === 'received') text.innerText = `${paidPrefix}📝 New items sent to chef`;
+      else if (kStatus === 'preparing') text.innerText = `${paidPrefix}🍳 Chef cooking in kitchen...`;
+      else if (kStatus === 'ready') text.innerText = `${paidPrefix}🍽️ Food ready for pickup!`;
+      else if (kStatus === 'served') text.innerText = `${paidPrefix}✅ Food served! Tap to add more or pay`;
       else if (isPaid) text.innerText = '🎉 Bill Paid & Settled! Thank you!';
     }
 
     function openLiveOrderModal() {
       if (!currentOrder) return;
       document.getElementById('liveOrderModal').classList.remove('hidden');
-      document.getElementById('modalOrderId').innerText = `Order #${currentOrder.id}`;
+      document.getElementById('modalOrderId').innerText = `Table ${currentOrder.tableId || currentTableId} • Order #${currentOrder.id}`;
       document.getElementById('modalOrderTotal').innerText = `₹${currentOrder.total}`;
 
       const upiBtnAmt = document.getElementById('upiPayAmountBtn');
@@ -1438,12 +1572,31 @@
         if (reviewSection) reviewSection.classList.remove('hidden');
       }
 
-      document.getElementById('modalOrderItems').innerHTML = (currentOrder.items || []).map(i => `
-        <div class="flex justify-between py-0.5">
-          <span>${i.qty}x ${i.name} ${i.variant ? `(${i.variant})` : ''}</span>
-          <span class="font-bold text-slate-900">₹${i.itemTotal}</span>
-        </div>
-      `).join('');
+      // Render Itemized breakdown with Multi-Round KOT grouping if present
+      const itemsContainer = document.getElementById('modalOrderItems');
+      if (currentOrder.kots && currentOrder.kots.length > 1) {
+        itemsContainer.innerHTML = currentOrder.kots.map(k => `
+          <div class="border-b border-slate-200/80 pb-2 pt-1.5 first:pt-0 space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] font-black uppercase tracking-wider text-sky-800 bg-sky-100 px-2 py-0.5 rounded-md">KOT Round ${k.kotNumber}</span>
+              <span class="text-[9px] text-slate-400 font-mono">${k.orderedAt ? new Date(k.orderedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+            </div>
+            ${(k.items || []).map(i => `
+              <div class="flex justify-between py-0.5 pl-1 text-slate-700">
+                <span>${i.qty}x ${i.name} ${i.variant ? `(${i.variant})` : ''}</span>
+                <span class="font-bold text-slate-900">₹${i.itemTotal || (i.price * i.qty)}</span>
+              </div>
+            `).join('')}
+          </div>
+        `).join('');
+      } else {
+        itemsContainer.innerHTML = (currentOrder.items || []).map(i => `
+          <div class="flex justify-between py-0.5 text-slate-700">
+            <span>${i.qty}x ${i.name} ${i.variant ? `(${i.variant})` : ''}</span>
+            <span class="font-bold text-slate-900">₹${i.itemTotal || (i.price * i.qty)}</span>
+          </div>
+        `).join('');
+      }
     }
 
     function closeLiveOrderModal() {
