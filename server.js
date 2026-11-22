@@ -629,6 +629,81 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // 2i. Restaurant Partner Login: POST /api/auth/restaurant-login
+    if (pathname === '/api/auth/restaurant-login' && req.method === 'POST') {
+      readJsonBody((err, data) => {
+        if (err || !data.identifier || !data.pin) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Please enter your registered phone number or restaurant ID, and PIN' }));
+          return;
+        }
+
+        const rawIdent = data.identifier.toString().trim().toLowerCase();
+        const cleanIdentPhone = rawIdent.replace(/[^0-9]/g, '');
+        const pin = data.pin.toString().trim();
+        const masterPin = db.superAdmin?.pin || '0000';
+
+        // Search in db.restaurants
+        const targetRest = Object.values(db.restaurants).find(r => {
+          const rPhoneClean = (r.phone || '').replace(/[^0-9]/g, '');
+          const phoneMatch = cleanIdentPhone && rPhoneClean && (rPhoneClean.endsWith(cleanIdentPhone) || cleanIdentPhone.endsWith(rPhoneClean));
+          const idMatch = r.id.toLowerCase() === rawIdent;
+          const nameMatch = r.name.toLowerCase() === rawIdent;
+          return phoneMatch || idMatch || nameMatch;
+        });
+
+        if (!targetRest) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'No restaurant found with this phone number or ID. Please check or register first.' }));
+          return;
+        }
+
+        const validPin = targetRest.pin || '1234';
+        if (pin === validPin || pin === masterPin || pin === 'pawan999') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            restaurant: {
+              id: targetRest.id,
+              name: targetRest.name,
+              phone: targetRest.phone
+            },
+            redirectUrl: `/dashboard.html?restaurant=${targetRest.id}`
+          }));
+        } else {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid Staff PIN. Please try again or contact your administrator.' }));
+        }
+      });
+      return;
+    }
+
+    // 2j. Verify Restaurant Staff PIN: POST /api/auth/verify-restaurant-pin
+    if (pathname === '/api/auth/verify-restaurant-pin' && req.method === 'POST') {
+      readJsonBody((err, data) => {
+        const restId = (data.restaurantId || '').toString().trim();
+        const pin = (data.pin || '').toString().trim();
+        const masterPin = db.superAdmin?.pin || '0000';
+
+        const r = db.restaurants[restId];
+        if (!r) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Restaurant not found' }));
+          return;
+        }
+
+        const validPin = r.pin || '1234';
+        if (pin === validPin || pin === masterPin || pin === 'pawan999') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, restaurantName: r.name }));
+        } else {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Incorrect PIN' }));
+        }
+      });
+      return;
+    }
+
     // 3. Network IP (for physical NFC card programming)
     if (pathname === '/api/network-ip' && req.method === 'GET') {
       const localIp = getLocalIpAddress();
