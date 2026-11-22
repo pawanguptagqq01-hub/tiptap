@@ -215,13 +215,6 @@
             <span id="rushDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
             <span id="rushText">Rush: OFF</span>
           </button>
-
-          <!-- Print NFC Stands Quick Button -->
-          <a id="btnQuickNfcPrint" href="/nfc-manager.html" target="_blank" title="Print Table NFC Acrylic Stands"
-            class="px-2.5 py-2 rounded-xl bg-[#112240] hover:bg-[#1b3457] text-sky-200 hover:text-white text-xs font-bold border border-sky-400/30 flex items-center gap-1 transition">
-            <span>💳</span>
-            <span>NFC Stands</span>
-          </a>
         </div>
 
         <!-- Mobile More Tools Popover Button -->
@@ -244,10 +237,6 @@
             </button>
             <a id="mBtnQuickKds" href="/kds.html" target="_blank" class="w-full p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 flex items-center justify-between font-bold">
               <span>🍳 Open Kitchen KDS</span>
-              <span>➔</span>
-            </a>
-            <a id="mBtnQuickNfcPrint" href="/nfc-manager.html" target="_blank" class="w-full p-2 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-between font-bold">
-              <span>💳 Print NFC Stands</span>
               <span>➔</span>
             </a>
             <button onclick="testSoundboxVoice(); toggleMobileToolsMenu();" class="w-full p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-between font-bold">
@@ -475,26 +464,6 @@
           </div>
         </div>
 
-      </div>
-
-      <!-- NFC Stand & Table Setup Card -->
-      <div class="grid lg:grid-cols-3 gap-4 sm:gap-6">
-        <div class="lg:col-span-3 bg-gradient-to-r from-brand-600 via-sky-500 to-brand-500 text-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl shadow-brand-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div class="space-y-1">
-            <h3 class="text-base sm:text-lg font-black">NFC Table Cards & Smart Stands</h3>
-            <p class="text-xs text-brand-100 leading-relaxed">
-              Program blank NFC tags or print color acrylic stands with fallback QR codes for all tables.
-            </p>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto shrink-0">
-            <a id="btnNfcStands" href="/nfc-manager.html" target="_blank" class="flex-1 sm:flex-none text-center px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-white hover:bg-brand-50 text-brand-700 font-extrabold text-xs shadow-md transition">
-              Print NFC Stands ➔
-            </a>
-            <a id="btnTestGuestMenu" href="/menu.html?table=1" target="_blank" class="flex-1 sm:flex-none text-center px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-brand-700/60 hover:bg-brand-700 text-white font-bold text-xs transition">
-              📱 Guest Menu
-            </a>
-          </div>
-        </div>
       </div>
 
     </section>
@@ -1514,14 +1483,6 @@
             </option>
           `).join('');
         }
-
-        // Update links
-        const nfcBtn = document.getElementById('btnNfcStands');
-        if (nfcBtn) nfcBtn.href = `/nfc-manager.html?restaurant=${currentRestaurantId}`;
-        const menuBtn = document.getElementById('btnTestGuestMenu');
-        if (menuBtn) menuBtn.href = `/menu.html?restaurant=${currentRestaurantId}&table=1`;
-        const mNfcBtn = document.getElementById('mBtnQuickNfcPrint');
-        if (mNfcBtn) mNfcBtn.href = `/nfc-manager.html?restaurant=${currentRestaurantId}`;
 
         // Kitchen KDS Links
         const kdsHeaderBtn = document.getElementById('btnHeaderKdsScreen');
@@ -2867,10 +2828,6 @@
                      localStorage.getItem('tiptap_staff_auth_' + currentRestaurantId);
       const gateModal = document.getElementById('staffSecurityGateModal');
       
-      // Update quick NFC print link
-      const nfcBtn = document.getElementById('btnQuickNfcPrint');
-      if (nfcBtn) nfcBtn.href = `/nfc-manager.html?restaurant=${currentRestaurantId}`;
-
       if (isAuth === 'true') {
         gateModal.classList.add('hidden');
         fetchState();
