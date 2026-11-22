@@ -405,7 +405,11 @@
           `${appState.restaurant.name || 'Restaurant'} • Active Kitchen Station`;
 
         // Check for new incoming orders and trigger chime
-        const activeKitchenOrders = appState.orders.filter(o => o.status === 'received' || o.status === 'preparing');
+        const activeKitchenOrders = appState.orders.filter(o => 
+          o.status !== 'cancelled' && 
+          o.status !== 'served' && 
+          (o.kitchenStatus ? o.kitchenStatus !== 'served' : true)
+        );
         if (initialLoadDone) {
           activeKitchenOrders.forEach(o => {
             if (!knownOrderIds.has(o.id)) {
@@ -428,8 +432,12 @@
     // ----------------------------------------------------
     function renderKdsView() {
       const orders = appState.orders || [];
-      // Only show received or preparing orders in kitchen
-      let kitchenOrders = orders.filter(o => o.status === 'received' || o.status === 'preparing');
+      // Show all active tickets that are not yet served by kitchen, even if paid online!
+      let kitchenOrders = orders.filter(o => 
+        o.status !== 'cancelled' && 
+        o.status !== 'served' && 
+        (o.kitchenStatus ? o.kitchenStatus !== 'served' : true)
+      );
 
       const totalActive = kitchenOrders.length;
       const dineInCount = kitchenOrders.filter(o => (o.orderType || 'dinein') === 'dinein').length;
@@ -500,7 +508,8 @@
           timerBadgeClass = 'bg-amber-500 text-slate-950 font-black';
         }
 
-        const isPreparing = order.status === 'preparing';
+        const isPreparing = order.kitchenStatus === 'preparing' || order.status === 'preparing';
+        const isPaid = order.isPaid || order.paymentStatus === 'paid' || order.status === 'paid';
 
         return `
           <div class="rounded-3xl p-5 border-2 ${cardClass} flex flex-col justify-between transition-all duration-300 hover:border-amber-400 group">
@@ -514,6 +523,16 @@
                     <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${order.orderType === 'takeaway' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-sky-500/20 text-sky-300 border border-sky-500/40'}">
                       ${order.orderType === 'takeaway' ? '🥡 TAKEAWAY' : '🍽️ DINE-IN'}
                     </span>
+                    ${isPaid ? `
+                      <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 inline-flex items-center gap-1 shadow-sm font-sans">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>🟢 PAID ONLINE (${order.paymentMethod || 'UPI'})</span>
+                      </span>
+                    ` : `
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-300/80 border border-amber-500/30 font-sans">
+                        ⏳ UNPAID
+                      </span>
+                    `}
                   </div>
                   <div class="flex items-center gap-2 mt-1 text-slate-400 font-mono text-xs">
                     <span>#${order.id}</span>
@@ -568,7 +587,7 @@
                 🖨️ KOT
               </button>
 
-              ${order.status === 'received' ? `
+              ${(!isPreparing) ? `
                 <button onclick="changeKdsOrderStatus('${order.id}', 'preparing')" class="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-display font-black text-sm transition shadow-lg shadow-amber-500/20 active:scale-98 flex items-center justify-center gap-2">
                   <span>🍳 Start Cooking</span>
                   <span>➔</span>
@@ -614,7 +633,7 @@
         const res = await fetch(`/api/orders/${orderId}?restaurant=${restaurantId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status })
+          body: JSON.stringify({ status, kitchenStatus: status })
         });
         if (res.ok) {
           // Play quick confirmation sound
@@ -720,6 +739,7 @@
         });
 
         kdsEvtSource.addEventListener('order:update', () => fetchKdsState());
+        kdsEvtSource.addEventListener('payment:success', () => fetchKdsState());
         kdsEvtSource.addEventListener('table:update', () => fetchKdsState());
         
         kdsEvtSource.addEventListener('service:call', (e) => {

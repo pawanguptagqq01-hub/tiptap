@@ -410,6 +410,18 @@
         </div>
       </div>
 
+      <!-- Bill Paid Verified Badge & Receipt -->
+      <div id="modalPaidBadge" class="hidden text-center p-4 rounded-3xl bg-emerald-500/10 border-2 border-emerald-400/40 text-emerald-950 space-y-2">
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-700 font-black text-xs font-display">
+          <span>🟢</span>
+          <span>BILL PAID ONLINE</span>
+        </div>
+        <p class="text-xs font-mono font-bold text-emerald-800" id="modalPaidTxnText">Txn: TXN_12345</p>
+        <button type="button" onclick="printBillReceipt()" class="px-4 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-800 font-black text-xs shadow-xs hover:bg-emerald-50 transition inline-flex items-center gap-1.5">
+          <span>🧾 View & Print Tax Invoice</span>
+        </button>
+      </div>
+
       <!-- Pay Bill via Online Gateway (Instant Auto-Verify) -->
       <div id="upiPaymentSection" class="hidden text-center p-5 rounded-3xl bg-gradient-to-br from-[#06101e] to-[#0a192f] text-white border-2 border-sky-400/40 space-y-3 shadow-xl shadow-sky-500/20">
         <div>
@@ -644,7 +656,10 @@
         </div>
 
         <div class="space-y-2 pt-2">
-          <button onclick="printBillReceipt()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 font-display font-black text-xs shadow-lg shadow-sky-400/30 transition hover:scale-105 active:scale-95">
+          <button onclick="closeGatewayModal(); openLiveOrderModal();" class="w-full py-3.5 rounded-2xl bg-[#0a192f] hover:bg-[#112240] text-sky-300 font-display font-black text-xs shadow-md border border-sky-400/40 transition hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5">
+            <span>🍳 Track Food Cooking Live</span> <span>➔</span>
+          </button>
+          <button onclick="printBillReceipt()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 font-display font-black text-xs shadow-lg shadow-sky-400/30 transition hover:scale-[1.02] active:scale-95">
             📄 View / Download Tax Receipt
           </button>
           <button onclick="closeGatewayModal()" class="w-full py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition">
@@ -1345,13 +1360,18 @@
       if (!order) return;
       const bar = document.getElementById('dynamicIslandBar');
       bar.classList.remove('hidden');
-      document.getElementById('islandOrderNo').innerText = `Order #${order.id} • Table ${order.tableId}`;
+      document.getElementById('islandOrderNo').innerText = `Order #${order.id} • Table ${order.tableId || currentTableId}`;
 
       const text = document.getElementById('islandStatusText');
-      if (order.status === 'received') text.innerText = '📝 Order placed with chef';
-      else if (order.status === 'preparing') text.innerText = '🍳 Cooking in progress...';
-      else if (order.status === 'ready') text.innerText = '🍽️ Food is ready for pickup!';
-      else if (order.status === 'served') text.innerText = '✅ Meal served! Enjoy';
+      const isPaid = order.isPaid || order.paymentStatus === 'paid' || order.status === 'paid';
+      const kStatus = order.kitchenStatus || order.status;
+      const paidPrefix = isPaid ? '🟢 Paid • ' : '';
+
+      if (kStatus === 'received') text.innerText = `${paidPrefix}📝 Order placed with chef`;
+      else if (kStatus === 'preparing') text.innerText = `${paidPrefix}🍳 Cooking in progress...`;
+      else if (kStatus === 'ready') text.innerText = `${paidPrefix}🍽️ Food is ready for pickup!`;
+      else if (kStatus === 'served') text.innerText = `${paidPrefix}✅ Meal served! Enjoy`;
+      else if (isPaid) text.innerText = '🎉 Bill Paid & Settled! Thank you!';
     }
 
     function openLiveOrderModal() {
@@ -1368,36 +1388,53 @@
       const desc = document.getElementById('statusDesc');
       const upiSection = document.getElementById('upiPaymentSection');
       const reviewSection = document.getElementById('reviewFeedbackSection');
+      const paidBadge = document.getElementById('modalPaidBadge');
 
-      if (currentOrder.status === 'received') {
+      const isPaid = currentOrder.isPaid || currentOrder.paymentStatus === 'paid' || currentOrder.status === 'paid';
+      const kStatus = currentOrder.kitchenStatus || currentOrder.status;
+
+      if (isPaid) {
+        if (upiSection) upiSection.classList.add('hidden');
+        if (paidBadge) {
+          paidBadge.classList.remove('hidden');
+          const txnEl = document.getElementById('modalPaidTxnText');
+          if (txnEl) txnEl.innerText = `Txn: ${currentOrder.txnId || 'VERIFIED'} • Amount: ₹${currentOrder.total}`;
+        }
+      } else {
+        if (upiSection) upiSection.classList.remove('hidden');
+        if (paidBadge) paidBadge.classList.add('hidden');
+      }
+
+      if (kStatus === 'received') {
         icon.innerText = '📝';
-        title.innerText = 'Order Placed';
-        desc.innerText = 'The kitchen has received your order ticket and will begin preparation shortly.';
-        upiSection.classList.remove('hidden'); // allow customer to pay in advance if they wish
+        title.innerText = isPaid ? 'Order Confirmed (Paid)' : 'Order Placed';
+        desc.innerText = isPaid 
+          ? 'Your payment is confirmed! The kitchen has received your order ticket and will begin preparation shortly.' 
+          : 'The kitchen has received your order ticket and will begin preparation shortly.';
         if (reviewSection) reviewSection.classList.add('hidden');
-      } else if (currentOrder.status === 'preparing') {
+      } else if (kStatus === 'preparing') {
         icon.innerText = '🍳';
-        title.innerText = 'Chef is Cooking';
-        desc.innerText = 'Your food is currently being freshly prepared in the kitchen.';
-        upiSection.classList.remove('hidden');
+        title.innerText = isPaid ? 'Chef is Cooking (Paid)' : 'Chef is Cooking';
+        desc.innerText = isPaid 
+          ? 'Your payment is confirmed! Your food is currently being freshly cooked in the kitchen.' 
+          : 'Your food is currently being freshly prepared in the kitchen.';
         if (reviewSection) reviewSection.classList.add('hidden');
-      } else if (currentOrder.status === 'ready') {
+      } else if (kStatus === 'ready') {
         icon.innerText = '🍽️';
         title.innerText = 'Food is Ready';
         desc.innerText = 'Dishes are plated and ready! The waiter is on their way to your table.';
-        upiSection.classList.remove('hidden');
         if (reviewSection) reviewSection.classList.add('hidden');
-      } else if (currentOrder.status === 'served') {
-        icon.innerText = '💳';
-        title.innerText = 'Meal Served & Bill Ready';
-        desc.innerText = 'Hope you enjoy your meal! Settle your bill instantly online via UPI or card below.';
-        upiSection.classList.remove('hidden');
+      } else if (kStatus === 'served' || kStatus === 'completed') {
+        icon.innerText = isPaid ? '🎉' : '💳';
+        title.innerText = isPaid ? 'Meal Served & Paid ✓' : 'Meal Served & Bill Ready';
+        desc.innerText = isPaid 
+          ? 'Hope you enjoyed your delicious meal! Your bill has already been settled online.' 
+          : 'Hope you enjoy your meal! Settle your bill instantly online via UPI or card below.';
         if (reviewSection) reviewSection.classList.remove('hidden');
-      } else if (currentOrder.status === 'paid') {
+      } else if (isPaid) {
         icon.innerText = '🎉';
         title.innerText = 'Payment Settled ✓';
         desc.innerText = 'Thank you! Your bill has been paid and verified. Receipt is generated below.';
-        upiSection.classList.add('hidden');
         if (reviewSection) reviewSection.classList.remove('hidden');
       }
 
@@ -1568,12 +1605,14 @@
           const data = await res.json();
           const ord = (data.orders || []).find(o => o.id === orderId);
           const completedOrd = (data.completedOrders || []).find(o => o.id === orderId);
-          if (completedOrd || (ord && ord.status === 'paid')) {
+          if (completedOrd || (ord && (ord.isPaid || ord.status === 'paid' || ord.paymentStatus === 'paid'))) {
             clearInterval(gwPollingTimer);
+            const target = completedOrd || ord;
             onPaymentVerifiedSuccess({
-              txnId: txnId || 'TXN_SUCCESS',
-              amount: (completedOrd || ord).total,
-              paymentMethod: (completedOrd || ord).paymentMethod || 'Online UPI'
+              txnId: target.txnId || txnId || 'TXN_SUCCESS',
+              amount: target.total,
+              paymentMethod: target.paymentMethod || 'Online UPI',
+              order: target
             });
           }
         } catch (e) {
@@ -1751,16 +1790,22 @@
       document.getElementById('gwSuccessMethod').innerText = data.paymentMethod || 'Online UPI';
       
       if (currentOrder) {
-        currentOrder.status = 'paid';
+        currentOrder.isPaid = true;
+        currentOrder.paymentStatus = 'paid';
+        currentOrder.txnId = data.txnId || currentOrder.txnId;
+        if (data.order) {
+          if (data.order.kitchenStatus) currentOrder.kitchenStatus = data.order.kitchenStatus;
+          if (data.order.status && data.order.status !== 'paid') currentOrder.status = data.order.status;
+        }
       }
       
-      // Update dynamic island
-      const text = document.getElementById('islandStatusText');
-      if (text) text.innerText = '🎉 Bill Paid & Settled! Thank you!';
-      const badge = document.getElementById('islandOrderNo');
-      if (badge) badge.innerText = `Paid ₹${amt} • Receipt Ready`;
+      // Update dynamic island & live modal
+      updateDynamicIslandUI(currentOrder);
+      if (!document.getElementById('liveOrderModal').classList.contains('hidden')) {
+        openLiveOrderModal();
+      }
       
-      showToast(`Payment of ₹${amt} verified instantly!`, '🎉');
+      showToast(`Payment of ₹${amt} verified instantly! Kitchen is cooking your food.`, '🎉');
     }
 
     function playSuccessChime() {
@@ -1866,8 +1911,17 @@
       evtSource.addEventListener('order:update', (e) => {
         const payload = JSON.parse(e.data).payload || JSON.parse(e.data);
         if (currentOrder && currentOrder.id === payload.id) {
+          const wasPaid = currentOrder.isPaid || currentOrder.paymentStatus === 'paid';
+          const prevTxn = currentOrder.txnId;
+          const prevMethod = currentOrder.paymentMethod;
           currentOrder = payload;
-          updateDynamicIslandUI(payload);
+          if (wasPaid) {
+            currentOrder.isPaid = true;
+            currentOrder.paymentStatus = 'paid';
+            if (!currentOrder.txnId) currentOrder.txnId = prevTxn;
+            if (!currentOrder.paymentMethod) currentOrder.paymentMethod = prevMethod;
+          }
+          updateDynamicIslandUI(currentOrder);
           if (!document.getElementById('liveOrderModal').classList.contains('hidden')) {
             openLiveOrderModal();
           }

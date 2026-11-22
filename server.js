@@ -935,7 +935,8 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        order.status = 'paid';
+        order.isPaid = true;
+        order.paymentStatus = 'paid';
         order.paymentMethod = paymentMethod;
         order.txnId = txnId;
         order.paidAt = new Date().toISOString();
@@ -949,11 +950,7 @@ const server = http.createServer((req, res) => {
           simulated: !!data.simulated
         };
 
-        // Move to completed orders
-        restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
-        restaurant.orders = restaurant.orders.filter(o => o.id !== order.id);
-
-        // Update customer lifetime spend & loyalty coins
+        // Update customer lifetime spend & loyalty coins immediately
         if (order.customerPhone && restaurant.customers) {
           const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
           if (cust) {
@@ -962,12 +959,31 @@ const server = http.createServer((req, res) => {
           }
         }
 
-        // Set table status to cleaning and free table
-        const table = restaurant.tables.find(t => t.id === order.tableId);
-        if (table) {
-          table.status = 'cleaning';
-          table.currentOrderId = null;
-          table.seatingTime = null;
+        // Check if food was already served to table by kitchen
+        const isFoodServed = order.kitchenStatus === 'served' || order.status === 'served';
+
+        if (isFoodServed) {
+          // Food was already served AND now paid! Settle and archive to completedOrders
+          order.status = 'completed';
+          restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+          restaurant.orders = restaurant.orders.filter(o => o.id !== order.id);
+
+          // Table is done, set to cleaning
+          const table = restaurant.tables.find(t => t.id === order.tableId);
+          if (table) {
+            table.status = 'cleaning';
+            table.currentOrderId = null;
+            table.seatingTime = null;
+          }
+        } else {
+          // Food is STILL in kitchen queue or cooking!
+          // DO NOT delete order from active orders or KDS! Keep order active with isPaid = true.
+          // Table remains occupied so staff and chefs know which table this paid food belongs to!
+          const table = restaurant.tables.find(t => t.id === order.tableId);
+          if (table) {
+            table.status = 'occupied';
+            table.currentOrderId = order.id;
+          }
         }
 
         saveDb(db);
@@ -981,7 +997,9 @@ const server = http.createServer((req, res) => {
           txnId,
           utr: data.utr || null,
           paymentMethod,
-          paidAt: order.paidAt
+          paidAt: order.paidAt,
+          isPaid: true,
+          kitchenStatus: order.kitchenStatus || order.status
         });
         broadcastEvent(restaurant.id, 'order:update', order);
         broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
@@ -995,6 +1013,11 @@ const server = http.createServer((req, res) => {
           tableName: order.tableName,
           amountPaid: order.total,
           paidAt: order.paidAt,
+          isPaid: true,
+          paymentStatus: 'paid',
+          kitchenStatus: order.kitchenStatus || order.status,
+          status: order.status,
+          order: order,
           message: `Payment of ₹${order.total} verified successfully!`
         }));
       });
@@ -1090,6 +1113,9 @@ const server = http.createServer((req, res) => {
           gst,
           total,
           status: 'received',
+          kitchenStatus: 'received',
+          paymentStatus: 'unpaid',
+          isPaid: false,
           paymentMethod: null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
@@ -1178,8 +1204,12 @@ const server = http.createServer((req, res) => {
           order.status = data.status;
           order.updatedAt = new Date().toISOString();
         }
-
+        if (data.kitchenStatus) {
+          order.kitchenStatus = data.kitchenStatus;
+        }
         if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
+        if (data.isPaid !== undefined) order.isPaid = data.isPaid;
+        if (data.paymentStatus) order.paymentStatus = data.paymentStatus;
 
         if (order.status === 'cancelled') {
           restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
@@ -1189,24 +1219,75 @@ const server = http.createServer((req, res) => {
             table.currentOrderId = null;
             table.seatingTime = null;
           }
-        } else if (order.status === 'paid') {
-          restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
-          restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
+        } else if (order.status === 'served' || data.kitchenStatus === 'served') {
+          order.kitchenStatus = 'served';
+          order.status = 'served';
 
-          // Update customer lifetime spend & loyalty coins
-          if (order.customerPhone && restaurant.customers) {
-            const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
-            if (cust) {
-              cust.totalSpent = (cust.totalSpent || 0) + order.total;
-              cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(order.total / 10);
+          // If the order was already paid online by customer
+          if (order.isPaid || order.paymentStatus === 'paid') {
+            // Food served AND bill is already paid! Complete and archive
+            order.status = 'completed';
+            restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+            restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
+
+            const table = restaurant.tables.find(t => t.id === order.tableId);
+            if (table) {
+              table.status = 'cleaning';
+              table.currentOrderId = null;
+              table.seatingTime = null;
+            }
+          } else {
+            // Food served, but customer hasn't paid bill yet
+            const table = restaurant.tables.find(t => t.id === order.tableId);
+            if (table) {
+              table.status = 'occupied';
+              table.currentOrderId = order.id;
             }
           }
+        } else if (order.status === 'paid' || data.status === 'paid') {
+          order.isPaid = true;
+          order.paymentStatus = 'paid';
+          if (!order.paidAt) order.paidAt = new Date().toISOString();
+          if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
 
+          // Check if food was already served OR if cashier explicitly closes table
+          const isFoodServed = order.kitchenStatus === 'served';
+          const shouldClose = data.closeTable === true || isFoodServed;
+
+          if (shouldClose) {
+            order.status = 'completed';
+            restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+            restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
+
+            // Update customer lifetime spend & loyalty coins
+            if (order.customerPhone && restaurant.customers) {
+              const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
+              if (cust) {
+                cust.totalSpent = (cust.totalSpent || 0) + order.total;
+                cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(order.total / 10);
+              }
+            }
+
+            const table = restaurant.tables.find(t => t.id === order.tableId);
+            if (table) {
+              table.status = 'cleaning';
+              table.currentOrderId = null;
+              table.seatingTime = null;
+            }
+          } else {
+            // Cashier marked paid, but kitchen is still cooking! Keep active with isPaid = true.
+            const table = restaurant.tables.find(t => t.id === order.tableId);
+            if (table) {
+              table.status = 'occupied';
+              table.currentOrderId = order.id;
+            }
+          }
+        } else if (order.status === 'preparing') {
+          order.kitchenStatus = 'preparing';
           const table = restaurant.tables.find(t => t.id === order.tableId);
           if (table) {
-            table.status = 'cleaning';
-            table.currentOrderId = null;
-            table.seatingTime = null;
+            table.status = 'occupied';
+            table.currentOrderId = order.id;
           }
         }
 

@@ -843,8 +843,11 @@
         </div>
       </div>
 
+      <!-- Online Paid Confirmation Box (Shown when customer paid on table) -->
+      <div id="settlePaidNotice" class="hidden"></div>
+
       <!-- Payment Mode -->
-      <div class="space-y-2">
+      <div id="settlePayModeSection" class="space-y-2">
         <label class="block text-xs font-bold text-slate-700">Select Received Payment Mode:</label>
         <div class="grid grid-cols-3 gap-2">
           <button type="button" onclick="selectPayMode('upi')" id="pay-upi" class="py-2.5 rounded-xl border-2 border-brand-500 bg-brand-50 text-brand-700 font-bold text-xs truncate">
@@ -861,7 +864,7 @@
 
       <!-- Settlement Actions -->
       <div class="space-y-2 pt-2">
-        <button onclick="confirmSettlement()" class="w-full py-3 sm:py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm shadow-md transition">
+        <button id="btnConfirmSettle" onclick="confirmSettlement()" class="w-full py-3 sm:py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm shadow-md transition">
           ✅ Settle & Mark Table Paid
         </button>
         <div class="grid grid-cols-2 gap-2">
@@ -1653,14 +1656,18 @@
               ` : ''}
 
               ${order ? `
-                <div class="mt-2 p-2.5 sm:p-3 rounded-2xl bg-sky-50/80 border border-sky-200/80 space-y-1">
+                <div class="mt-2 p-2.5 sm:p-3 rounded-2xl ${(order.isPaid || order.paymentStatus === 'paid') ? 'bg-emerald-50/90 border border-emerald-300' : 'bg-sky-50/80 border border-sky-200/80'} space-y-1">
                   <div class="flex items-center justify-between gap-1">
-                    <span class="text-[11px] sm:text-xs font-bold text-slate-500">Bill:</span>
-                    <span class="font-display font-black text-lg sm:text-2xl text-[#0a192f]">₹${order.total}</span>
+                    <span class="text-[11px] sm:text-xs font-bold ${(order.isPaid || order.paymentStatus === 'paid') ? 'text-emerald-800' : 'text-slate-500'}">
+                      ${(order.isPaid || order.paymentStatus === 'paid') ? '🟢 Paid Online:' : 'Bill:'}
+                    </span>
+                    <span class="font-display font-black text-lg sm:text-2xl ${(order.isPaid || order.paymentStatus === 'paid') ? 'text-emerald-900' : 'text-[#0a192f]'}">₹${order.total}</span>
                   </div>
                   <div class="flex items-center justify-between text-[10px] sm:text-[11px] font-bold text-slate-600 gap-1 flex-wrap">
                     <span>${order.items.length} items</span>
-                    <span class="uppercase text-sky-700 text-[9px] bg-sky-100 px-1.5 py-0.5 rounded-md font-black border border-sky-300 shrink-0">${order.status}</span>
+                    <span class="uppercase text-[9px] px-1.5 py-0.5 rounded-md font-black shrink-0 ${(order.isPaid || order.paymentStatus === 'paid') ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-sky-100 text-sky-700 border border-sky-300'}">
+                      ${(order.isPaid || order.paymentStatus === 'paid') ? 'PAID • ' : ''}${order.kitchenStatus || order.status}
+                    </span>
                   </div>
                 </div>
               ` : ''}
@@ -1672,8 +1679,8 @@
                   <button onclick="event.stopPropagation(); openTransferTableModal(${table.id})" class="py-2 px-1 rounded-xl border border-sky-300 hover:border-sky-500 hover:bg-sky-50 text-[11px] sm:text-xs font-black text-sky-800 transition flex items-center justify-center gap-1 shadow-xs">
                     <span>🔀</span> <span class="truncate">Shift</span>
                   </button>
-                  <button onclick="event.stopPropagation(); openSettleModal('${order.id}')" class="py-2 px-1 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-display font-black text-[11px] sm:text-xs shadow-md shadow-sky-400/25 transition active:scale-95 flex items-center justify-center gap-1">
-                    <span>💳</span> <span class="truncate">Settle</span>
+                  <button onclick="event.stopPropagation(); openSettleModal('${order.id}')" class="py-2 px-1 rounded-xl ${(order.isPaid || order.paymentStatus === 'paid') ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white shadow-emerald-500/25' : 'bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 shadow-sky-400/25'} font-display font-black text-[11px] sm:text-xs shadow-md transition active:scale-95 flex items-center justify-center gap-1">
+                    <span>${(order.isPaid || order.paymentStatus === 'paid') ? '✓' : '💳'}</span> <span class="truncate">${(order.isPaid || order.paymentStatus === 'paid') ? 'Paid Bill' : 'Settle'}</span>
                   </button>
                 </div>
               ` : (table.status === 'reserved' ? `
@@ -1738,32 +1745,39 @@
         const orderTime = new Date(order.createdAt).getTime();
         const elapsedMins = Math.floor((now - orderTime) / 60000);
 
+        const isPaid = order.isPaid || order.paymentStatus === 'paid' || order.status === 'paid';
+        const kStatus = order.kitchenStatus || order.status;
+
         let statusBadge = '';
-        if (order.status === 'received') {
+        if (kStatus === 'received') {
           statusBadge = `
-            <span class="px-3 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1.5">
-              <span>⏳</span> <span>Order Received (Kitchen Pending)</span>
+            <span class="px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1.5">
+              <span>⏳</span> <span>Kitchen Pending</span>
             </span>
           `;
-        } else if (order.status === 'preparing') {
+        } else if (kStatus === 'preparing') {
           statusBadge = `
-            <span class="px-3 py-1 rounded-full text-xs font-black bg-sky-100 text-sky-900 border border-sky-300 inline-flex items-center gap-1.5">
-              <span>🍳</span> <span>Cooking in Kitchen (Chef Active)</span>
+            <span class="px-2.5 py-1 rounded-full text-xs font-black bg-sky-100 text-sky-900 border border-sky-300 inline-flex items-center gap-1.5">
+              <span>🍳</span> <span>Cooking in Kitchen</span>
             </span>
           `;
-        } else if (order.status === 'served') {
+        } else if (kStatus === 'served') {
           statusBadge = `
-            <span class="px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1.5">
-              <span>🍽️</span> <span>Food Ready & Served to Table</span>
+            <span class="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-900 border border-emerald-300 inline-flex items-center gap-1.5">
+              <span>🍽️</span> <span>Food Ready & Served</span>
             </span>
           `;
         } else {
           statusBadge = `
-            <span class="px-3 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-800 border border-slate-300">
-              ${(order.status || 'ACTIVE').toUpperCase()}
+            <span class="px-2.5 py-1 rounded-full text-xs font-black bg-slate-100 text-slate-800 border border-slate-300">
+              ${(kStatus || 'ACTIVE').toUpperCase()}
             </span>
           `;
         }
+
+        const paymentBadge = isPaid
+          ? `<span class="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-500/15 text-emerald-700 border border-emerald-400/50 inline-flex items-center gap-1"><span>🟢</span> <span>PAID ONLINE (${order.paymentMethod || 'UPI'})</span></span>`
+          : `<span class="px-2.5 py-1 rounded-full text-xs font-black bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-1"><span>⏳</span> <span>BILL UNPAID</span></span>`;
 
         return `
           <div class="p-4 sm:p-5 rounded-2xl border-2 border-slate-200 bg-white shadow-xs hover:border-sky-300 transition-all space-y-3">
@@ -1777,7 +1791,8 @@
                 </span>
                 <span class="text-xs text-slate-500 font-medium">⏱️ ${elapsedMins}m ago</span>
               </div>
-              <div>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                ${paymentBadge}
                 ${statusBadge}
               </div>
             </div>
@@ -2388,6 +2403,40 @@
           <span class="font-bold">₹${i.itemTotal}</span>
         </div>
       `).join('');
+
+      const isPaid = settlingOrder.isPaid || settlingOrder.paymentStatus === 'paid' || settlingOrder.status === 'paid';
+      const paidNotice = document.getElementById('settlePaidNotice');
+      const payModeSection = document.getElementById('settlePayModeSection');
+      const btnConfirmSettle = document.getElementById('btnConfirmSettle');
+
+      if (isPaid) {
+        if (paidNotice) {
+          paidNotice.classList.remove('hidden');
+          paidNotice.innerHTML = `
+            <div class="p-3.5 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-900 space-y-1">
+              <div class="flex items-center gap-1.5 font-black text-sm">
+                <span>✅</span> <span>Bill Paid Online</span>
+              </div>
+              <p class="text-xs text-emerald-800">
+                Customer settled ₹${settlingOrder.total} via <strong>${settlingOrder.paymentMethod || 'Online UPI'}</strong>.
+                <br>Txn ID: <code class="font-mono text-[11px] font-bold">${settlingOrder.txnId || 'VERIFIED'}</code>
+              </p>
+            </div>
+          `;
+        }
+        if (payModeSection) payModeSection.classList.add('hidden');
+        if (btnConfirmSettle) {
+          btnConfirmSettle.innerText = '✓ Complete & Free Table';
+          btnConfirmSettle.className = 'w-full py-3 sm:py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm shadow-md transition';
+        }
+      } else {
+        if (paidNotice) paidNotice.classList.add('hidden');
+        if (payModeSection) payModeSection.classList.remove('hidden');
+        if (btnConfirmSettle) {
+          btnConfirmSettle.innerText = '✅ Settle & Mark Table Paid';
+          btnConfirmSettle.className = 'w-full py-3 sm:py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm shadow-md transition';
+        }
+      }
     }
 
     function closeSettleModal() {
@@ -2409,15 +2458,18 @@
 
     async function confirmSettlement() {
       if (!settlingOrder) return;
+      const isAlreadyPaid = settlingOrder.isPaid || settlingOrder.paymentStatus === 'paid';
       await fetch(`/api/orders/${settlingOrder.id}?restaurant=${currentRestaurantId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'paid',
-          paymentMethod: selectedPayMode
+          closeTable: true,
+          paymentMethod: isAlreadyPaid ? settlingOrder.paymentMethod : selectedPayMode
         })
       });
       closeSettleModal();
+      fetchState();
     }
 
     async function cancelRunningOrder(targetOrderId) {
