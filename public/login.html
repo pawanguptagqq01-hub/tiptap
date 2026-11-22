@@ -36,29 +36,29 @@
     }
   </script>
 </head>
-<body class="bg-slate-950 text-slate-100 font-sans min-h-screen antialiased flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen antialiased flex flex-col justify-between selection:bg-brand-500 selection:text-white overflow-x-hidden">
 
   <!-- Top Simple Navigation -->
-  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-6 py-4 flex items-center justify-between">
-    <a href="/" class="flex items-center gap-2.5">
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
+    <a href="/" class="flex items-center gap-2.5 shrink-0">
       <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-brand-500 to-sky-400 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-brand-500/25">
         TT
       </div>
       <div>
         <span class="font-extrabold text-white text-base tracking-tight">TipTap</span>
-        <span class="text-[10px] font-bold text-brand-400 ml-1.5 uppercase px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/20">Staff Portal</span>
+        <span class="text-[10px] font-bold text-brand-400 ml-1 sm:ml-1.5 uppercase px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/20">Staff Portal</span>
       </div>
     </a>
 
-    <a href="/#partner-registration" class="text-xs font-bold text-slate-400 hover:text-white transition flex items-center gap-1">
-      <span>Not yet registered?</span>
-      <span class="text-brand-400 font-extrabold underline">Apply Here ➔</span>
+    <a href="/#partner-registration" class="text-xs font-bold text-slate-400 hover:text-white transition flex items-center gap-1 shrink-0">
+      <span class="hidden sm:inline">Not yet registered?</span>
+      <span class="text-brand-400 font-extrabold underline">Apply ➔</span>
     </a>
   </header>
 
   <!-- Login Card Form Area -->
-  <main class="flex-1 flex items-center justify-center p-4 sm:p-6 my-8">
-    <div class="bg-slate-900/90 border border-slate-800 rounded-3xl max-w-md w-full p-7 sm:p-9 shadow-2xl space-y-6 relative overflow-hidden backdrop-blur-xl">
+  <main class="flex-1 flex items-center justify-center p-3 sm:p-6 my-4 sm:my-8">
+    <div class="bg-slate-900/90 border border-slate-800 rounded-3xl max-w-md w-full p-5 sm:p-9 shadow-2xl space-y-5 sm:space-y-6 relative overflow-hidden backdrop-blur-xl">
       
       <!-- Top Glow Accent -->
       <div class="absolute -top-24 -right-24 w-48 h-48 bg-brand-500/20 rounded-full blur-3xl pointer-events-none"></div>
@@ -109,23 +109,23 @@
         <!-- Workstation Choice: Billing Counter vs Kitchen KDS -->
         <div>
           <label class="block font-bold text-slate-300 mb-1.5">Select Workstation Destination *</label>
-          <div class="grid grid-cols-2 gap-2.5">
-            <label id="lblStationCounter" class="flex flex-col p-3 rounded-2xl border-2 border-brand-500 bg-brand-500/10 cursor-pointer transition select-none">
+          <div class="grid grid-cols-2 gap-2 sm:gap-2.5">
+            <label id="lblStationCounter" class="flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-brand-500 bg-brand-500/10 cursor-pointer transition select-none">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-lg">👑</span>
+                <span class="text-base sm:text-lg">👑</span>
                 <input type="radio" name="stationDest" value="counter" checked onchange="handleStationToggle()" class="accent-brand-500 w-4 h-4">
               </div>
-              <span class="font-extrabold text-white text-xs">Billing Counter</span>
-              <span class="text-[10px] text-slate-400 mt-0.5">POS, Tables & Live Orders</span>
+              <span class="font-extrabold text-white text-xs truncate">Billing Counter</span>
+              <span class="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">POS, Tables & Live</span>
             </label>
 
-            <label id="lblStationKds" class="flex flex-col p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600">
+            <label id="lblStationKds" class="flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600">
               <div class="flex items-center justify-between mb-1">
-                <span class="text-lg">🍳</span>
+                <span class="text-base sm:text-lg">🍳</span>
                 <input type="radio" name="stationDest" value="kds" onchange="handleStationToggle()" class="accent-amber-500 w-4 h-4">
               </div>
-              <span class="font-extrabold text-white text-xs">Kitchen KDS</span>
-              <span class="text-[10px] text-slate-400 mt-0.5">Direct Chef Order Screen</span>
+              <span class="font-extrabold text-white text-xs truncate">Kitchen KDS</span>
+              <span class="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">Direct Chef Orders</span>
             </label>
           </div>
         </div>
@@ -173,13 +173,13 @@
       const btn = document.getElementById('btnLoginSubmit');
 
       if (isCounter) {
-        lblCounter.className = 'flex flex-col p-3 rounded-2xl border-2 border-brand-500 bg-brand-500/10 cursor-pointer transition select-none';
-        lblKds.className = 'flex flex-col p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600';
+        lblCounter.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-brand-500 bg-brand-500/10 cursor-pointer transition select-none';
+        lblKds.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600';
         btn.innerHTML = '<span>🚀 Enter Billing Counter POS</span>';
         btn.className = 'w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-sm shadow-xl shadow-brand-500/25 transition flex items-center justify-center gap-2 active:scale-98';
       } else {
-        lblCounter.className = 'flex flex-col p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600';
-        lblKds.className = 'flex flex-col p-3 rounded-2xl border-2 border-amber-500 bg-amber-500/15 cursor-pointer transition select-none';
+        lblCounter.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600';
+        lblKds.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-amber-500 bg-amber-500/15 cursor-pointer transition select-none';
         btn.innerHTML = '<span>🍳 Enter Kitchen KDS Screen</span>';
         btn.className = 'w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-sm shadow-xl shadow-amber-500/25 transition flex items-center justify-center gap-2 active:scale-98';
       }

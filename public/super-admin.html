@@ -36,45 +36,46 @@
     }
   </script>
 </head>
-<body class="bg-slate-900 text-slate-100 font-sans min-h-screen antialiased selection:bg-brand-500 selection:text-white">
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen antialiased selection:bg-brand-500 selection:text-white overflow-x-hidden">
 
   <!-- Top Platform Navigation -->
   <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 min-h-16 py-2.5 sm:py-0 flex items-center justify-between gap-2">
       
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-brand-500 to-sky-400 flex items-center justify-center text-white font-black text-base shadow-lg shadow-brand-500/30">
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-brand-500 to-sky-400 flex items-center justify-center text-white font-black text-sm sm:text-base shadow-lg shadow-brand-500/30">
           TT
         </div>
         <div>
-          <div class="flex items-center gap-2">
-            <span class="font-extrabold text-white text-lg tracking-tight">TipTap</span>
-            <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/40">
-              Super Admin SaaS
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <span class="font-extrabold text-white text-base sm:text-lg tracking-tight">TipTap</span>
+            <span class="text-[9px] sm:text-[10px] font-black uppercase px-1.5 sm:px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/40">
+              <span class="sm:hidden">HQ</span><span class="hidden sm:inline">Super Admin SaaS</span>
             </span>
           </div>
-          <p class="text-[11px] text-slate-400">Multi-Restaurant Operations HQ</p>
+          <p class="text-[10px] sm:text-[11px] text-slate-400 hidden xs:block">Multi-Restaurant Operations HQ</p>
         </div>
       </div>
 
-      <div class="flex items-center gap-2 sm:gap-3">
-        <button onclick="resetAllData()" class="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs transition flex items-center gap-1.5" title="Clear all orders and make all tables free">
+      <div class="flex items-center gap-1 sm:gap-2.5 shrink-0">
+        <button onclick="resetAllData()" class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs transition flex items-center gap-1" title="Clear all orders and make all tables free">
           <span>🧹</span>
           <span class="hidden sm:inline">Reset Orders</span>
         </button>
-        <a href="/kds.html" target="_blank" class="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-bold text-amber-300 transition flex items-center gap-1.5" title="Open Kitchen KDS Display">
+        <a href="/kds.html" target="_blank" class="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-bold text-amber-300 transition flex items-center gap-1" title="Open Kitchen KDS Display">
           <span>🍳</span>
           <span class="hidden sm:inline">Kitchen KDS</span>
         </a>
-        <a href="/dashboard.html" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition flex items-center gap-1.5">
+        <a href="/dashboard.html" class="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition flex items-center gap-1">
           <span>👑</span>
           <span class="hidden sm:inline">Billing POS ➔</span>
         </a>
-        <button onclick="openOnboardModal()" class="px-3.5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-lg shadow-brand-500/25 transition flex items-center gap-1.5 active:scale-95">
+        <button onclick="openOnboardModal()" class="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-lg shadow-brand-500/25 transition flex items-center gap-1 active:scale-95">
           <span>＋</span>
-          <span>Add Restaurant</span>
+          <span class="hidden sm:inline">Add Restaurant</span>
+          <span class="sm:hidden font-bold">Add</span>
         </button>
-        <button onclick="lockAdminSession()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-amber-300 transition flex items-center gap-1" title="Lock Super Admin Portal">
+        <button onclick="lockAdminSession()" class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-amber-300 transition flex items-center gap-1" title="Lock Super Admin Portal">
           <span>🔒</span>
           <span class="hidden sm:inline">Lock HQ</span>
         </button>
@@ -102,48 +103,48 @@
     </div>
 
     <!-- Platform Metric KPI Cards -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
       
-      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
-        <div class="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
+      <div class="bg-slate-800/80 p-3.5 sm:p-5 rounded-2xl border border-slate-700/80 shadow-md">
+        <div class="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-bold mb-1">
           <span>TOTAL RESTAURANTS</span>
-          <span class="text-lg">🏪</span>
+          <span class="text-base sm:text-lg">🏪</span>
         </div>
-        <p class="text-3xl font-black text-white" id="statTotalRest">0</p>
-        <p class="text-[11px] text-brand-400 font-semibold mt-1">Active subscriptions</p>
+        <p class="text-2xl sm:text-3xl font-black text-white" id="statTotalRest">0</p>
+        <p class="text-[10px] sm:text-[11px] text-brand-400 font-semibold mt-1">Active subscriptions</p>
       </div>
 
-      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
-        <div class="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
-          <span>TOTAL TABLES DEPLOYED</span>
-          <span class="text-lg">🍽️</span>
+      <div class="bg-slate-800/80 p-3.5 sm:p-5 rounded-2xl border border-slate-700/80 shadow-md">
+        <div class="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-bold mb-1">
+          <span>TABLES DEPLOYED</span>
+          <span class="text-base sm:text-lg">🍽️</span>
         </div>
-        <p class="text-3xl font-black text-brand-400" id="statTotalTables">0</p>
-        <p class="text-[11px] text-slate-400 font-medium mt-1">NFC enabled tables</p>
+        <p class="text-2xl sm:text-3xl font-black text-brand-400" id="statTotalTables">0</p>
+        <p class="text-[10px] sm:text-[11px] text-slate-400 font-medium mt-1">NFC enabled tables</p>
       </div>
 
-      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
-        <div class="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
-          <span>MONTHLY REVENUE (MRR)</span>
-          <span class="text-lg">💰</span>
+      <div class="bg-slate-800/80 p-3.5 sm:p-5 rounded-2xl border border-slate-700/80 shadow-md">
+        <div class="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-bold mb-1">
+          <span>MONTHLY MRR</span>
+          <span class="text-base sm:text-lg">💰</span>
         </div>
-        <p class="text-3xl font-black text-emerald-400" id="statSaaSRevenue">₹0</p>
-        <p class="text-[11px] text-emerald-400/80 font-medium mt-1">@ ₹999/mo per restaurant</p>
+        <p class="text-2xl sm:text-3xl font-black text-emerald-400" id="statSaaSRevenue">₹0</p>
+        <p class="text-[10px] sm:text-[11px] text-emerald-400/80 font-medium mt-1">@ ₹999/mo per restaurant</p>
       </div>
 
-      <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
-        <div class="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
-          <span>ACTIVE ORDERS RIGHT NOW</span>
-          <span class="text-lg">⚡</span>
+      <div class="bg-slate-800/80 p-3.5 sm:p-5 rounded-2xl border border-slate-700/80 shadow-md">
+        <div class="flex items-center justify-between text-slate-400 text-[10px] sm:text-xs font-bold mb-1">
+          <span>ACTIVE ORDERS</span>
+          <span class="text-base sm:text-lg">⚡</span>
         </div>
-        <p class="text-3xl font-black text-amber-400" id="statActiveOrders">0</p>
-        <p class="text-[11px] text-slate-400 font-medium mt-1">Across all restaurant kitchens</p>
+        <p class="text-2xl sm:text-3xl font-black text-amber-400" id="statActiveOrders">0</p>
+        <p class="text-[10px] sm:text-[11px] text-slate-400 font-medium mt-1">Across all restaurant kitchens</p>
       </div>
 
     </div>
 
     <!-- Central Super Admin NFC Card & Acrylic Stand Studio -->
-    <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-2 border-brand-500/40 rounded-3xl p-6 sm:p-7 shadow-xl space-y-4">
+    <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-2 border-brand-500/40 rounded-3xl p-4 sm:p-7 shadow-xl space-y-4">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div class="space-y-1.5">
           <div class="flex items-center gap-2.5">
@@ -152,9 +153,9 @@
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <h2 class="text-lg sm:text-xl font-black text-white">Central NFC Card & Acrylic Stand Studio</h2>
-                <span class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">
-                  Super Admin Only
+                <h2 class="text-base sm:text-xl font-black text-white">Central NFC Card & Acrylic Stand Studio</h2>
+                <span class="text-[9px] sm:text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">
+                  Super Admin
                 </span>
               </div>
               <p class="text-xs text-slate-400 mt-0.5 leading-relaxed">
@@ -164,8 +165,8 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2.5 shrink-0 self-start md:self-auto">
-          <a href="/nfc-manager.html" target="_blank" class="px-5 py-3 rounded-2xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs shadow-xl shadow-brand-500/25 transition flex items-center gap-2 active:scale-95">
+        <div class="flex items-center gap-2.5 shrink-0 self-stretch sm:self-auto">
+          <a href="/nfc-manager.html" target="_blank" class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-brand-500 hover:bg-brand-400 text-slate-950 font-black text-xs shadow-xl shadow-brand-500/25 transition flex items-center justify-center gap-2 active:scale-95">
             <span>💳</span>
             <span>Open NFC Card Studio ➔</span>
           </a>
@@ -174,9 +175,24 @@
     </div>
 
     <!-- Incoming Leads / Partner Registration Queue (From Stage 1 Index.html) -->
-    <div id="leadsSection" class="space-y-4 bg-slate-800/40 p-6 rounded-3xl border border-slate-800">
+    <div id="leadsSection" class="space-y-4 bg-slate-800/40 p-4 sm:p-6 rounded-3xl border border-slate-800">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/60 pb-4">
         <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center text-base font-bold shadow">
+            📥
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base sm:text-lg font-extrabold text-white">Pending Restaurant Applications</h2>
+              <span id="leadsBadge" class="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">0 Pending</span>
+            </div>
+            <p class="text-xs text-slate-400">Applications submitted through public website (<code class="text-slate-300 font-mono text-[11px]">index.html#partner-registration</code>). Approve to generate live restaurant & NFCs.</p>
+          </div>
+        </div>
+        <button onclick="loadLeads()" class="text-xs font-bold text-brand-400 hover:text-brand-300 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 transition self-start sm:self-auto">
+          <span>🔄</span> Refresh Leads
+        </button>
+      </div>
           <div class="w-9 h-9 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center text-base font-bold shadow">
             📥
           </div>
@@ -215,16 +231,16 @@
   </main>
 
   <!-- Master PIN Security Gate Modal (Stage 2 Hidden Gate) -->
-  <div id="superAdminGateModal" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-md w-full p-7 sm:p-8 shadow-2xl space-y-6 text-center">
+  <div id="superAdminGateModal" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-md w-full p-5 sm:p-8 shadow-2xl space-y-5 sm:space-y-6 text-center max-h-[92vh] overflow-y-auto">
       
-      <div class="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-brand-600 to-sky-400 flex items-center justify-center text-3xl shadow-xl shadow-brand-500/30">
+      <div class="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-3xl bg-gradient-to-tr from-brand-600 to-sky-400 flex items-center justify-center text-2xl sm:text-3xl shadow-xl shadow-brand-500/30">
         🛡️
       </div>
 
       <div>
-        <span class="text-[11px] font-black uppercase tracking-wider text-brand-400 bg-brand-500/10 px-3 py-1 rounded-full border border-brand-500/20">Stage 2 • Restricted HQ</span>
-        <h2 class="text-2xl font-black text-white mt-2">Super Admin Master Access</h2>
+        <span class="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-brand-400 bg-brand-500/10 px-3 py-1 rounded-full border border-brand-500/20">Stage 2 • Restricted HQ</span>
+        <h2 class="text-xl sm:text-2xl font-black text-white mt-2">Super Admin Master Access</h2>
         <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
           TipTap Multi-Tenant Platform Master Control. This area is hidden and protected. Enter your Master PIN to unlock.
         </p>
@@ -251,13 +267,13 @@
   </div>
 
   <!-- Onboard New Restaurant Modal -->
-  <div id="onboardModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-6">
+  <div id="onboardModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-4 sm:p-7 shadow-2xl space-y-4 sm:space-y-6 max-h-[92vh] overflow-y-auto">
       
-      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4">
         <div>
-          <span class="text-[11px] font-bold text-brand-400 uppercase tracking-wider">Fast Onboarding Form</span>
-          <h3 class="text-lg font-extrabold text-white">Onboard a New Restaurant</h3>
+          <span class="text-[10px] sm:text-[11px] font-bold text-brand-400 uppercase tracking-wider">Fast Onboarding Form</span>
+          <h3 class="text-base sm:text-lg font-extrabold text-white">Onboard a New Restaurant</h3>
         </div>
         <button onclick="closeOnboardModal()" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 font-bold">
           ✕
@@ -354,7 +370,7 @@
       }
 
       grid.innerHTML = restaurants.map(r => `
-        <div class="bg-slate-800/90 rounded-3xl p-6 border border-slate-700 shadow-xl space-y-5 flex flex-col justify-between hover:border-brand-500/60 transition">
+        <div class="bg-slate-800/90 rounded-3xl p-4 sm:p-6 border border-slate-700 shadow-xl space-y-4 sm:space-y-5 flex flex-col justify-between hover:border-brand-500/60 transition">
           
           <div>
             <!-- Header -->
@@ -391,36 +407,36 @@
 
           <!-- Actions -->
           <div class="space-y-2 pt-2 border-t border-slate-700/80">
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              <a href="/dashboard.html?restaurant=${r.id}" target="_blank" class="py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-extrabold flex items-center justify-center gap-1.5 transition shadow">
+            <div class="grid grid-cols-2 gap-1.5 sm:gap-2 text-[11px] sm:text-xs">
+              <a href="/dashboard.html?restaurant=${r.id}" target="_blank" class="py-2.5 px-1 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 transition shadow truncate">
                 <span>👑 Billing POS</span>
                 <span>➔</span>
               </a>
-              <a href="/kds.html?restaurant=${r.id}" target="_blank" class="py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-extrabold flex items-center justify-center gap-1.5 transition shadow">
+              <a href="/kds.html?restaurant=${r.id}" target="_blank" class="py-2.5 px-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-extrabold flex items-center justify-center gap-1 sm:gap-1.5 transition shadow truncate">
                 <span>🍳 Kitchen KDS</span>
                 <span>➔</span>
               </a>
             </div>
 
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              <a href="/nfc-manager.html?restaurant=${r.id}" target="_blank" class="py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-center transition flex items-center justify-center gap-1">
-                <span>💳</span> <span>Print NFC Stands</span>
+            <div class="grid grid-cols-2 gap-1.5 sm:gap-2 text-[11px] sm:text-xs">
+              <a href="/nfc-manager.html?restaurant=${r.id}" target="_blank" class="py-2 px-1 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-center transition flex items-center justify-center gap-1 truncate">
+                <span>💳</span> <span class="truncate">Print NFC Stands</span>
               </a>
-              <a href="/menu.html?restaurant=${r.id}&table=1" target="_blank" class="py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-bold text-center transition flex items-center justify-center gap-1">
-                <span>🍽️</span> <span>Test Menu (T1)</span>
+              <a href="/menu.html?restaurant=${r.id}&table=1" target="_blank" class="py-2 px-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-bold text-center transition flex items-center justify-center gap-1 truncate">
+                <span>🍽️</span> <span class="truncate">Test Menu (T1)</span>
               </a>
             </div>
 
-            <button onclick="shareWelcomeOnWhatsApp('${r.name}', '${r.id}', '${r.phone}')" class="w-full py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition">
-              <span>💬</span> Send POS & KDS Access via WhatsApp
+            <button onclick="shareWelcomeOnWhatsApp('${r.name}', '${r.id}', '${r.phone}')" class="w-full py-2 px-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 text-emerald-300 font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1.5 transition">
+              <span>💬</span> <span class="truncate">Send POS & KDS Access via WhatsApp</span>
             </button>
 
-            <div class="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-700/60">
-              <button onclick="resetRestaurantData('${r.id}', '${r.name}')" class="py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-amber-300 font-bold text-center transition flex items-center justify-center gap-1">
-                <span>🧹</span> Reset Orders
+            <div class="grid grid-cols-2 gap-1.5 sm:gap-2 text-xs pt-1 border-t border-slate-700/60">
+              <button onclick="resetRestaurantData('${r.id}', '${r.name}')" class="py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 border border-slate-600 text-amber-300 font-bold text-center transition flex items-center justify-center gap-1 text-[11px] sm:text-xs">
+                <span>🧹</span> <span>Reset Orders</span>
               </button>
-              <button onclick="deleteRestaurant('${r.id}', '${r.name}')" class="py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 text-rose-300 font-bold text-center transition flex items-center justify-center gap-1">
-                <span>🗑️</span> Delete
+              <button onclick="deleteRestaurant('${r.id}', '${r.name}')" class="py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 text-rose-300 font-bold text-center transition flex items-center justify-center gap-1 text-[11px] sm:text-xs">
+                <span>🗑️</span> <span>Delete</span>
               </button>
             </div>
           </div>

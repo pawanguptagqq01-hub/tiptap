@@ -56,7 +56,7 @@
     }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 font-sans min-h-screen antialiased flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen antialiased flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950 overflow-x-hidden">
 
   <!-- Printable KOT Container (Hidden during normal screen use) -->
   <div id="kotPrintSection" class="hidden p-4 font-mono text-black text-sm bg-white">
@@ -72,16 +72,16 @@
   </div>
 
   <!-- Kitchen Station Passkey Security Gate Modal -->
-  <div id="kdsSecurityGateModal" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4">
-    <div class="bg-slate-900 border-2 border-amber-500/50 rounded-3xl max-w-sm w-full p-6 sm:p-8 shadow-2xl space-y-5 text-center relative overflow-hidden text-slate-100">
+  <div id="kdsSecurityGateModal" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-slate-900 border-2 border-amber-500/50 rounded-3xl max-w-sm w-full p-5 sm:p-8 shadow-2xl space-y-4 sm:space-y-5 text-center relative overflow-hidden text-slate-100 max-h-[92vh] overflow-y-auto">
       <div class="absolute -top-20 -right-20 w-40 h-40 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"></div>
 
-      <div class="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500 to-orange-400 flex items-center justify-center text-3xl shadow-xl shadow-amber-500/30">
+      <div class="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500 to-orange-400 flex items-center justify-center text-2xl sm:text-3xl shadow-xl shadow-amber-500/30">
         🍳
       </div>
 
       <div class="space-y-1">
-        <h2 class="font-display font-black text-white text-2xl tracking-tight">Kitchen KDS Gate</h2>
+        <h2 class="font-display font-black text-white text-xl sm:text-2xl tracking-tight">Kitchen KDS Gate</h2>
         <p class="text-xs text-slate-400">
           Enter 4-digit Staff Passkey to unlock the live kitchen display station.
         </p>
@@ -94,7 +94,7 @@
       <form id="kdsGateForm" onsubmit="handleKdsGateUnlock(event)" class="space-y-4">
         <div>
           <input type="password" id="kdsGatePinInput" maxlength="8" placeholder="••••" required autofocus
-            class="w-full text-center tracking-[0.5em] font-mono text-3xl py-3.5 px-4 rounded-2xl bg-slate-800 border-2 border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 text-white outline-none transition">
+            class="w-full text-center tracking-[0.5em] font-mono text-2xl sm:text-3xl py-3 sm:py-3.5 px-4 rounded-2xl bg-slate-800 border-2 border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 text-white outline-none transition">
           <p class="text-[11px] text-amber-400/90 font-mono mt-1.5">Default Staff Passkey: 1234</p>
         </div>
 
@@ -115,7 +115,7 @@
   <div class="flex-1 flex flex-col">
 
     <!-- Top Kitchen Command Header -->
-    <header class="bg-slate-900/90 border-b border-slate-800/90 px-4 sm:px-6 py-3.5 backdrop-blur-md sticky top-0 z-40 shadow-xl">
+    <header class="bg-slate-900/90 border-b border-slate-800/90 px-3 sm:px-6 py-2.5 sm:py-3.5 backdrop-blur-md sticky top-0 z-40 shadow-xl overflow-x-hidden">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
         
         <!-- Left: Logo & Station Title -->
@@ -125,11 +125,11 @@
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <span class="font-display font-black text-white text-lg tracking-tight">TipTap KDS</span>
-              <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
-                Direct Kitchen Station
+              <span class="font-display font-black text-white text-base sm:text-lg tracking-tight">TipTap KDS</span>
+              <span class="text-[9px] sm:text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                <span class="sm:hidden">KDS</span><span class="hidden sm:inline">Direct Kitchen Station</span>
               </span>
-              <div class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-extrabold bg-emerald-950/60 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
+              <div class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-extrabold bg-emerald-950/60 border border-emerald-500/40 px-2 sm:px-2.5 py-0.5 rounded-full">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                 <span>LIVE</span>
               </div>
@@ -138,28 +138,28 @@
           </div>
         </div>
 
-        <!-- Center: Ticket Filter Buttons -->
-        <div class="flex items-center bg-slate-950/80 p-1 rounded-2xl border border-slate-800 self-start md:self-center">
-          <button onclick="setKdsFilter('all')" id="filter-all" class="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-display font-black text-xs transition shadow-md shadow-amber-500/20 flex items-center gap-1.5">
+        <!-- Center: Ticket Filter Buttons (Scrollable on Mobile) -->
+        <div class="flex items-center bg-slate-950/80 p-1 rounded-2xl border border-slate-800 w-full md:w-auto overflow-x-auto no-scrollbar gap-1">
+          <button onclick="setKdsFilter('all')" id="filter-all" class="shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-amber-500 text-slate-950 font-display font-black text-xs transition shadow-md shadow-amber-500/20 flex items-center gap-1.5">
             <span>All Orders</span>
             <span id="badgeCountAll" class="px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300 text-[10px]">0</span>
           </button>
-          <button onclick="setKdsFilter('dinein')" id="filter-dinein" class="px-4 py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5">
+          <button onclick="setKdsFilter('dinein')" id="filter-dinein" class="shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5">
             <span>🍽️ Dine-In</span>
             <span id="badgeCountDineIn" class="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 text-[10px]">0</span>
           </button>
-          <button onclick="setKdsFilter('takeaway')" id="filter-takeaway" class="px-4 py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5">
+          <button onclick="setKdsFilter('takeaway')" id="filter-takeaway" class="shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5">
             <span>🥡 Takeaway</span>
             <span id="badgeCountTakeaway" class="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 text-[10px]">0</span>
           </button>
-          <button onclick="setKdsFilter('urgent')" id="filter-urgent" class="px-4 py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5">
+          <button onclick="setKdsFilter('urgent')" id="filter-urgent" class="shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5">
             <span>🔥 Late Only</span>
             <span id="badgeCountLate" class="hidden px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse">0</span>
           </button>
         </div>
 
         <!-- Right: Actions & Tools (Clock, Fullscreen, Sound, POS Link) -->
-        <div class="flex items-center gap-2 self-end md:self-center shrink-0">
+        <div class="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full md:w-auto shrink-0">
           
           <!-- Live Clock -->
           <div class="hidden sm:block text-right pr-2 border-r border-slate-800">
@@ -168,7 +168,7 @@
           </div>
 
           <!-- Audio Bell Toggle -->
-          <button onclick="toggleAudio()" id="btnAudioToggle" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition" title="Toggle Audio Chime">
+          <button onclick="toggleAudio()" id="btnAudioToggle" class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition" title="Toggle Audio Chime">
             <span id="audioIcon">🔔</span>
             <span id="audioLabel" class="hidden sm:inline">Sound: ON</span>
           </button>
@@ -192,7 +192,7 @@
           </button>
 
           <!-- Switch to Billing Counter POS -->
-          <a id="btnBillingCounter" href="/dashboard.html" class="px-3 sm:px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black shadow-md shadow-brand-500/20 flex items-center gap-1.5 transition">
+          <a id="btnBillingCounter" href="/dashboard.html" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black shadow-md shadow-brand-500/20 flex items-center gap-1.5 transition">
             <span>👑</span>
             <span class="hidden sm:inline">Billing Counter</span>
           </a>
@@ -591,9 +591,9 @@
         const btn = document.getElementById(`filter-${tab}`);
         if (btn) {
           if (tab === f) {
-            btn.className = 'px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-display font-black text-xs transition shadow-md shadow-amber-500/20 flex items-center gap-1.5';
+            btn.className = 'shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-amber-500 text-slate-950 font-display font-black text-xs transition shadow-md shadow-amber-500/20 flex items-center gap-1.5';
           } else {
-            btn.className = 'px-4 py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5';
+            btn.className = 'shrink-0 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5';
           }
         }
       });

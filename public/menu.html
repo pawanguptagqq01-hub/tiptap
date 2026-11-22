@@ -119,13 +119,13 @@
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
-<body class="bg-slate-100 text-slate-900 font-sans pb-36 antialiased selection:bg-sky-500 selection:text-navy-950">
+<body class="bg-slate-100 text-slate-900 font-sans pb-36 antialiased selection:bg-sky-500 selection:text-navy-950 overflow-x-hidden">
 
   <!-- Floating Dynamic Island Live Order Tracker (Deep Navy + Sky Blue Glow) -->
-  <div id="dynamicIslandBar" class="hidden fixed top-3 inset-x-4 max-w-md mx-auto z-40 animate-fade-in">
-    <div onclick="openLiveOrderModal()" class="cursor-pointer bg-[#06101e]/95 backdrop-blur-xl text-white rounded-2xl p-3.5 shadow-2xl border-2 border-sky-400/50 flex items-center justify-between pulse-glow transition transform hover:scale-[1.02] active:scale-95">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-xl shrink-0">
+  <div id="dynamicIslandBar" class="hidden fixed top-3 inset-x-3 sm:inset-x-4 max-w-md mx-auto z-40 animate-fade-in">
+    <div onclick="openLiveOrderModal()" class="cursor-pointer bg-[#06101e]/95 backdrop-blur-xl text-white rounded-2xl p-3 sm:p-3.5 shadow-2xl border-2 border-sky-400/50 flex items-center justify-between pulse-glow transition transform hover:scale-[1.02] active:scale-95">
+      <div class="flex items-center gap-2.5 sm:gap-3">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-lg sm:text-xl shrink-0">
           🍳
         </div>
         <div>
@@ -133,10 +133,10 @@
             <span class="w-2 h-2 rounded-full bg-sky-400 animate-ping"></span>
             <span id="islandOrderNo" class="text-xs font-black text-sky-300 uppercase tracking-wider font-display">Order #ORD-101</span>
           </div>
-          <p id="islandStatusText" class="text-xs font-bold text-white mt-0.5">Kitchen is cooking your meal...</p>
+          <p id="islandStatusText" class="text-xs font-bold text-white mt-0.5 truncate max-w-[180px] sm:max-w-none">Kitchen is cooking your meal...</p>
         </div>
       </div>
-      <span class="text-xs font-black bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 px-3.5 py-1.5 rounded-xl shadow-md transition">
+      <span class="text-xs font-black bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 px-3 py-1.5 rounded-xl shadow-md transition shrink-0">
         Track ➔
       </span>
     </div>
@@ -255,17 +255,17 @@
   </main>
 
   <!-- Sticky Bottom Cart Bar (Deep Navy Blue Glass + Glowing Sky Blue CTA) -->
-  <div id="cartBar" class="hidden fixed bottom-5 inset-x-4 max-w-md mx-auto z-40 animate-slide-up">
-    <div class="bg-gradient-to-r from-[#06101e] via-[#0a192f] to-[#0c1f38] backdrop-blur-xl text-white rounded-3xl p-4 shadow-2xl flex items-center justify-between border-2 border-sky-400/50 shadow-sky-500/20">
+  <div id="cartBar" class="hidden fixed bottom-4 sm:bottom-5 inset-x-3 sm:inset-x-4 max-w-md mx-auto z-40 animate-slide-up pb-[env(safe-area-inset-bottom,0px)]">
+    <div class="bg-gradient-to-r from-[#06101e] via-[#0a192f] to-[#0c1f38] backdrop-blur-xl text-white rounded-3xl p-3.5 sm:p-4 shadow-2xl flex items-center justify-between border-2 border-sky-400/50 shadow-sky-500/20">
       <div>
         <div class="flex items-center gap-2">
-          <span id="cartCountBadge" class="bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 text-xs font-black px-3 py-0.5 rounded-full shadow-sm">1 item</span>
+          <span id="cartCountBadge" class="bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 text-xs font-black px-2.5 sm:px-3 py-0.5 rounded-full shadow-sm">1 item</span>
           <span class="text-xs text-sky-200 font-bold uppercase tracking-wider">Subtotal</span>
         </div>
-        <p class="text-2xl font-black text-white mt-0.5 font-display">₹<span id="cartSubtotalText">0</span></p>
+        <p class="text-xl sm:text-2xl font-black text-white mt-0.5 font-display">₹<span id="cartSubtotalText">0</span></p>
       </div>
 
-      <button onclick="openCartModal()" class="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-black text-sm shadow-lg shadow-sky-400/40 hover:shadow-[0_0_25px_rgba(56,189,248,0.7)] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 font-display">
+      <button onclick="openCartModal()" class="px-5 sm:px-6 py-3 sm:py-3.5 rounded-2xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-sky-400/40 hover:shadow-[0_0_25px_rgba(56,189,248,0.7)] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 font-display">
         <span>View Order</span>
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
       </button>
@@ -274,15 +274,18 @@
 
   <!-- Cart & Checkout Slide-Over Modal -->
   <div id="cartModal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col justify-end">
-    <div class="bg-white rounded-t-3xl max-h-[85vh] flex flex-col max-w-md mx-auto w-full shadow-2xl overflow-hidden animate-slide-up">
+    <div class="bg-white rounded-t-3xl max-h-[92vh] flex flex-col max-w-md mx-auto w-full shadow-2xl overflow-y-auto animate-slide-up">
       
       <!-- Cart Header -->
-      <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+      <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
         <div>
-          <h3 class="font-extrabold text-slate-900 text-lg font-display">Your Table Order</h3>
+          <h3 class="font-extrabold text-slate-900 text-base sm:text-lg font-display">Your Table Order</h3>
           <p class="text-xs text-slate-500 font-medium" id="cartModalTableText">Table 1 • TipTap NFC Order</p>
         </div>
-        <button onclick="closeCartModal()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold transition">
+        <button onclick="closeCartModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold transition">
+          ✕
+        </button>
+      </div>
           ✕
         </button>
       </div>
@@ -361,8 +364,8 @@
       </div>
 
       <!-- Checkout Action Button -->
-      <div class="p-5 border-t border-slate-100 bg-white">
-        <button id="btnPlaceOrder" onclick="placeOrder()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-[#0284c7] hover:from-sky-300 hover:to-sky-400 text-slate-950 font-black text-base shadow-xl shadow-sky-400/40 hover:shadow-[0_0_25px_rgba(56,189,248,0.7)] transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display">
+      <div class="p-4 sm:p-5 border-t border-slate-100 bg-white sticky bottom-0 z-10 shadow-lg">
+        <button id="btnPlaceOrder" onclick="placeOrder()" class="w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-[#0284c7] hover:from-sky-300 hover:to-sky-400 text-slate-950 font-black text-sm sm:text-base shadow-xl shadow-sky-400/40 hover:shadow-[0_0_25px_rgba(56,189,248,0.7)] transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display">
           <span>🚀 Place Order to Kitchen</span>
         </button>
       </div>
@@ -372,14 +375,14 @@
 
   <!-- Live Order Tracker Modal -->
   <div id="liveOrderModal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col justify-end sm:justify-center sm:p-4">
-    <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-md mx-auto w-full p-6 shadow-2xl space-y-6 animate-slide-up">
+    <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-md mx-auto w-full p-5 sm:p-6 shadow-2xl space-y-5 sm:space-y-6 animate-slide-up max-h-[92vh] overflow-y-auto">
       
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
           <span class="text-[11px] font-black text-brand-600 tracking-wider uppercase font-display">Live Kitchen Tracker</span>
-          <h3 id="modalOrderId" class="font-black text-slate-900 text-lg font-display">Order #ORD-101</h3>
+          <h3 id="modalOrderId" class="font-black text-slate-900 text-base sm:text-lg font-display">Order #ORD-101</h3>
         </div>
-        <button onclick="closeLiveOrderModal()" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold">✕</button>
+        <button onclick="closeLiveOrderModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold">✕</button>
       </div>
 
       <!-- Status Visual -->
@@ -692,13 +695,13 @@
 
   <!-- Dish Customization Modal (Portion & Add-ons) -->
   <div id="customizeDishModal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col justify-end">
-    <div class="bg-white rounded-t-3xl max-w-md mx-auto w-full p-6 shadow-2xl space-y-5 animate-slide-up">
+    <div class="bg-white rounded-t-3xl max-w-md mx-auto w-full p-5 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 animate-slide-up max-h-[92vh] overflow-y-auto">
       <div class="flex items-start justify-between border-b border-slate-100 pb-3">
         <div>
-          <h3 id="customModalDishName" class="font-extrabold text-slate-900 text-lg leading-tight font-display">Dish Name</h3>
+          <h3 id="customModalDishName" class="font-extrabold text-slate-900 text-base sm:text-lg leading-tight font-display">Dish Name</h3>
           <p id="customModalDishDesc" class="text-xs text-slate-500 mt-0.5 font-medium">Description</p>
         </div>
-        <button onclick="closeCustomizeModal()" class="w-9 h-9 rounded-full bg-slate-100 font-bold text-slate-600">✕</button>
+        <button onclick="closeCustomizeModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 font-bold text-slate-600">✕</button>
       </div>
 
       <!-- Variants (Portion Size) -->

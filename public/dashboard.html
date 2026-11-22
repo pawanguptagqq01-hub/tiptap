@@ -89,7 +89,7 @@
         <!-- Restaurant Selector Dropdown (Clean, Sleek Pill) -->
         <div class="relative">
           <select id="restaurantSelector" onchange="switchRestaurant(this.value)" 
-            class="bg-[#112240] text-sky-200 hover:text-white font-bold text-xs rounded-xl pl-3 pr-8 py-2 border border-sky-400/30 hover:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400 cursor-pointer transition-all shadow-sm appearance-none">
+            class="bg-[#112240] text-sky-200 hover:text-white font-bold text-xs rounded-xl pl-3 pr-8 py-2 border border-sky-400/30 hover:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400 cursor-pointer transition-all shadow-sm appearance-none max-w-[125px] sm:max-w-[200px] md:max-w-xs truncate">
             <option value="">Select Branch...</option>
           </select>
           <span class="pointer-events-none absolute right-2.5 top-2.5 text-[10px] text-sky-400">▼</span>
@@ -144,14 +144,14 @@
 
         <!-- Real Payment Gateway & UPI Settings Button -->
         <button onclick="openPaymentGatewayModal()" id="btnPaymentGatewaySettings" title="Setup Real Merchant UPI & Bank Gateway"
-          class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 text-emerald-300 hover:text-white text-xs font-black border border-emerald-400/40 flex items-center gap-1 transition">
+          class="hidden sm:flex px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 text-emerald-300 hover:text-white text-xs font-black border border-emerald-400/40 items-center gap-1 transition">
           <span>💳</span>
           <span class="hidden md:inline">UPI Gateway</span>
         </button>
 
         <!-- Dedicated Kitchen KDS Screen Button -->
         <a id="btnHeaderKdsScreen" href="/kds.html" target="_blank" title="Open Dedicated Kitchen KDS Screen for Chefs"
-          class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 text-amber-300 hover:text-white text-xs font-black border border-amber-400/40 flex items-center gap-1 transition">
+          class="hidden sm:flex px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 text-amber-300 hover:text-white text-xs font-black border border-amber-400/40 items-center gap-1 transition">
           <span>🍳</span>
           <span class="hidden lg:inline">Kitchen Screen ↗</span>
         </a>
@@ -226,7 +226,7 @@
           </button>
 
           <!-- Mobile Tools Dropdown -->
-          <div id="mobileToolsDropdown" class="hidden absolute right-0 top-10 w-52 bg-slate-900 border border-sky-400/40 rounded-2xl shadow-2xl p-3 z-50 text-white space-y-2 font-sans text-xs">
+          <div id="mobileToolsDropdown" class="hidden absolute right-0 top-10 w-56 bg-slate-900 border border-sky-400/40 rounded-2xl shadow-2xl p-3 z-50 text-white space-y-2 font-sans text-xs">
             <button onclick="toggleSound(); toggleMobileToolsMenu();" class="w-full p-2 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-between font-bold">
               <span>🔊 Bell Alerts</span>
               <span id="mSoundStatus" class="text-sky-300">ON</span>
@@ -239,6 +239,10 @@
               <span>🍳 Open Kitchen KDS</span>
               <span>➔</span>
             </a>
+            <button onclick="openPaymentGatewayModal(); toggleMobileToolsMenu();" class="w-full p-2 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 flex items-center justify-between font-bold">
+              <span>💳 UPI Gateway</span>
+              <span>⚙️</span>
+            </button>
             <button onclick="testSoundboxVoice(); toggleMobileToolsMenu();" class="w-full p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-between font-bold">
               <span>📢 Test Soundbox</span>
               <span>▶️</span>
@@ -1801,20 +1805,22 @@
             ` : ''}
 
             <!-- Bottom Row: Read-Only Kitchen Indicator + Billing Actions -->
-            <div class="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-100">
+            <div class="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 border-t border-slate-100">
               <div class="flex items-center gap-1.5 text-xs text-slate-500">
                 <span class="text-xs">🔒</span>
-                <span class="text-[11px] font-medium text-slate-500">Kitchen cooking status controlled by Kitchen KDS Screen (Read-Only at Counter)</span>
+                <span class="text-[11px] font-medium text-slate-500">Kitchen status managed by Kitchen KDS</span>
               </div>
 
-              <div class="flex items-center gap-2 self-end sm:self-auto">
-                <span class="font-display font-black text-slate-900 text-lg mr-2">Total: ₹${order.total}</span>
-                <button onclick="printKOT('${order.id}')" class="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs" title="Print Kitchen Slip">
-                  🖨️ KOT Slip
-                </button>
-                <button onclick="openSettleModal('${order.id}')" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-display font-black text-xs shadow-md shadow-sky-400/20">
-                  💳 Settle Bill
-                </button>
+              <div class="w-full sm:w-auto flex flex-wrap items-center justify-between sm:justify-end gap-2">
+                <span class="font-display font-black text-slate-900 text-base sm:text-lg">Total: ₹${order.total}</span>
+                <div class="flex items-center gap-2">
+                  <button onclick="printKOT('${order.id}')" class="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs" title="Print Kitchen Slip">
+                    🖨️ KOT Slip
+                  </button>
+                  <button onclick="openSettleModal('${order.id}')" class="px-3 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-display font-black text-xs shadow-md shadow-sky-400/20">
+                    💳 Settle Bill
+                  </button>
+                </div>
               </div>
             </div>
 
