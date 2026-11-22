@@ -184,6 +184,13 @@
           <span>🏢</span> <span class="hidden sm:inline">Super Admin</span>
         </a>
 
+        <!-- Real Payment Gateway & UPI Settings Button -->
+        <button onclick="openPaymentGatewayModal()" id="btnPaymentGatewaySettings" title="Setup Real Merchant UPI & Bank Gateway"
+          class="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 text-emerald-300 hover:text-white text-xs font-black border border-emerald-400/40 hover:border-emerald-400 flex items-center gap-1.5 transition shadow-xs">
+          <span>💳</span>
+          <span class="hidden sm:inline">UPI Gateway</span>
+        </button>
+
         <!-- Sound Toggle -->
         <button onclick="toggleSound()" id="soundBtn" title="Sound Bell Alerts"
           class="px-3 py-2 rounded-xl bg-[#112240] hover:bg-[#1b3457] text-sky-200 hover:text-white text-xs font-bold flex items-center gap-1.5 border border-sky-400/30 hover:border-sky-400 transition">
@@ -941,6 +948,120 @@
           Cancel
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Real Payment Gateway & Merchant UPI Setup Modal -->
+  <div id="paymentGatewayModal" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-fade-in max-h-[92vh] overflow-y-auto">
+      
+      <!-- Modal Header -->
+      <div class="flex items-start justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl font-bold">
+            💳
+          </div>
+          <div>
+            <h3 class="font-black text-slate-900 text-base font-display">Real Payment Gateway & UPI Setup</h3>
+            <p class="text-xs text-slate-500">Receive real money directly into your restaurant's bank account.</p>
+          </div>
+        </div>
+        <button onclick="closePaymentGatewayModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold">
+          ✕
+        </button>
+      </div>
+
+      <!-- Form -->
+      <form id="paymentGatewayForm" onsubmit="savePaymentGatewaySettings(event)" class="space-y-4 text-xs">
+        
+        <!-- 1. Merchant UPI VPA (Direct Bank) -->
+        <div class="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block font-black text-emerald-950 uppercase text-[11px] tracking-wide">
+              1. Merchant UPI ID / VPA (0% Fee, Direct to Bank) *
+            </label>
+            <span class="text-[10px] bg-emerald-200/60 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Recommended</span>
+          </div>
+          <p class="text-[11px] text-emerald-800/80">
+            Enter your PhonePe, Google Pay, Paytm, or BHIM merchant VPA. Customer payments land directly in your bank:
+          </p>
+          <input type="text" id="pgUpiVpaInp" required placeholder="E.g., pawancafe@okhdfcbank or 9876543210@paytm" oninput="updateTestQrPreview()"
+            class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-emerald-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+        </div>
+
+        <!-- 2. Payee / Business Display Name -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">2. Business / Payee Display Name *</label>
+          <input type="text" id="pgMerchantNameInp" required placeholder="E.g., Pawan Bistro & Cafe" oninput="updateTestQrPreview()"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-400">
+          <p class="text-[10px] text-slate-400 mt-1">Appears on the guest's Google Pay / PhonePe screen as the verified shop name.</p>
+        </div>
+
+        <!-- 3. Gateway Mode Selection -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">3. Default Payment Flow</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="p-3 rounded-2xl border-2 border-emerald-300 bg-emerald-50/50 flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="pgMode" value="upi_dynamic" checked class="text-emerald-600 focus:ring-emerald-500">
+              <div>
+                <p class="font-extrabold text-xs text-slate-900">Direct UPI / QR</p>
+                <p class="text-[10px] text-emerald-700 font-semibold">0% MDR, Instant to Bank</p>
+              </div>
+            </label>
+            <label class="p-3 rounded-2xl border-2 border-slate-200 hover:border-sky-300 bg-white flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="pgMode" value="razorpay" class="text-sky-600 focus:ring-sky-500">
+              <div>
+                <p class="font-extrabold text-xs text-slate-900">Razorpay Gateway</p>
+                <p class="text-[10px] text-slate-500 font-semibold">Cards, NetBanking & UPI</p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 4. Optional Razorpay Keys -->
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-800 text-[11px]">4. Razorpay Credentials (Optional for Cards/Wallets)</span>
+            <span class="text-[10px] text-slate-400">Test & Live supported</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] text-slate-500 font-bold mb-0.5">Key ID:</label>
+              <input type="text" id="pgRzpKeyInp" placeholder="rzp_live_... or rzp_test_..." 
+                class="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 font-mono text-[11px]">
+            </div>
+            <div>
+              <label class="block text-[10px] text-slate-500 font-bold mb-0.5">Key Secret:</label>
+              <input type="password" id="pgRzpSecretInp" placeholder="••••••••••••" 
+                class="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 font-mono text-[11px]">
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. Live Test QR Preview -->
+        <div class="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between gap-4">
+          <div class="space-y-1">
+            <span class="text-[10px] font-black uppercase text-emerald-400 tracking-wider">Live Scannable QR Preview</span>
+            <p class="text-xs font-bold text-slate-200" id="pgPreviewMerchant">TipTap Bistro</p>
+            <p class="text-[10px] font-mono text-slate-400" id="pgPreviewVpa">tiptap.merchant@icici</p>
+            <p class="text-[10px] text-sky-300">Scan this right now with GPay or PhonePe to test!</p>
+          </div>
+          <div class="w-24 h-24 p-1.5 bg-white rounded-2xl shadow-md shrink-0 flex items-center justify-center">
+            <img id="pgPreviewQrImg" src="" alt="Test QR" class="w-full h-full object-contain">
+          </div>
+        </div>
+
+        <div class="pt-2 flex gap-2">
+          <button type="submit" id="btnSavePg" class="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-black text-xs shadow-lg shadow-emerald-500/25 transition active:scale-95">
+            💾 Save & Activate Real Payment Gateway
+          </button>
+          <button type="button" onclick="closePaymentGatewayModal()" class="px-4 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs">
+            Cancel
+          </button>
+        </div>
+
+      </form>
+
     </div>
   </div>
 
@@ -2290,6 +2411,83 @@
       document.getElementById('zRepPayCard').innerText = `₹${card.toLocaleString('en-IN')}`;
 
       window.print();
+    }
+
+    // Real Payment Gateway & Merchant UPI Setup
+    function openPaymentGatewayModal() {
+      if (!appState || !appState.restaurant) return;
+      const pc = appState.restaurant.paymentConfig || {};
+      document.getElementById('pgUpiVpaInp').value = pc.upiVpa || '';
+      document.getElementById('pgMerchantNameInp').value = pc.merchantName || appState.restaurant.name || '';
+      document.getElementById('pgRzpKeyInp').value = pc.razorpayKeyId || '';
+      document.getElementById('pgRzpSecretInp').value = pc.razorpayKeySecret || '';
+      
+      const mode = pc.mode || 'upi_dynamic';
+      const radio = document.querySelector(`input[name="pgMode"][value="${mode}"]`);
+      if (radio) radio.checked = true;
+
+      updateTestQrPreview();
+      document.getElementById('paymentGatewayModal').classList.remove('hidden');
+    }
+
+    function closePaymentGatewayModal() {
+      document.getElementById('paymentGatewayModal').classList.add('hidden');
+    }
+
+    function updateTestQrPreview() {
+      const vpa = (document.getElementById('pgUpiVpaInp')?.value || 'tiptap.merchant@icici').trim();
+      const name = (document.getElementById('pgMerchantNameInp')?.value || appState?.restaurant?.name || 'TipTap Bistro').trim();
+      
+      const prevMerchant = document.getElementById('pgPreviewMerchant');
+      if (prevMerchant) prevMerchant.innerText = name;
+      const prevVpa = document.getElementById('pgPreviewVpa');
+      if (prevVpa) prevVpa.innerText = vpa;
+
+      const testUpiUrl = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(name)}&am=1.00&cu=INR&tn=TipTap%20Test%20Payment`;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(testUpiUrl)}`;
+      const qrImg = document.getElementById('pgPreviewQrImg');
+      if (qrImg) qrImg.src = qrUrl;
+    }
+
+    async function savePaymentGatewaySettings(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnSavePg');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'Activating Payment Gateway...';
+      }
+
+      const payload = {
+        paymentConfig: {
+          upiVpa: document.getElementById('pgUpiVpaInp').value.trim(),
+          merchantName: document.getElementById('pgMerchantNameInp').value.trim(),
+          mode: document.querySelector('input[name="pgMode"]:checked').value,
+          razorpayKeyId: document.getElementById('pgRzpKeyInp').value.trim(),
+          razorpayKeySecret: document.getElementById('pgRzpSecretInp').value.trim()
+        }
+      };
+
+      try {
+        const res = await fetch(`/api/settings?restaurant=${currentRestaurantId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          alert('✅ Real Payment Gateway activated! Customer UPI orders will now pay directly to your VPA: ' + payload.paymentConfig.upiVpa);
+          closePaymentGatewayModal();
+          await fetchState();
+        } else {
+          alert('Failed to save payment settings');
+        }
+      } catch (err) {
+        alert('Network error while saving payment settings');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = '💾 Save & Activate Real Payment Gateway';
+        }
+      }
     }
 
     // SSE Real-Time Event Listener & Voice Soundbox Dispatcher

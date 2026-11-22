@@ -6,6 +6,8 @@
   <title>TipTap - Digital Table Menu</title>
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Razorpay Standard Checkout SDK -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -564,6 +566,27 @@
           <button onclick="triggerCardPayment()" class="w-full py-3 rounded-xl bg-[#0a192f] hover:bg-[#112240] text-sky-300 font-bold text-xs shadow-md transition">
             Pay ₹<span class="gwPayBtnAmount">0</span> Securely via Card ➔
           </button>
+        </div>
+
+        <!-- UTR / Direct App Payment Verification Box -->
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2.5">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-extrabold text-slate-800 flex items-center gap-1.5">
+              <span>📱</span> Paid via GPay / PhonePe / Paytm?
+            </span>
+            <span class="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">Fast Confirm</span>
+          </div>
+          <p class="text-[11px] text-slate-500">
+            Enter the 12-digit UPI Ref / UTR number from your payment receipt to instantly verify:
+          </p>
+          <div class="flex gap-2">
+            <input type="text" id="inpUpiUtr" maxlength="16" placeholder="E.g. 432109876543" 
+              class="flex-1 px-3 py-2.5 rounded-xl border border-slate-300 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-sky-400">
+            <button onclick="submitUtrPayment()" id="btnSubmitUtr" 
+              class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-xs shadow-md transition active:scale-95 shrink-0">
+              Verify UTR ✓
+            </button>
+          </div>
         </div>
 
         <!-- Automatic Bank Listener & Instant Simulation Sandbox -->
@@ -1420,6 +1443,7 @@
     let gwCountdownTimer = null;
     let gwPollingTimer = null;
     let currentGatewayTxnId = null;
+    let currentGatewayData = null;
 
     function launchPaymentGatewayForCurrentOrder() {
       if (!currentOrder) {
@@ -1453,25 +1477,26 @@
         });
         const data = await res.json();
         if (data.success) {
+          currentGatewayData = data;
           currentGatewayTxnId = data.txnId;
           document.getElementById('gwTxnIdText').innerText = data.txnId;
-          if (data.restaurantName) {
-            document.getElementById('gwMerchantName').innerText = `${data.restaurantName} • Safe & Secure`;
-          }
+          const merchantVpa = data.merchantVpa || data.vpa || 'tiptap.merchant@icici';
+          const merchantName = data.merchantName || data.restaurantName || 'TipTap Bistro';
+          document.getElementById('gwMerchantName').innerText = `${merchantName} • UPI: ${merchantVpa}`;
 
           // 1-Tap UPI deep-link URLs
-          const gpayLink = `tez://upi/pay?pa=${encodeURIComponent(data.vpa)}&pn=${encodeURIComponent(data.restaurantName || 'TipTap')}&am=${amount}&tr=${data.txnId}&tn=${encodeURIComponent('Bill Table ' + currentTableId)}&cu=INR`;
-          const phonepeLink = `phonepe://upi/pay?pa=${encodeURIComponent(data.vpa)}&pn=${encodeURIComponent(data.restaurantName || 'TipTap')}&am=${amount}&tr=${data.txnId}&tn=${encodeURIComponent('Bill Table ' + currentTableId)}&cu=INR`;
-          const paytmLink = `paytmmp://upi/pay?pa=${encodeURIComponent(data.vpa)}&pn=${encodeURIComponent(data.restaurantName || 'TipTap')}&am=${amount}&tr=${data.txnId}&tn=${encodeURIComponent('Bill Table ' + currentTableId)}&cu=INR`;
-          const anyUpiLink = data.upiIntent || `upi://pay?pa=${encodeURIComponent(data.vpa)}&pn=${encodeURIComponent(data.restaurantName || 'TipTap')}&am=${amount}&tr=${data.txnId}&tn=${encodeURIComponent('Bill Table ' + currentTableId)}&cu=INR`;
+          const gpayLink = `tez://upi/pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encodeURIComponent(merchantName)}&am=${amount}&tr=${data.txnId}&tn=${encodeURIComponent('Bill Table ' + currentTableId)}&cu=INR`;
+          const phonepeLink = `phonepe://upi/pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encodeURIComponent(merchantName)}&am=${amount}&tr=${data.txnId}&tn=${encodeURIComponent('Bill Table ' + currentTableId)}&cu=INR`;
+          const paytmLink = `paytmmp://upi/pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encodeURIComponent(merchantName)}&am=${amount}&tr=${data.txnId}&tn=${encodeURIComponent('Bill Table ' + currentTableId)}&cu=INR`;
+          const anyUpiLink = data.upiIntent || `upi://pay?pa=${encodeURIComponent(merchantVpa)}&pn=${encodeURIComponent(merchantName)}&am=${amount}&tr=${data.txnId}&tn=${encodeURIComponent('Bill Table ' + currentTableId)}&cu=INR`;
 
           document.getElementById('gwLinkGpay').href = gpayLink;
           document.getElementById('gwLinkPhonepe').href = phonepeLink;
           document.getElementById('gwLinkPaytm').href = paytmLink;
           document.getElementById('gwLinkAnyUpi').href = anyUpiLink;
 
-          // Render live QR Code
-          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(data.upiQrString || anyUpiLink)}`;
+          // Render live dynamic QR Code
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(anyUpiLink)}`;
           document.getElementById('gwDynamicQrImg').src = qrUrl;
 
           startGatewayCountdown(300); // 5 min
@@ -1580,7 +1605,91 @@
       }
     }
 
+    // Verify Real UPI App payment via 12-digit UTR reference number
+    async function submitUtrPayment() {
+      const inp = document.getElementById('inpUpiUtr');
+      const utr = (inp?.value || '').trim();
+      if (!utr || utr.length < 6) {
+        alert('Please enter a valid 12-digit UPI Reference / UTR Number from your GPay / PhonePe / Paytm receipt.');
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitUtr');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'Verifying UTR...';
+      }
+
+      try {
+        const res = await fetch(`/api/verify-payment?restaurant=${currentRestaurantId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: currentOrder ? currentOrder.id : null,
+            txnId: currentGatewayTxnId || `TXN_${Date.now()}`,
+            utr: utr,
+            paymentMethod: 'UPI App (UTR Verified)'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          onPaymentVerifiedSuccess(data);
+        } else {
+          alert(data.error || 'Payment verification failed');
+        }
+      } catch (e) {
+        alert('Network error while verifying UTR payment');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = 'Verify UTR ✓';
+        }
+      }
+    }
+
     async function triggerCardPayment() {
+      if (window.Razorpay && currentGatewayData && currentGatewayData.keyId) {
+        try {
+          const options = {
+            key: currentGatewayData.keyId,
+            amount: currentGatewayData.amountPaise || Math.round(Number(currentOrder?.total || 0) * 100),
+            currency: 'INR',
+            name: currentGatewayData.merchantName || appState?.restaurant?.name || 'TipTap Dining',
+            description: `Dining Bill ${currentGatewayData.tableLabel || 'Table ' + currentTableId}`,
+            image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=200&q=80',
+            handler: async function (response) {
+              const res = await fetch(`/api/verify-payment?restaurant=${currentRestaurantId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  orderId: currentOrder ? currentOrder.id : null,
+                  txnId: response.razorpay_payment_id || `RZP_${Date.now()}`,
+                  gatewayTxnId: response.razorpay_payment_id,
+                  paymentMethod: 'Razorpay Gateway (Cards/NetBanking)'
+                })
+              });
+              const data = await res.json();
+              if (data.success) {
+                onPaymentVerifiedSuccess(data);
+              }
+            },
+            prefill: {
+              name: currentOrder?.customerName || '',
+              contact: currentOrder?.customerPhone || ''
+            },
+            theme: {
+              color: '#0ea5e9'
+            }
+          };
+          const rzp = new Razorpay(options);
+          rzp.open();
+          return;
+        } catch (e) {
+          console.warn('Razorpay popup error, falling back:', e);
+        }
+      }
+
+      // Fallback Card Simulation
       const cardBtn = event?.currentTarget;
       if (cardBtn) {
         cardBtn.disabled = true;
@@ -1604,8 +1713,13 @@
           }
         } catch(e) {
           alert('Card payment processing error');
+        } finally {
+          if (cardBtn) {
+            cardBtn.disabled = false;
+            cardBtn.innerText = 'Pay Securely via Card ➔';
+          }
         }
-      }, 1200);
+      }, 1000);
     }
 
     function trackUpiClick(appName) {

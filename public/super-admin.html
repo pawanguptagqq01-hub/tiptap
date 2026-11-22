@@ -202,6 +202,13 @@
           </div>
         </div>
 
+        <div>
+          <label class="block font-bold text-slate-300 mb-1">Merchant UPI ID (For Direct Guest Bank Payments)</label>
+          <input type="text" id="inpUpi" placeholder="e.g. restaurant@okaxis or 9876543210@paytm"
+            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
+          <p class="text-[10px] text-slate-400 mt-1">Customer table QR & UPI payments will go directly into this bank account (0% fee).</p>
+        </div>
+
         <div class="pt-2">
           <button type="submit" id="btnSubmitOnboard" class="w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-sm shadow-lg shadow-brand-500/25 transition flex items-center justify-center gap-2">
             <span>🚀 Create & Launch Restaurant Account</span>
@@ -273,6 +280,10 @@
                 <span class="text-slate-500">🍽️</span>
                 <span>${r.tableCount} Dining Tables • ${r.menuItemsCount} Menu Dishes</span>
               </p>
+              <p class="flex items-center gap-2 text-emerald-400 font-mono text-[11px]">
+                <span>💳</span>
+                <span>UPI: ${r.paymentConfig?.upiVpa || 'tiptap.merchant@icici'}</span>
+              </p>
             </div>
           </div>
 
@@ -331,7 +342,8 @@
         tablesCount: parseInt(document.getElementById('inpTables').value, 10) || 8,
         address: document.getElementById('inpAddress').value.trim(),
         gstin: document.getElementById('inpGstin').value.trim(),
-        pin: document.getElementById('inpPin').value.trim() || '1234'
+        pin: document.getElementById('inpPin').value.trim() || '1234',
+        upiVpa: document.getElementById('inpUpi').value.trim() || 'tiptap.merchant@icici'
       };
 
       try {

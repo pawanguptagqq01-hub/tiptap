@@ -414,6 +414,7 @@ const server = http.createServer((req, res) => {
         tableCount: (r.tables || []).length,
         activeOrdersCount: (r.orders || []).length,
         menuItemsCount: (r.menu || []).length,
+        paymentConfig: r.paymentConfig || { upiVpa: 'tiptap.merchant@icici', merchantName: r.name },
         createdAt: r.createdAt
       }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -447,6 +448,13 @@ const server = http.createServer((req, res) => {
         );
 
         if (data.pin) newRestaurant.pin = data.pin;
+        if (data.upiVpa) {
+          newRestaurant.paymentConfig = {
+            upiVpa: data.upiVpa,
+            merchantName: data.name,
+            mode: 'upi_dynamic'
+          };
+        }
         db.restaurants[slug] = newRestaurant;
         saveDb(db);
 
@@ -536,7 +544,14 @@ const server = http.createServer((req, res) => {
           gstin: restaurant.gstin,
           gstPercent: restaurant.gstPercent,
           rushMode: restaurant.rushMode,
-          plan: restaurant.plan
+          plan: restaurant.plan,
+          paymentConfig: restaurant.paymentConfig || {
+            upiVpa: 'tiptap.merchant@icici',
+            merchantName: restaurant.name || 'TipTap Bistro',
+            mode: 'upi_dynamic',
+            razorpayKeyId: 'rzp_test_TipTapPOS99',
+            razorpayKeySecret: ''
+          }
         },
         tables: restaurant.tables,
         menu: restaurant.menu,
@@ -634,7 +649,7 @@ const server = http.createServer((req, res) => {
         const txnId = `TXN_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`;
         const razorpayOrderId = `order_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
         const merchantVpa = restaurant.paymentConfig?.upiVpa || 'tiptap.merchant@icici';
-        const merchantName = restaurant.name || 'TipTap Bistro';
+        const merchantName = restaurant.paymentConfig?.merchantName || restaurant.name || 'TipTap Bistro';
         const tableLabel = order ? order.tableName : `Table ${data.tableId || 1}`;
 
         // Standard NPCI Dynamic UPI Intent URL
@@ -689,6 +704,7 @@ const server = http.createServer((req, res) => {
           provider: data.provider || 'Razorpay / Dynamic UPI',
           txnId,
           gatewayTxnId,
+          utr: data.utr || null,
           verified: true,
           verifiedAt: new Date().toISOString(),
           simulated: !!data.simulated
@@ -724,6 +740,7 @@ const server = http.createServer((req, res) => {
           tableId: order.tableId,
           total: order.total,
           txnId,
+          utr: data.utr || null,
           paymentMethod,
           paidAt: order.paidAt
         });
@@ -1098,6 +1115,12 @@ const server = http.createServer((req, res) => {
         if (data.name) restaurant.name = data.name;
         if (data.phone) restaurant.phone = data.phone;
         if (data.address) restaurant.address = data.address;
+        if (data.paymentConfig) {
+          restaurant.paymentConfig = {
+            ...(restaurant.paymentConfig || {}),
+            ...data.paymentConfig
+          };
+        }
         saveDb(db);
         broadcastEvent(restaurant.id, 'settings:update', restaurant);
 
