@@ -737,12 +737,13 @@
 
   <script>
     const urlParams = new URLSearchParams(window.location.search);
-    const currentRestaurantId = urlParams.get('restaurant') || 'tiptap-bistro';
+    let currentRestaurantId = urlParams.get('restaurant') || 'tiptap-bistro';
     const currentTableId = parseInt(urlParams.get('table') || '1', 10);
     document.getElementById('tableBadge').innerText = `Table ${currentTableId}`;
     document.getElementById('cartModalTableText').innerText = `Table ${currentTableId} • TipTap NFC Order`;
 
     // State
+    let appState = null;
     let menuData = [];
     let cart = [];
     let activeCategory = 'all';
@@ -812,8 +813,10 @@
       try {
         const res = await fetch(`/api/state?restaurant=${currentRestaurantId}`);
         const data = await res.json();
+        appState = data;
         
         if (data.restaurant) {
+          currentRestaurantId = data.restaurant.id;
           document.getElementById('restaurantName').innerText = data.restaurant.name;
           if (data.restaurant.rushMode) {
             document.getElementById('rushBanner').classList.remove('hidden');
@@ -1814,8 +1817,8 @@
         </head>
         <body>
           <div class="header">
-            <h2 style="margin:0;">TipTap Bistro</h2>
-            <p style="margin:3px 0; font-size:11px;">NFC Smart Dining • GSTIN: 07AAAAA0000A1Z5</p>
+            <h2 style="margin:0;">${appState?.restaurant?.name || 'TipTap Bistro'}</h2>
+            <p style="margin:3px 0; font-size:11px;">NFC Smart Dining • GSTIN: ${appState?.restaurant?.gstin || '07AAAAA0000A1Z5'}</p>
             <div class="badge">OFFICIAL TAX INVOICE</div>
           </div>
           <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:10px;">

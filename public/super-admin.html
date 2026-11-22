@@ -62,8 +62,13 @@
           <span>🧹</span>
           <span class="hidden sm:inline">Reset Orders</span>
         </button>
-        <a href="/dashboard.html" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition">
-          Staff POS ➔
+        <a href="/kds.html" target="_blank" class="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-bold text-amber-300 transition flex items-center gap-1.5" title="Open Kitchen KDS Display">
+          <span>🍳</span>
+          <span class="hidden sm:inline">Kitchen KDS</span>
+        </a>
+        <a href="/dashboard.html" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition flex items-center gap-1.5">
+          <span>👑</span>
+          <span class="hidden sm:inline">Billing POS ➔</span>
         </a>
         <button onclick="openOnboardModal()" class="px-3.5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-lg shadow-brand-500/25 transition flex items-center gap-1.5 active:scale-95">
           <span>＋</span>
@@ -386,17 +391,23 @@
 
           <!-- Actions -->
           <div class="space-y-2 pt-2 border-t border-slate-700/80">
-            <a href="/dashboard.html?restaurant=${r.id}" target="_blank" class="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow">
-              <span>Open Staff POS & Kitchen</span>
-              <span>➔</span>
-            </a>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <a href="/dashboard.html?restaurant=${r.id}" target="_blank" class="py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-extrabold flex items-center justify-center gap-1.5 transition shadow">
+                <span>👑 Billing POS</span>
+                <span>➔</span>
+              </a>
+              <a href="/kds.html?restaurant=${r.id}" target="_blank" class="py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-extrabold flex items-center justify-center gap-1.5 transition shadow">
+                <span>🍳 Kitchen KDS</span>
+                <span>➔</span>
+              </a>
+            </div>
 
             <div class="grid grid-cols-2 gap-2 text-xs">
-              <a href="/menu.html?restaurant=${r.id}&table=1" target="_blank" class="py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold text-center transition">
-                📱 Guest Menu (T1)
+              <a href="/nfc-manager.html?restaurant=${r.id}" target="_blank" class="py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-center transition flex items-center justify-center gap-1">
+                <span>💳</span> <span>Print NFC Stands</span>
               </a>
-              <a href="/nfc-manager.html?restaurant=${r.id}" target="_blank" class="py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold text-center transition">
-                💳 Print NFC Stands
+              <a href="/menu.html?restaurant=${r.id}&table=1" target="_blank" class="py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-bold text-center transition flex items-center justify-center gap-1">
+                <span>🍽️</span> <span>Test Menu (T1)</span>
               </a>
             </div>
 
@@ -528,7 +539,7 @@
     }
 
     function checkSuperAdminAuth() {
-      const isAuth = sessionStorage.getItem('tiptap_admin_auth');
+      const isAuth = sessionStorage.getItem('tiptap_admin_auth') || localStorage.getItem('tiptap_admin_auth');
       const gateModal = document.getElementById('superAdminGateModal');
       if (isAuth === 'true') {
         gateModal.classList.add('hidden');
@@ -557,6 +568,7 @@
         const data = await res.json();
         if (res.ok && data.success) {
           sessionStorage.setItem('tiptap_admin_auth', 'true');
+          localStorage.setItem('tiptap_admin_auth', 'true');
           document.getElementById('superAdminGateModal').classList.add('hidden');
           initSuperAdmin();
         } else {
@@ -576,6 +588,7 @@
 
     function lockAdminSession() {
       sessionStorage.removeItem('tiptap_admin_auth');
+      localStorage.removeItem('tiptap_admin_auth');
       location.reload();
     }
 
@@ -708,11 +721,20 @@
 
     function connectAdminSSE() {
       try {
-        const evtSource = new EventSource('/events?restaurant=super-admin');
+        const evtSource = new EventSource('/api/events?restaurant=super-admin');
         evtSource.addEventListener('lead:new', () => {
           loadLeads();
         });
         evtSource.addEventListener('restaurant:new', () => {
+          loadRestaurants();
+        });
+        evtSource.addEventListener('order:new', () => {
+          loadRestaurants();
+        });
+        evtSource.addEventListener('order:update', () => {
+          loadRestaurants();
+        });
+        evtSource.addEventListener('payment:success', () => {
           loadRestaurants();
         });
       } catch (e) {

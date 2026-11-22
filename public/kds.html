@@ -685,11 +685,16 @@
     // ----------------------------------------------------
     // 8. Real-Time SSE Listener
     // ----------------------------------------------------
+    let kdsEvtSource = null;
     function initSseConnection() {
+      if (kdsEvtSource) {
+        try { kdsEvtSource.close(); } catch(e) {}
+        kdsEvtSource = null;
+      }
       try {
-        const evt = new EventSource(`/api/events?restaurant=${restaurantId}`);
+        kdsEvtSource = new EventSource(`/api/events?restaurant=${restaurantId}`);
 
-        evt.addEventListener('order:new', (e) => {
+        kdsEvtSource.addEventListener('order:new', (e) => {
           playChime();
           try {
             const data = JSON.parse(e.data).payload || JSON.parse(e.data);
@@ -701,10 +706,10 @@
           fetchKdsState();
         });
 
-        evt.addEventListener('order:update', () => fetchKdsState());
-        evt.addEventListener('table:update', () => fetchKdsState());
+        kdsEvtSource.addEventListener('order:update', () => fetchKdsState());
+        kdsEvtSource.addEventListener('table:update', () => fetchKdsState());
         
-        evt.addEventListener('service:call', (e) => {
+        kdsEvtSource.addEventListener('service:call', (e) => {
           playChime();
           try {
             const data = JSON.parse(e.data).payload || JSON.parse(e.data);
@@ -713,9 +718,10 @@
           fetchKdsState();
         });
 
-        evt.onerror = () => {
-          // Reconnect automatically
-          setTimeout(initSseConnection, 5000);
+        kdsEvtSource.addEventListener('service:resolved', () => fetchKdsState());
+
+        kdsEvtSource.onerror = () => {
+          // EventSource automatically retries connection
         };
       } catch (err) {
         console.error('SSE Error:', err);

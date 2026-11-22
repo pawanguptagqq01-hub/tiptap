@@ -864,6 +864,9 @@
             <span>💬</span> <span>WhatsApp</span>
           </button>
         </div>
+        <button onclick="cancelRunningOrder()" class="w-full py-2 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition flex items-center justify-center gap-1">
+          <span>✕ Cancel & Free Table</span>
+        </button>
       </div>
 
     </div>
@@ -2387,6 +2390,28 @@
       closeSettleModal();
     }
 
+    async function cancelRunningOrder(targetOrderId) {
+      const order = targetOrderId 
+        ? (appState.orders || []).find(o => o.id === targetOrderId)
+        : settlingOrder;
+      if (!order) return;
+      if (!confirm(`Are you sure you want to cancel the order #${order.id} for ${order.tableName}? The table will be set to free.`)) return;
+      try {
+        const res = await fetch(`/api/orders/${order.id}?restaurant=${currentRestaurantId}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          closeSettleModal();
+          fetchState();
+        } else {
+          const err = await res.json();
+          alert(err.error || 'Failed to cancel order');
+        }
+      } catch (e) {
+        alert('Server network error while cancelling order');
+      }
+    }
+
     // Thermal Receipt Print
     function printThermalBill() {
       if (!settlingOrder) return;
@@ -2857,6 +2882,7 @@
         const data = await res.json();
         if (res.ok && data.success) {
           sessionStorage.setItem('tiptap_staff_auth_' + currentRestaurantId, 'true');
+          localStorage.setItem('tiptap_staff_auth_' + currentRestaurantId, 'true');
           document.getElementById('staffSecurityGateModal').classList.add('hidden');
           fetchState();
           setupSSE();

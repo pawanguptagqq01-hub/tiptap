@@ -211,6 +211,7 @@
         if (res.ok && data.success) {
           if (data.role === 'superadmin') {
             sessionStorage.setItem('tiptap_admin_auth', 'true');
+            localStorage.setItem('tiptap_admin_auth', 'true');
             btn.innerText = '✓ Master PIN Verified! Opening Super Admin HQ...';
             btn.className = 'w-full py-3.5 rounded-xl bg-amber-500 text-slate-950 font-black text-sm shadow-xl flex items-center justify-center gap-2';
             setTimeout(() => {
@@ -222,11 +223,8 @@
           // Store authentication for this restaurant
           sessionStorage.setItem('tiptap_staff_auth_' + data.restaurant.id, 'true');
           sessionStorage.setItem('tiptap_active_restaurant', data.restaurant.id);
-          
-          if (remember) {
-            localStorage.setItem('tiptap_staff_auth_' + data.restaurant.id, 'true');
-            localStorage.setItem('tiptap_active_restaurant', data.restaurant.id);
-          }
+          localStorage.setItem('tiptap_staff_auth_' + data.restaurant.id, 'true');
+          localStorage.setItem('tiptap_active_restaurant', data.restaurant.id);
 
           const targetUrl = station === 'kds' 
             ? `/kds.html?restaurant=${data.restaurant.id}` 

@@ -314,8 +314,8 @@ function broadcastEvent(restaurantId, eventType, payload) {
   const message = `event: ${eventType}\ndata: ${JSON.stringify({ restaurantId, payload })}\n\n`;
   for (const client of sseClients) {
     try {
-      // If client subscribed to specific restaurant or super-admin (all)
-      if (!client.restaurantId || client.restaurantId === 'all' || client.restaurantId === restaurantId) {
+      // If client subscribed to specific restaurant, super-admin, or all
+      if (!client.restaurantId || client.restaurantId === 'all' || client.restaurantId === 'super-admin' || client.restaurantId === restaurantId) {
         client.res.write(message);
       }
     } catch (e) {
@@ -366,9 +366,9 @@ const server = http.createServer((req, res) => {
   const searchParams = parsedUrl.searchParams;
 
   // ----------------------------------------------------
-  // SSE REAL-TIME ENDPOINT: /api/events
+  // SSE REAL-TIME ENDPOINT: /api/events or /events
   // ----------------------------------------------------
-  if (pathname === '/api/events') {
+  if (pathname === '/api/events' || pathname === '/events') {
     const restaurantId = searchParams.get('restaurant') || 'all';
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -909,6 +909,21 @@ const server = http.createServer((req, res) => {
         }
 
         if (!order) {
+          const alreadyPaid = (restaurant.completedOrders || []).find(o => o.id === orderId || (data.tableId && o.tableId === parseInt(data.tableId, 10)));
+          if (alreadyPaid) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              verified: true,
+              orderId: alreadyPaid.id,
+              txnId: alreadyPaid.txnId || txnId,
+              tableName: alreadyPaid.tableName,
+              amountPaid: alreadyPaid.total,
+              paidAt: alreadyPaid.paidAt,
+              message: `Payment already settled for ${alreadyPaid.tableName}`
+            }));
+            return;
+          }
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Order not found or already settled' }));
           return;
@@ -1115,10 +1130,36 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // 6. Update Order Status: PATCH /api/orders/:id or PATCH /api/r/:id/orders/:id
+    // 6. Update or Cancel Order: PATCH or DELETE /api/orders/:id
     const orderMatch = pathname.match(/\/(?:r\/[A-Za-z0-9_-]+\/)?orders\/([A-Za-z0-9-]+)$/);
-    if (orderMatch && req.method === 'PATCH') {
+    if (orderMatch && (req.method === 'PATCH' || req.method === 'DELETE')) {
       const orderId = orderMatch[1];
+
+      if (req.method === 'DELETE') {
+        const order = restaurant.orders.find(o => o.id === orderId);
+        if (!order) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Order not found' }));
+          return;
+        }
+
+        restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
+        const table = (restaurant.tables || []).find(t => t.id === order.tableId);
+        if (table) {
+          table.status = 'free';
+          table.currentOrderId = null;
+          table.seatingTime = null;
+        }
+
+        saveDb(db);
+        broadcastEvent(restaurant.id, 'order:update', { id: orderId, status: 'cancelled' });
+        broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Order cancelled and table freed' }));
+        return;
+      }
+
       readJsonBody((err, data) => {
         const order = restaurant.orders.find(o => o.id === orderId);
         if (!order) {
@@ -1134,7 +1175,15 @@ const server = http.createServer((req, res) => {
 
         if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
 
-        if (order.status === 'paid') {
+        if (order.status === 'cancelled') {
+          restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
+          const table = (restaurant.tables || []).find(t => t.id === order.tableId);
+          if (table) {
+            table.status = 'free';
+            table.currentOrderId = null;
+            table.seatingTime = null;
+          }
+        } else if (order.status === 'paid') {
           restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
           restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
 
@@ -1195,15 +1244,15 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // 8. Resolve Service Request: PATCH /api/service-request/:id
+    // 8. Resolve Service Request: PATCH or DELETE /api/service-request/:id
     const srMatch = pathname.match(/service-request\/([A-Za-z0-9-]+)$/);
-    if (srMatch && req.method === 'PATCH') {
+    if (srMatch && (req.method === 'PATCH' || req.method === 'DELETE')) {
       const srId = srMatch[1];
-      restaurant.serviceRequests = restaurant.serviceRequests.filter(s => s.id !== srId);
+      restaurant.serviceRequests = (restaurant.serviceRequests || []).filter(s => s.id !== srId);
       saveDb(db);
       broadcastEvent(restaurant.id, 'service:resolved', { id: srId });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true }));
+      res.end(JSON.stringify({ success: true, id: srId }));
       return;
     }
 
