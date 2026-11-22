@@ -677,6 +677,9 @@ const server = http.createServer((req, res) => {
 
         const validPin = targetRest.pin || '1234';
         if (pin === validPin || pin === masterPin || pin === 'pawan999') {
+          const redirectUrl = data.station === 'kds'
+            ? `/kds.html?restaurant=${targetRest.id}`
+            : `/dashboard.html?restaurant=${targetRest.id}`;
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             success: true,
@@ -685,7 +688,7 @@ const server = http.createServer((req, res) => {
               name: targetRest.name,
               phone: targetRest.phone
             },
-            redirectUrl: `/dashboard.html?restaurant=${targetRest.id}`
+            redirectUrl
           }));
         } else {
           res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -1403,7 +1406,8 @@ function startServer(portIndex = 0) {
     console.log(`📡 Local Computer   : http://localhost:${port}`);
     console.log(`📱 Same Wi-Fi/NFC   : http://${localIp}:${port}`);
     console.log(`👑 Super Admin SaaS : http://localhost:${port}/super-admin.html`);
-    console.log(`🍳 Staff Dashboard  : http://localhost:${port}/dashboard.html`);
+    console.log(`💳 Billing POS Counter: http://localhost:${port}/dashboard.html`);
+    console.log(`🍳 Kitchen KDS Station: http://localhost:${port}/kds.html`);
     console.log(`🍽️ Guest NFC Menu   : http://localhost:${port}/menu.html?table=1`);
     console.log(`💳 NFC Tools Cards  : http://localhost:${port}/nfc-manager.html`);
     console.log(`======================================================\n`);

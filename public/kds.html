@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TipTap - Kitchen Display System (KDS)</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            display: ['"Outfit"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes flashLate {
+      0%, 100% { border-color: #ef4444; background-color: rgba(239, 68, 68, 0.12); }
+      50% { border-color: #f87171; background-color: rgba(239, 68, 68, 0.25); }
+    }
+    .ticket-late {
+      animation: flashLate 1.8s infinite ease-in-out;
+    }
+    .dish-done {
+      text-decoration: line-through;
+      opacity: 0.45;
+    }
+    /* Printable KOT formatting */
+    @media print {
+      body * { visibility: hidden; }
+      #kotPrintSection, #kotPrintSection * { visibility: visible; }
+      #kotPrintSection { position: absolute; left: 0; top: 0; width: 100%; display: block !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen antialiased flex flex-col justify-between selection:bg-amber-500 selection:text-slate-950">
+
+  <!-- Printable KOT Container (Hidden during normal screen use) -->
+  <div id="kotPrintSection" class="hidden p-4 font-mono text-black text-sm bg-white">
+    <div class="text-center pb-2 border-b-2 border-dashed border-black">
+      <h2 class="text-xl font-black">*** KITCHEN ORDER TICKET (KOT) ***</h2>
+      <p id="kotPrintRest" class="font-bold text-base mt-1">TipTap Kitchen</p>
+      <p id="kotPrintTable" class="text-lg font-black mt-1">TABLE 1</p>
+      <p id="kotPrintMeta" class="text-xs">Order: #--- | Time: --:--</p>
+    </div>
+    <div id="kotPrintItems" class="py-3 border-b-2 border-dashed border-black space-y-1"></div>
+    <div id="kotPrintNotes" class="py-2 text-xs font-bold border-b border-black"></div>
+    <p class="text-center text-[10px] pt-2">TipTap Cloud KDS • Direct Kitchen Dispatch</p>
+  </div>
+
+  <!-- Main KDS Interface -->
+  <div class="flex-1 flex flex-col">
+
+    <!-- Top Kitchen Command Header -->
+    <header class="bg-slate-900/90 border-b border-slate-800/90 px-4 sm:px-6 py-3.5 backdrop-blur-md sticky top-0 z-40 shadow-xl">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        
+        <!-- Left: Logo & Station Title -->
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-400 flex items-center justify-center text-xl shadow-lg shadow-amber-500/25 shrink-0">
+            🍳
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-display font-black text-white text-lg tracking-tight">TipTap KDS</span>
+              <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                Direct Kitchen Station
+              </span>
+              <div class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-extrabold bg-emerald-950/60 border border-emerald-500/40 px-2.5 py-0.5 rounded-full">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>LIVE</span>
+              </div>
+            </div>
+            <p id="kdsRestaurantName" class="text-xs text-slate-400 font-medium">Connecting to restaurant kitchen...</p>
+          </div>
+        </div>
+
+        <!-- Center: Ticket Filter Buttons -->
+        <div class="flex items-center bg-slate-950/80 p-1 rounded-2xl border border-slate-800 self-start md:self-center">
+          <button onclick="setKdsFilter('all')" id="filter-all" class="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-display font-black text-xs transition shadow-md shadow-amber-500/20 flex items-center gap-1.5">
+            <span>All Orders</span>
+            <span id="badgeCountAll" class="px-1.5 py-0.2 rounded-full bg-slate-950 text-amber-300 text-[10px]">0</span>
+          </button>
+          <button onclick="setKdsFilter('dinein')" id="filter-dinein" class="px-4 py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5">
+            <span>🍽️ Dine-In</span>
+            <span id="badgeCountDineIn" class="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 text-[10px]">0</span>
+          </button>
+          <button onclick="setKdsFilter('takeaway')" id="filter-takeaway" class="px-4 py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5">
+            <span>🥡 Takeaway</span>
+            <span id="badgeCountTakeaway" class="px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-300 text-[10px]">0</span>
+          </button>
+          <button onclick="setKdsFilter('urgent')" id="filter-urgent" class="px-4 py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5">
+            <span>🔥 Late Only</span>
+            <span id="badgeCountLate" class="hidden px-1.5 py-0.2 rounded-full bg-rose-600 text-white text-[10px] font-black animate-pulse">0</span>
+          </button>
+        </div>
+
+        <!-- Right: Actions & Tools (Clock, Fullscreen, Sound, POS Link) -->
+        <div class="flex items-center gap-2 self-end md:self-center shrink-0">
+          
+          <!-- Live Clock -->
+          <div class="hidden sm:block text-right pr-2 border-r border-slate-800">
+            <span id="liveClock" class="font-mono text-xs font-black text-amber-400">--:--:--</span>
+            <p class="text-[9px] uppercase tracking-wider text-slate-500 font-bold">Kitchen Time</p>
+          </div>
+
+          <!-- Audio Bell Toggle -->
+          <button onclick="toggleAudio()" id="btnAudioToggle" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 transition" title="Toggle Audio Chime">
+            <span id="audioIcon">🔔</span>
+            <span id="audioLabel" class="hidden sm:inline">Sound: ON</span>
+          </button>
+
+          <!-- Test Bell Button -->
+          <button onclick="playChime(true)" class="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 text-xs font-bold border border-slate-700 flex items-center gap-1 transition" title="Test Chime Volume">
+            <span>🔊</span>
+            <span class="hidden lg:inline">Test Bell</span>
+          </button>
+
+          <!-- Fullscreen Toggle Button -->
+          <button onclick="toggleFullscreen()" class="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1 transition" title="Full Screen View for Wall TV / Tablet">
+            <span>⛶</span>
+            <span class="hidden lg:inline">Fullscreen</span>
+          </button>
+
+          <!-- Switch to Billing Counter POS -->
+          <a id="btnBillingCounter" href="/dashboard.html" class="px-3 sm:px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black shadow-md shadow-brand-500/20 flex items-center gap-1.5 transition">
+            <span>👑</span>
+            <span class="hidden sm:inline">Billing Counter</span>
+          </a>
+
+        </div>
+
+      </div>
+    </header>
+
+    <!-- Service Calls Alert Bar (Waiter / Water Requests) -->
+    <div id="serviceAlertsBar" class="hidden bg-amber-500/15 border-b border-amber-500/30 px-4 sm:px-6 py-3 transition-all">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <span class="text-2xl animate-bounce">🛎️</span>
+          <div>
+            <p class="font-extrabold text-amber-300 text-xs sm:text-sm">Table Service Call Pending</p>
+            <div id="serviceAlertsList" class="flex flex-wrap gap-2 mt-1"></div>
+          </div>
+        </div>
+        <p class="text-[11px] text-amber-400 font-bold shrink-0">Alert staff to attend!</p>
+      </div>
+    </div>
+
+    <!-- Main KDS Orders Canvas -->
+    <main class="flex-1 p-4 sm:p-6">
+      
+      <!-- Orders Grid -->
+      <div id="kdsTicketsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        <!-- Ticket Cards Injected by JavaScript -->
+      </div>
+
+      <!-- Zero Orders Empty State -->
+      <div id="kdsEmptyState" class="hidden py-24 text-center max-w-md mx-auto space-y-4">
+        <div class="w-20 h-20 mx-auto rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center text-4xl shadow-2xl">
+          🍳
+        </div>
+        <div class="space-y-1">
+          <h2 class="text-2xl font-black text-white tracking-tight">Kitchen is All Caught Up!</h2>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            As soon as customers tap their table NFC card and place an order, live tickets will chime and pop up here instantly.
+          </p>
+        </div>
+        <div class="pt-2">
+          <button onclick="playChime(true)" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 transition">
+            🔔 Test Audio Bell Chime
+          </button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Footer Info Bar -->
+  <footer class="bg-slate-950/80 border-t border-slate-900 px-6 py-2.5 text-center text-[11px] text-slate-600 flex flex-col sm:flex-row items-center justify-between gap-2">
+    <div>
+      TipTap Direct KDS Station • Orders are received in real-time from NFC table menus
+    </div>
+    <div class="flex items-center gap-3 text-slate-500 font-mono text-[10px]">
+      <span id="kdsTicketCountFooter">0 tickets active</span>
+      <span>•</span>
+      <span id="kdsAvgPrepFooter">Avg Prep: ~12m</span>
+    </div>
+  </footer>
+
+  <!-- Audio Chime Generator & KDS Application Logic -->
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    let restaurantId = urlParams.get('restaurant') || sessionStorage.getItem('tiptap_active_restaurant') || localStorage.getItem('tiptap_active_restaurant') || 'tiptap-bistro';
+    
+    // Save active restaurant
+    sessionStorage.setItem('tiptap_active_restaurant', restaurantId);
+
+    // KDS State
+    let appState = {
+      restaurant: null,
+      orders: [],
+      serviceRequests: []
+    };
+    let activeFilter = 'all';
+    let audioEnabled = localStorage.getItem('tiptap_kds_audio') !== 'false';
+    let knownOrderIds = new Set();
+    let initialLoadDone = false;
+
+    // Set billing counter button link
+    document.getElementById('btnBillingCounter').href = `/dashboard.html?restaurant=${restaurantId}`;
+
+    // ----------------------------------------------------
+    // 1. Audio Bell Chime (Web Audio API Synthesizer - Zero Lag, 100% Offline)
+    // ----------------------------------------------------
+    let audioCtx = null;
+
+    function initAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playChime(force = false) {
+      if (!audioEnabled && !force) return;
+      try {
+        initAudioContext();
+        if (!audioCtx) return;
+
+        const now = audioCtx.currentTime;
+
+        // Two-tone pleasant kitchen order chime (Ding-Dong: E5 -> G#5)
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(659.25, now); // E5
+        gain1.gain.setValueAtTime(0.3, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.5);
+
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(830.61, now + 0.15); // G#5
+        gain2.gain.setValueAtTime(0.35, now + 0.15);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.start(now + 0.15);
+        osc2.stop(now + 0.8);
+      } catch (e) {
+        console.warn('Audio playback error:', e);
+      }
+    }
+
+    function toggleAudio() {
+      audioEnabled = !audioEnabled;
+      localStorage.setItem('tiptap_kds_audio', audioEnabled ? 'true' : 'false');
+      updateAudioButton();
+      if (audioEnabled) {
+        initAudioContext();
+        playChime(true);
+      }
+    }
+
+    function updateAudioButton() {
+      const icon = document.getElementById('audioIcon');
+      const label = document.getElementById('audioLabel');
+      if (audioEnabled) {
+        icon.innerText = '🔔';
+        label.innerText = 'Sound: ON';
+      } else {
+        icon.innerText = '🔕';
+        label.innerText = 'Sound: Muted';
+      }
+    }
+    updateAudioButton();
+
+    // Voice Announcement
+    function speakVoice(text) {
+      if (!audioEnabled) return;
+      if ('speechSynthesis' in window) {
+        try {
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          window.speechSynthesis.speak(utterance);
+        } catch(e) {}
+      }
+    }
+
+    // Fullscreen Toggle
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    // ----------------------------------------------------
+    // 2. Data Fetching & Sync
+    // ----------------------------------------------------
+    async function fetchKdsState() {
+      try {
+        const res = await fetch(`/api/state?restaurant=${restaurantId}`);
+        if (!res.ok) throw new Error('State fetch failed');
+        const data = await res.json();
+        
+        appState.restaurant = data.restaurant || {};
+        appState.orders = data.orders || [];
+        appState.serviceRequests = data.serviceRequests || [];
+
+        document.getElementById('kdsRestaurantName').innerText = 
+          `${appState.restaurant.name || 'Restaurant'} • Active Kitchen Station`;
+
+        // Check for new incoming orders and trigger chime
+        const activeKitchenOrders = appState.orders.filter(o => o.status === 'received' || o.status === 'preparing');
+        if (initialLoadDone) {
+          activeKitchenOrders.forEach(o => {
+            if (!knownOrderIds.has(o.id)) {
+              playChime();
+              speakVoice(`${o.tableName || 'Naya table'} se naya order!`);
+            }
+          });
+        }
+        knownOrderIds = new Set(activeKitchenOrders.map(o => o.id));
+        initialLoadDone = true;
+
+        renderKdsView();
+      } catch (err) {
+        console.error('Failed to sync KDS:', err);
+      }
+    }
+
+    // ----------------------------------------------------
+    // 3. Render Kitchen Tickets
+    // ----------------------------------------------------
+    function renderKdsView() {
+      const orders = appState.orders || [];
+      // Only show received or preparing orders in kitchen
+      let kitchenOrders = orders.filter(o => o.status === 'received' || o.status === 'preparing');
+
+      const totalActive = kitchenOrders.length;
+      const dineInCount = kitchenOrders.filter(o => (o.orderType || 'dinein') === 'dinein').length;
+      const takeawayCount = kitchenOrders.filter(o => (o.orderType || 'dinein') === 'takeaway').length;
+
+      // Calculate Late Orders (> 15 mins)
+      const now = Date.now();
+      const lateCount = kitchenOrders.filter(o => {
+        const elapsed = Math.floor((now - new Date(o.createdAt).getTime()) / 60000);
+        return elapsed >= 15;
+      }).length;
+
+      // Update badge counters
+      document.getElementById('badgeCountAll').innerText = totalActive;
+      document.getElementById('badgeCountDineIn').innerText = dineInCount;
+      document.getElementById('badgeCountTakeaway').innerText = takeawayCount;
+      
+      const lateBadge = document.getElementById('badgeCountLate');
+      lateBadge.innerText = lateCount;
+      lateBadge.classList.toggle('hidden', lateCount === 0);
+
+      document.getElementById('kdsTicketCountFooter').innerText = `${totalActive} kitchen orders active`;
+
+      // Filter by selection
+      if (activeFilter === 'dinein') {
+        kitchenOrders = kitchenOrders.filter(o => (o.orderType || 'dinein') === 'dinein');
+      } else if (activeFilter === 'takeaway') {
+        kitchenOrders = kitchenOrders.filter(o => (o.orderType || 'dinein') === 'takeaway');
+      } else if (activeFilter === 'urgent') {
+        kitchenOrders = kitchenOrders.filter(o => {
+          const elapsed = Math.floor((now - new Date(o.createdAt).getTime()) / 60000);
+          return elapsed >= 15;
+        });
+      }
+
+      // Sort: Received first, then preparing; within that, oldest first (FIFO)
+      kitchenOrders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+      // Render Service Requests
+      renderServiceRequests();
+
+      // Render Grid or Empty State
+      const grid = document.getElementById('kdsTicketsGrid');
+      const emptyState = document.getElementById('kdsEmptyState');
+
+      if (kitchenOrders.length === 0) {
+        grid.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      grid.innerHTML = kitchenOrders.map(order => {
+        const orderTime = new Date(order.createdAt).getTime();
+        const elapsedMins = Math.floor((now - orderTime) / 60000);
+        const isLate = elapsedMins >= 15;
+        const isWarning = elapsedMins >= 8 && !isLate;
+
+        let cardClass = 'bg-slate-900 border-slate-800 shadow-xl';
+        let timerBadgeClass = 'bg-slate-800 text-emerald-400 border-slate-700';
+
+        if (isLate) {
+          cardClass = 'ticket-late border-2 shadow-2xl shadow-rose-900/40';
+          timerBadgeClass = 'bg-rose-600 text-white font-black animate-pulse';
+        } else if (isWarning) {
+          cardClass = 'bg-slate-900 border-2 border-amber-500/80 shadow-xl shadow-amber-500/10';
+          timerBadgeClass = 'bg-amber-500 text-slate-950 font-black';
+        }
+
+        const isPreparing = order.status === 'preparing';
+
+        return `
+          <div class="rounded-3xl p-5 border-2 ${cardClass} flex flex-col justify-between transition-all duration-300 hover:border-amber-400 group">
+            
+            <div class="space-y-4">
+              <!-- Ticket Header -->
+              <div class="flex items-start justify-between pb-3.5 border-b border-slate-800/90 gap-2">
+                <div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-display font-black text-white text-2xl tracking-tight">${order.tableName || 'Table'}</span>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${order.orderType === 'takeaway' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-sky-500/20 text-sky-300 border border-sky-500/40'}">
+                      ${order.orderType === 'takeaway' ? '🥡 TAKEAWAY' : '🍽️ DINE-IN'}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2 mt-1 text-slate-400 font-mono text-xs">
+                    <span>#${order.id}</span>
+                    <span>•</span>
+                    <span>${new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                </div>
+
+                <div class="text-right shrink-0">
+                  <span class="text-xs px-3 py-1.5 rounded-full ${timerBadgeClass} inline-flex items-center gap-1.5 shadow-sm font-mono font-bold">
+                    <span>⏱️</span>
+                    <span>${isLate ? 'LATE ' : ''}${elapsedMins}m</span>
+                  </span>
+                  <div class="mt-1 text-[10px] font-black uppercase tracking-wider ${isPreparing ? 'text-amber-400' : 'text-slate-400'}">
+                    ${isPreparing ? '🍳 COOKING' : '⏳ PENDING'}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Customer Cooking Instructions (High Visibility) -->
+              ${order.notes ? `
+                <div class="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs space-y-1">
+                  <p class="text-[10px] uppercase tracking-wider text-amber-400 font-black flex items-center gap-1">
+                    <span>👨‍🍳</span> <span>Special Cooking Instructions:</span>
+                  </p>
+                  <p class="font-extrabold text-sm text-amber-100">"${order.notes}"</p>
+                </div>
+              ` : ''}
+
+              <!-- Ordered Items List (Bada Bada Typography for Kitchen Display) -->
+              <div class="space-y-2.5 divide-y divide-slate-800/80">
+                ${(order.items || []).map((i, idx) => `
+                  <div onclick="toggleItemStrike(this)" class="pt-2.5 flex items-start gap-3 cursor-pointer select-none group/item hover:bg-slate-800/40 p-1.5 rounded-xl transition">
+                    <span class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-amber-400 font-display font-black text-base flex items-center justify-center shrink-0 shadow-inner group-hover/item:border-amber-400">
+                      ${i.qty}x
+                    </span>
+                    <div class="flex-1">
+                      <p class="font-display font-black text-white text-base leading-snug tracking-tight">${i.name}</p>
+                      <div class="flex items-center gap-2 mt-1 flex-wrap">
+                        ${i.variant ? `<span class="text-[11px] font-extrabold text-sky-300 bg-sky-950/80 px-2 py-0.5 rounded-md border border-sky-500/30">Portion: ${i.variant}</span>` : ''}
+                        ${(i.addons && i.addons.length) ? `<span class="text-[11px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/30">Add: ${i.addons.join(', ')}</span>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <!-- Kitchen Action Buttons: Print KOT, Start Cooking, Food Ready -->
+            <div class="pt-4 mt-4 border-t border-slate-800 flex items-center gap-2">
+              <button onclick="printKotDirect('${order.id}')" class="px-3.5 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-display font-black text-xs border border-slate-700 transition" title="Print Kitchen Slip">
+                🖨️ KOT
+              </button>
+
+              ${order.status === 'received' ? `
+                <button onclick="changeKdsOrderStatus('${order.id}', 'preparing')" class="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-display font-black text-sm transition shadow-lg shadow-amber-500/20 active:scale-98 flex items-center justify-center gap-2">
+                  <span>🍳 Start Cooking</span>
+                  <span>➔</span>
+                </button>
+              ` : `
+                <button onclick="changeKdsOrderStatus('${order.id}', 'served')" class="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-display font-black text-sm transition shadow-lg shadow-emerald-500/25 active:scale-98 flex items-center justify-center gap-2">
+                  <span>🍽️ Food Ready & Served ✓</span>
+                </button>
+              `}
+            </div>
+
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Toggle strike-through on individual items so chef can mark them off
+    function toggleItemStrike(el) {
+      el.classList.toggle('dish-done');
+    }
+
+    // Filter Change
+    function setKdsFilter(f) {
+      activeFilter = f;
+      ['all', 'dinein', 'takeaway', 'urgent'].forEach(tab => {
+        const btn = document.getElementById(`filter-${tab}`);
+        if (btn) {
+          if (tab === f) {
+            btn.className = 'px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-display font-black text-xs transition shadow-md shadow-amber-500/20 flex items-center gap-1.5';
+          } else {
+            btn.className = 'px-4 py-2 rounded-xl text-slate-300 hover:text-white font-display font-bold text-xs transition flex items-center gap-1.5';
+          }
+        }
+      });
+      renderKdsView();
+    }
+
+    // ----------------------------------------------------
+    // 4. Update Order Status from Kitchen Screen
+    // ----------------------------------------------------
+    async function changeKdsOrderStatus(orderId, status) {
+      try {
+        const res = await fetch(`/api/orders/${orderId}?restaurant=${restaurantId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        });
+        if (res.ok) {
+          // Play quick confirmation sound
+          if (status === 'served') {
+            speakVoice('Order ready for service!');
+          }
+          fetchKdsState();
+        }
+      } catch (err) {
+        console.error('Failed to update order status:', err);
+      }
+    }
+
+    // ----------------------------------------------------
+    // 5. Service Requests (Water / Waiter Calls)
+    // ----------------------------------------------------
+    function renderServiceRequests() {
+      const container = document.getElementById('serviceAlertsBar');
+      const list = document.getElementById('serviceAlertsList');
+      const reqs = appState.serviceRequests || [];
+
+      if (reqs.length === 0) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      list.innerHTML = reqs.map(r => `
+        <div class="px-3 py-1.5 rounded-xl bg-slate-900 border border-amber-400/50 text-white text-xs font-bold flex items-center gap-2">
+          <span>${r.type === 'water' ? '💧 Drinking Water' : '🛎️ Waiter Call'}:</span>
+          <span class="text-amber-300 font-extrabold">${r.tableName}</span>
+          <button onclick="resolveServiceCall('${r.id}')" class="ml-1 px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[10px]">
+            Done ✓
+          </button>
+        </div>
+      `).join('');
+    }
+
+    async function resolveServiceCall(id) {
+      try {
+        await fetch(`/api/service-request/${id}?restaurant=${restaurantId}`, { method: 'DELETE' });
+        fetchKdsState();
+      } catch (e) {}
+    }
+
+    // ----------------------------------------------------
+    // 6. Direct Print KOT (Kitchen Order Ticket)
+    // ----------------------------------------------------
+    function printKotDirect(orderId) {
+      const order = (appState.orders || []).find(o => o.id === orderId);
+      if (!order) return;
+
+      document.getElementById('kotPrintRest').innerText = appState.restaurant?.name || 'TipTap Kitchen';
+      document.getElementById('kotPrintTable').innerText = (order.tableName || 'TABLE').toUpperCase();
+      document.getElementById('kotPrintMeta').innerText = `Order: #${order.id} | Type: ${(order.orderType || 'Dine-In').toUpperCase()} | Time: ${new Date().toLocaleTimeString()}`;
+
+      document.getElementById('kotPrintItems').innerHTML = (order.items || []).map(i => `
+        <div class="flex justify-between py-1 font-bold text-base">
+          <span>${i.qty}x ${i.name}</span>
+          <span>${i.variant ? `(${i.variant})` : ''}</span>
+        </div>
+      `).join('');
+
+      document.getElementById('kotPrintNotes').innerHTML = order.notes 
+        ? `*** SPECIAL COOKING INSTRUCTIONS: ${order.notes} ***` 
+        : '';
+
+      window.print();
+    }
+
+    // ----------------------------------------------------
+    // 7. Live Clock
+    // ----------------------------------------------------
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('liveClock').innerText = now.toLocaleTimeString([], { hour12: true });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // ----------------------------------------------------
+    // 8. Real-Time SSE Listener
+    // ----------------------------------------------------
+    function initSseConnection() {
+      try {
+        const evt = new EventSource(`/api/events?restaurant=${restaurantId}`);
+
+        evt.addEventListener('order:new', (e) => {
+          playChime();
+          try {
+            const data = JSON.parse(e.data).payload || JSON.parse(e.data);
+            const tName = data.tableName || `Table ${data.tableId || ''}`;
+            speakVoice(`${tName} se naya order!`);
+          } catch(err) {
+            speakVoice('Naya kitchen order!');
+          }
+          fetchKdsState();
+        });
+
+        evt.addEventListener('order:update', () => fetchKdsState());
+        evt.addEventListener('table:update', () => fetchKdsState());
+        
+        evt.addEventListener('service:call', (e) => {
+          playChime();
+          try {
+            const data = JSON.parse(e.data).payload || JSON.parse(e.data);
+            speakVoice(`${data.tableName || 'Table'} par service request!`);
+          } catch(err) {}
+          fetchKdsState();
+        });
+
+        evt.onerror = () => {
+          // Reconnect automatically
+          setTimeout(initSseConnection, 5000);
+        };
+      } catch (err) {
+        console.error('SSE Error:', err);
+      }
+    }
+
+    // Auto-refresh timer to keep elapsed minutes accurate
+    setInterval(() => {
+      renderKdsView();
+    }, 15000);
+
+    // Initial Load
+    fetchKdsState();
+    initSseConnection();
+
+    // Also poll every 8 seconds as robust fallback
+    setInterval(fetchKdsState, 8000);
+
+    // Audio context unlock on first tap
+    document.addEventListener('click', () => {
+      initAudioContext();
+    }, { once: true });
+  </script>
+</body>
+</html>

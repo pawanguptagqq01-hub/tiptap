@@ -106,6 +106,30 @@
           </div>
         </div>
 
+        <!-- Workstation Choice: Billing Counter vs Kitchen KDS -->
+        <div>
+          <label class="block font-bold text-slate-300 mb-1.5">Select Workstation Destination *</label>
+          <div class="grid grid-cols-2 gap-2.5">
+            <label id="lblStationCounter" class="flex flex-col p-3 rounded-2xl border-2 border-brand-500 bg-brand-500/10 cursor-pointer transition select-none">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-lg">👑</span>
+                <input type="radio" name="stationDest" value="counter" checked onchange="handleStationToggle()" class="accent-brand-500 w-4 h-4">
+              </div>
+              <span class="font-extrabold text-white text-xs">Billing Counter</span>
+              <span class="text-[10px] text-slate-400 mt-0.5">POS, Tables & Live Orders</span>
+            </label>
+
+            <label id="lblStationKds" class="flex flex-col p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-lg">🍳</span>
+                <input type="radio" name="stationDest" value="kds" onchange="handleStationToggle()" class="accent-amber-500 w-4 h-4">
+              </div>
+              <span class="font-extrabold text-white text-xs">Kitchen KDS</span>
+              <span class="text-[10px] text-slate-400 mt-0.5">Direct Chef Order Screen</span>
+            </label>
+          </div>
+        </div>
+
         <div class="flex items-center justify-between pt-1 text-slate-400">
           <label class="flex items-center gap-2 cursor-pointer select-none text-[11px]">
             <input type="checkbox" id="rememberMe" checked class="w-4 h-4 rounded bg-slate-800 border-slate-700 text-brand-500 focus:ring-brand-500/20">
@@ -114,7 +138,7 @@
         </div>
 
         <button type="submit" id="btnLoginSubmit" class="w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-sm shadow-xl shadow-brand-500/25 transition flex items-center justify-center gap-2 active:scale-98">
-          <span>🚀 Enter POS Counter & Kitchen</span>
+          <span>🚀 Enter Billing Counter POS</span>
         </button>
 
       </form>
@@ -127,7 +151,9 @@
         <div class="flex items-center justify-center gap-4 text-[10px] text-slate-500 pt-1">
           <a href="/super-admin.html" class="hover:text-slate-300 transition">👑 Super Admin Access</a>
           <span>•</span>
-          <a href="/" class="hover:text-slate-300 transition">🏠 Back to Website</a>
+          <a href="/kds.html" class="hover:text-amber-300 text-amber-400/90 font-bold transition">🍳 Direct Kitchen KDS</a>
+          <span>•</span>
+          <a href="/" class="hover:text-slate-300 transition">🏠 Website</a>
         </div>
       </div>
 
@@ -140,10 +166,30 @@
   </footer>
 
   <script>
+    function handleStationToggle() {
+      const isCounter = document.querySelector('input[name="stationDest"]:checked').value === 'counter';
+      const lblCounter = document.getElementById('lblStationCounter');
+      const lblKds = document.getElementById('lblStationKds');
+      const btn = document.getElementById('btnLoginSubmit');
+
+      if (isCounter) {
+        lblCounter.className = 'flex flex-col p-3 rounded-2xl border-2 border-brand-500 bg-brand-500/10 cursor-pointer transition select-none';
+        lblKds.className = 'flex flex-col p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600';
+        btn.innerHTML = '<span>🚀 Enter Billing Counter POS</span>';
+        btn.className = 'w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-sm shadow-xl shadow-brand-500/25 transition flex items-center justify-center gap-2 active:scale-98';
+      } else {
+        lblCounter.className = 'flex flex-col p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600';
+        lblKds.className = 'flex flex-col p-3 rounded-2xl border-2 border-amber-500 bg-amber-500/15 cursor-pointer transition select-none';
+        btn.innerHTML = '<span>🍳 Enter Kitchen KDS Screen</span>';
+        btn.className = 'w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-sm shadow-xl shadow-amber-500/25 transition flex items-center justify-center gap-2 active:scale-98';
+      }
+    }
+
     async function handleRestaurantLogin(e) {
       e.preventDefault();
       const identifier = document.getElementById('loginIdentifier').value.trim();
       const pin = document.getElementById('loginPin').value.trim();
+      const station = document.querySelector('input[name="stationDest"]:checked')?.value || 'counter';
       const remember = document.getElementById('rememberMe').checked;
       const alertBox = document.getElementById('loginAlert');
       const alertText = document.getElementById('loginAlertText');
@@ -157,7 +203,7 @@
         const res = await fetch('/api/auth/restaurant-login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier, pin })
+          body: JSON.stringify({ identifier, pin, station })
         });
 
         const data = await res.json();
@@ -182,24 +228,30 @@
             localStorage.setItem('tiptap_active_restaurant', data.restaurant.id);
           }
 
-          btn.innerText = '✓ Success! Opening POS...';
-          btn.className = 'w-full py-3.5 rounded-xl bg-emerald-600 text-white font-extrabold text-sm shadow-xl flex items-center justify-center gap-2';
+          const targetUrl = station === 'kds' 
+            ? `/kds.html?restaurant=${data.restaurant.id}` 
+            : `/dashboard.html?restaurant=${data.restaurant.id}`;
+
+          btn.innerText = station === 'kds' ? '✓ Success! Opening Kitchen KDS...' : '✓ Success! Opening POS...';
+          btn.className = station === 'kds' 
+            ? 'w-full py-3.5 rounded-xl bg-amber-500 text-slate-950 font-extrabold text-sm shadow-xl flex items-center justify-center gap-2'
+            : 'w-full py-3.5 rounded-xl bg-emerald-600 text-white font-extrabold text-sm shadow-xl flex items-center justify-center gap-2';
           
           setTimeout(() => {
-            window.location.href = data.redirectUrl;
+            window.location.href = targetUrl;
           }, 400);
 
         } else {
           alertText.innerText = data.error || 'Invalid Phone Number or PIN. Please check and try again.';
           alertBox.classList.remove('hidden');
           btn.disabled = false;
-          btn.innerText = '🚀 Enter POS Counter & Kitchen';
+          handleStationToggle();
         }
       } catch (err) {
         alertText.innerText = 'Server connection error. Please try again.';
         alertBox.classList.remove('hidden');
         btn.disabled = false;
-        btn.innerText = '🚀 Enter POS Counter & Kitchen';
+        handleStationToggle();
       }
     }
   </script>
