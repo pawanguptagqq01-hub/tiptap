@@ -1273,15 +1273,21 @@
         const res = await fetch('/api/auth/verify-restaurant-pin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ restaurantId: restId, pin })
+          body: JSON.stringify({ restaurantId: restId, pin, station: 'kds' })
         });
         const data = await res.json();
 
         if (res.ok && data.success) {
-          sessionStorage.setItem('tiptap_staff_auth_' + restId, 'true');
+          sessionStorage.setItem('tiptap_kds_auth_' + restId, 'true');
           sessionStorage.setItem('tiptap_active_restaurant', restId);
-          localStorage.setItem('tiptap_staff_auth_' + restId, 'true');
+          localStorage.setItem('tiptap_kds_auth_' + restId, 'true');
           localStorage.setItem('tiptap_active_restaurant', restId);
+          if (data.role === 'kitchen') {
+            sessionStorage.setItem('tiptap_role', 'kitchen');
+            localStorage.setItem('tiptap_role', 'kitchen');
+            sessionStorage.removeItem('tiptap_counter_auth_' + restId);
+            localStorage.removeItem('tiptap_counter_auth_' + restId);
+          }
 
           btn.innerText = '✓ Passkey Verified! Opening KDS...';
           btn.className = 'w-full py-3.5 rounded-2xl bg-emerald-500 text-slate-950 font-black text-sm shadow-xl flex items-center justify-center gap-2';
@@ -1290,7 +1296,7 @@
             window.location.href = `/kds.html?restaurant=${encodeURIComponent(restId)}`;
           }, 350);
         } else {
-          err.innerText = data.error || '❌ Incorrect Passkey. (Default PIN: 1234)';
+          err.innerText = data.error || '❌ Incorrect Chef Passkey. (Default: 5678)';
           err.classList.remove('hidden');
           const passInput = document.getElementById('kdsPasskeyInput');
           if (passInput) {
@@ -1328,13 +1334,13 @@
         </div>
         <h3 class="font-display font-black text-white text-xl tracking-tight">Kitchen KDS Login</h3>
         <p class="text-xs text-slate-400">
-          Enter 4-digit Staff Passkey to unlock live kitchen order tickets.
+          Enter 4-digit Chef Passkey to unlock live kitchen order tickets.
         </p>
       </div>
 
       <!-- Error Notice -->
       <div id="kdsPasskeyError" class="hidden p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold text-center">
-        ❌ Incorrect Passkey / PIN. Please try again.
+        ❌ Incorrect Chef Passkey. Please try again.
       </div>
 
       <!-- Form -->
@@ -1348,8 +1354,8 @@
 
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="text-[11px] font-bold text-slate-300">Staff Passkey / PIN *</label>
-            <span class="text-[10px] text-amber-400 font-mono">Default: 1234</span>
+            <label class="text-[11px] font-bold text-slate-300">Chef Passkey *</label>
+            <span class="text-[10px] text-amber-400 font-mono">Default: 5678</span>
           </div>
           <input type="password" id="kdsPasskeyInput" maxlength="8" placeholder="••••" required
             class="w-full text-center tracking-[0.4em] font-mono text-2xl py-3 px-4 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 text-white outline-none transition">

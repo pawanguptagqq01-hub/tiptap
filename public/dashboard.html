@@ -1058,28 +1058,33 @@
       </div>
 
       <div>
-        <span id="gateRestPill" class="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-sky-300 bg-sky-500/10 px-3 py-1 rounded-full border border-sky-500/20">Restaurant Staff POS</span>
-        <h2 id="gateRestTitle" class="text-xl sm:text-2xl font-black text-white mt-2">Staff Login Required</h2>
+        <span id="gateRestPill" class="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-amber-300 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">👑 Cashier & Billing Counter POS</span>
+        <h2 id="gateRestTitle" class="text-xl sm:text-2xl font-black text-white mt-2">Cashier Login Required</h2>
         <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
-          Enter your 4-digit Staff PIN to unlock the live billing counter, floor tables, and kitchen KDS.
+          Enter your Cashier / Manager PIN to unlock billing, floor tables, and financial ledger. Kitchen staff cannot access this station.
         </p>
       </div>
 
       <form id="staffGateForm" onsubmit="handleStaffPinSubmit(event)" class="space-y-4">
         <div>
           <input type="password" id="staffPinInput" autocomplete="off" maxlength="8" placeholder="••••" required autofocus
-            class="w-full text-center tracking-[0.5em] text-2xl font-mono py-3 sm:py-3.5 px-4 rounded-2xl bg-slate-800 border-2 border-slate-700 focus:border-sky-400 focus:ring-4 focus:ring-sky-400/20 text-white outline-none transition">
-          <p id="staffGateErrorMsg" class="hidden text-rose-400 text-xs font-bold mt-2">❌ Incorrect Staff PIN. (Default: 1234)</p>
+            class="w-full text-center tracking-[0.5em] text-2xl font-mono py-3 sm:py-3.5 px-4 rounded-2xl bg-slate-800 border-2 border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/20 text-white outline-none transition">
+          <p id="staffGateErrorMsg" class="hidden text-rose-400 text-xs font-bold mt-2">❌ Incorrect Cashier PIN. (Default: 1234)</p>
         </div>
 
-        <button type="submit" id="btnUnlockStaff" class="w-full py-3 sm:py-3.5 rounded-2xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-sky-400/25 transition flex items-center justify-center gap-2 active:scale-98">
+        <button type="submit" id="btnUnlockStaff" class="w-full py-3 sm:py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-amber-400/25 transition flex items-center justify-center gap-2 active:scale-98">
           <span>🔓</span>
-          <span>Unlock POS & Kitchen</span>
+          <span>Unlock Billing Counter</span>
         </button>
 
         <div class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-800">
           <span class="font-mono">Default PIN: 1234</span>
           <a href="/login.html" class="text-sky-400 hover:underline">Change Restaurant ➔</a>
+        </div>
+        <div class="pt-2 text-center">
+          <a id="linkGoToKds" href="/kds.html" class="inline-flex items-center gap-1.5 text-xs text-amber-400/90 hover:text-amber-300 hover:underline">
+            <span>🍳 Kitchen Staff? Go to Kitchen KDS</span> <span>➔</span>
+          </a>
         </div>
       </form>
 
@@ -2931,17 +2936,30 @@
     }
 
     function checkStaffAuth() {
-      const isAuth = sessionStorage.getItem('tiptap_staff_auth_' + currentRestaurantId) || 
-                     localStorage.getItem('tiptap_staff_auth_' + currentRestaurantId);
+      const isCounterAuth = sessionStorage.getItem('tiptap_counter_auth_' + currentRestaurantId) === 'true' || 
+                            localStorage.getItem('tiptap_counter_auth_' + currentRestaurantId) === 'true';
+      const role = sessionStorage.getItem('tiptap_role') || localStorage.getItem('tiptap_role');
       const gateModal = document.getElementById('staffSecurityGateModal');
+      const errEl = document.getElementById('staffGateErrorMsg');
+      const kdsLink = document.getElementById('linkGoToKds');
+      if (kdsLink) kdsLink.href = `/kds.html?restaurant=${currentRestaurantId}`;
+
+      // If user is currently identified only as kitchen staff, actively block billing counter
+      if (role === 'kitchen' && !isCounterAuth) {
+        gateModal.classList.remove('hidden');
+        document.getElementById('gateRestTitle').innerText = `🚫 Counter Access Restricted`;
+        errEl.innerText = '👨‍🍳 Kitchen Staff cannot access the Billing Counter. Please enter Cashier / Manager PIN or use Kitchen KDS.';
+        errEl.classList.remove('hidden');
+        return;
+      }
       
-      if (isAuth === 'true') {
+      if (isCounterAuth) {
         gateModal.classList.add('hidden');
         fetchState();
         setupSSE();
       } else {
         gateModal.classList.remove('hidden');
-        document.getElementById('gateRestTitle').innerText = `${currentRestaurantId.toUpperCase()} Staff Login`;
+        document.getElementById('gateRestTitle').innerText = `${currentRestaurantId.toUpperCase()} Cashier Login`;
         setTimeout(() => document.getElementById('staffPinInput')?.focus(), 200);
       }
     }
@@ -2959,17 +2977,19 @@
         const res = await fetch('/api/auth/verify-restaurant-pin', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ restaurantId: currentRestaurantId, pin })
+          body: JSON.stringify({ restaurantId: currentRestaurantId, pin, station: 'counter' })
         });
         const data = await res.json();
         if (res.ok && data.success) {
-          sessionStorage.setItem('tiptap_staff_auth_' + currentRestaurantId, 'true');
-          localStorage.setItem('tiptap_staff_auth_' + currentRestaurantId, 'true');
+          sessionStorage.setItem('tiptap_counter_auth_' + currentRestaurantId, 'true');
+          localStorage.setItem('tiptap_counter_auth_' + currentRestaurantId, 'true');
+          sessionStorage.setItem('tiptap_role', 'counter');
+          localStorage.setItem('tiptap_role', 'counter');
           document.getElementById('staffSecurityGateModal').classList.add('hidden');
           fetchState();
           setupSSE();
         } else {
-          errEl.innerText = data.error || '❌ Incorrect Staff PIN. (Default: 1234)';
+          errEl.innerText = data.error || '❌ Incorrect Cashier PIN. (Default: 1234)';
           errEl.classList.remove('hidden');
           document.getElementById('staffPinInput').value = '';
           document.getElementById('staffPinInput').focus();
@@ -2979,13 +2999,15 @@
         errEl.classList.remove('hidden');
       } finally {
         btn.disabled = false;
-        btn.innerText = '🔓 Unlock POS & Kitchen';
+        btn.innerHTML = '<span>🔓</span> <span>Unlock Billing Counter</span>';
       }
     }
 
     function lockStaffSession() {
-      sessionStorage.removeItem('tiptap_staff_auth_' + currentRestaurantId);
-      localStorage.removeItem('tiptap_staff_auth_' + currentRestaurantId);
+      sessionStorage.removeItem('tiptap_counter_auth_' + currentRestaurantId);
+      localStorage.removeItem('tiptap_counter_auth_' + currentRestaurantId);
+      sessionStorage.removeItem('tiptap_role');
+      localStorage.removeItem('tiptap_role');
       window.location.href = '/login.html';
     }
 

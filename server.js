@@ -38,6 +38,7 @@ function createDefaultRestaurant(id, name, phone, address, gstin, tableCount = 8
     gstPercent: 5,
     rushMode: false,
     pin: '1234',
+    kitchenPin: '5678',
     plan: 'Pro Plan (Active)',
     createdAt: new Date().toISOString(),
     tables,
@@ -239,6 +240,8 @@ function loadDb() {
       if (data.restaurants) {
         Object.values(data.restaurants).forEach(r => {
           if (!r.plan) r.plan = 'Pro Plan (Active)';
+          if (!r.pin) r.pin = '1234';
+          if (!r.kitchenPin) r.kitchenPin = '5678';
           if (!r.orders) r.orders = [];
           if (!r.completedOrders) r.completedOrders = [];
           if (!r.serviceRequests) r.serviceRequests = [];
@@ -415,6 +418,8 @@ const server = http.createServer((req, res) => {
         phone: r.phone,
         address: r.address,
         plan: r.plan || 'Pro Plan (Active)',
+        pin: r.pin || '1234',
+        kitchenPin: r.kitchenPin || '5678',
         tableCount: (r.tables || []).length,
         activeOrdersCount: (r.orders || []).length,
         menuItemsCount: (r.menu || []).length,
@@ -453,6 +458,7 @@ const server = http.createServer((req, res) => {
         );
 
         if (data.pin) newRestaurant.pin = data.pin;
+        if (data.kitchenPin) newRestaurant.kitchenPin = data.kitchenPin;
         if (data.upiVpa) {
           newRestaurant.paymentConfig = {
             upiVpa: data.upiVpa,
@@ -681,24 +687,56 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        const validPin = targetRest.pin || '1234';
-        if (pin === validPin || pin === masterPin || pin === 'pawan999') {
-          const redirectUrl = data.station === 'kds'
-            ? `/kds.html?restaurant=${targetRest.id}`
-            : `/dashboard.html?restaurant=${targetRest.id}`;
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            success: true,
-            restaurant: {
-              id: targetRest.id,
-              name: targetRest.name,
-              phone: targetRest.phone
-            },
-            redirectUrl
-          }));
+        const counterPin = targetRest.pin || '1234';
+        const kitchenPin = targetRest.kitchenPin || '5678';
+        const isMaster = pin === masterPin || pin === 'pawan999';
+        const station = (data.station || 'counter').toString().trim();
+
+        if (station === 'kds') {
+          // Kitchen KDS login: accepts kitchenPin, counterPin, or masterPin
+          if (pin === kitchenPin || pin === counterPin || isMaster) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              role: 'kitchen',
+              restaurant: {
+                id: targetRest.id,
+                name: targetRest.name,
+                phone: targetRest.phone
+              },
+              redirectUrl: `/kds.html?restaurant=${targetRest.id}`
+            }));
+            return;
+          } else {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Invalid Kitchen Chef Passkey. (Default: 5678)' }));
+            return;
+          }
         } else {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid Staff PIN. Please try again or contact your administrator.' }));
+          // Billing Counter POS login: ONLY accepts counterPin or masterPin!
+          if (pin === counterPin || isMaster) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: true,
+              role: 'counter',
+              restaurant: {
+                id: targetRest.id,
+                name: targetRest.name,
+                phone: targetRest.phone
+              },
+              redirectUrl: `/dashboard.html?restaurant=${targetRest.id}`
+            }));
+            return;
+          } else if (pin === kitchenPin) {
+            // Kitchen staff tried to login to billing counter!
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: '🚫 Access Denied: Kitchen staff cannot access the Billing Counter. Please enter Cashier / Owner PIN, or switch destination to Kitchen KDS.' }));
+            return;
+          } else {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Invalid Cashier / Staff PIN for Billing Counter.' }));
+            return;
+          }
         }
       });
       return;
@@ -709,6 +747,7 @@ const server = http.createServer((req, res) => {
       readJsonBody((err, data) => {
         let restId = (data.restaurantId || '').toString().trim();
         const pin = (data.pin || '').toString().trim();
+        const station = (data.station || 'counter').toString().trim();
         const masterPin = db.superAdmin?.pin || '0000';
 
         if (!restId || !db.restaurants[restId]) {
@@ -719,17 +758,45 @@ const server = http.createServer((req, res) => {
         const r = db.restaurants[restId];
         if (!r) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Restaurant not found' }));
+          res.end(JSON.stringify({ success: false, error: 'Restaurant not found' }));
           return;
         }
 
-        const validPin = r.pin || '1234';
-        if (pin === validPin || pin === masterPin || pin === 'pawan999') {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, restaurantId: r.id, restaurantName: r.name }));
+        const counterPin = r.pin || '1234';
+        const kitchenPin = r.kitchenPin || '5678';
+        const isMaster = pin === masterPin || pin === 'pawan999';
+
+        if (station === 'kds') {
+          // Kitchen KDS unlock
+          if (pin === kitchenPin || pin === counterPin || isMaster) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: true, 
+              role: 'kitchen',
+              restaurantId: r.id, 
+              restaurantName: r.name 
+            }));
+          } else {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Incorrect Kitchen Chef Passkey. (Default: 5678)' }));
+          }
         } else {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Incorrect Staff Passkey / PIN. (Default: 1234)' }));
+          // Billing Counter unlock: strictly blocks kitchen passkey!
+          if (pin === counterPin || isMaster) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: true, 
+              role: 'counter',
+              restaurantId: r.id, 
+              restaurantName: r.name 
+            }));
+          } else if (pin === kitchenPin) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: '🚫 Access Denied: Kitchen Chef passkey cannot access the Billing Counter. Please enter Cashier / Owner PIN.' }));
+          } else {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Incorrect Cashier / Manager PIN. (Default: 1234)' }));
+          }
         }
       });
       return;
@@ -1475,6 +1542,8 @@ const server = http.createServer((req, res) => {
         if (data.name) restaurant.name = data.name;
         if (data.phone) restaurant.phone = data.phone;
         if (data.address) restaurant.address = data.address;
+        if (data.pin) restaurant.pin = data.pin.toString().trim();
+        if (data.kitchenPin) restaurant.kitchenPin = data.kitchenPin.toString().trim();
         if (data.paymentConfig) {
           restaurant.paymentConfig = {
             ...(restaurant.paymentConfig || {}),

@@ -317,22 +317,28 @@
 
         <div class="grid grid-cols-2 gap-3">
           <div>
+            <label class="block font-bold text-slate-300 mb-1">Cashier PIN (Billing Counter POS)</label>
+            <input type="text" id="inpPin" maxlength="6" value="1234"
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono font-bold">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-300 mb-1">Chef Passkey (Kitchen KDS Only)</label>
+            <input type="text" id="inpKitchenPin" maxlength="6" value="5678"
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono font-bold">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
             <label class="block font-bold text-slate-300 mb-1">GSTIN Number (Optional)</label>
             <input type="text" id="inpGstin" placeholder="07AAAAA0000A1Z5"
               class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
           </div>
           <div>
-            <label class="block font-bold text-slate-300 mb-1">Staff 4-Digit Login PIN</label>
-            <input type="text" id="inpPin" maxlength="6" value="1234"
+            <label class="block font-bold text-slate-300 mb-1">Merchant UPI ID (0% Bank QR)</label>
+            <input type="text" id="inpUpi" placeholder="e.g. restaurant@okaxis"
               class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
           </div>
-        </div>
-
-        <div>
-          <label class="block font-bold text-slate-300 mb-1">Merchant UPI ID (For Direct Guest Bank Payments)</label>
-          <input type="text" id="inpUpi" placeholder="e.g. restaurant@okaxis or 9876543210@paytm"
-            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium">
-          <p class="text-[10px] text-slate-400 mt-1">Customer table QR & UPI payments will go directly into this bank account (0% fee).</p>
         </div>
 
         <div class="pt-2">
@@ -410,6 +416,10 @@
                 <span>💳</span>
                 <span>UPI: ${r.paymentConfig?.upiVpa || 'tiptap.merchant@icici'}</span>
               </p>
+              <p class="flex items-center gap-2 text-slate-300 font-mono text-[11px] bg-slate-900/60 p-1.5 rounded-lg border border-slate-700/60">
+                <span>🔑</span>
+                <span>Counter PIN: <strong class="text-white">${r.pin || '1234'}</strong> | Chef Passkey: <strong class="text-amber-400">${r.kitchenPin || '5678'}</strong></span>
+              </p>
             </div>
           </div>
 
@@ -435,7 +445,7 @@
               </a>
             </div>
 
-            <button onclick="shareWelcomeOnWhatsApp('${r.name}', '${r.id}', '${r.phone}')" class="w-full py-2 px-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 text-emerald-300 font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1.5 transition">
+            <button onclick="shareWelcomeOnWhatsApp('${r.name}', '${r.id}', '${r.phone}', '${r.pin || '1234'}', '${r.kitchenPin || '5678'}')" class="w-full py-2 px-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 text-emerald-300 font-bold text-[11px] sm:text-xs flex items-center justify-center gap-1.5 transition">
               <span>💬</span> <span class="truncate">Send POS & KDS Access via WhatsApp</span>
             </button>
 
@@ -475,6 +485,7 @@
         address: document.getElementById('inpAddress').value.trim(),
         gstin: document.getElementById('inpGstin').value.trim(),
         pin: document.getElementById('inpPin').value.trim() || '1234',
+        kitchenPin: document.getElementById('inpKitchenPin').value.trim() || '5678',
         upiVpa: document.getElementById('inpUpi').value.trim() || 'tiptap.merchant@icici'
       };
 
@@ -503,17 +514,17 @@
       }
     }
 
-    function shareWelcomeOnWhatsApp(name, id, phone) {
+    function shareWelcomeOnWhatsApp(name, id, phone, pin = '1234', kitchenPin = '5678') {
       const host = window.location.origin;
       const message = `*🌟 Welcome to TipTap Smart Dining Platform!*\n\n` +
         `Dear Owner of *${name}*,\n` +
         `Your smart restaurant ordering & kitchen station system is now active!\n\n` +
-        `*👑 Billing Counter POS Link:*\n` +
+        `*👑 Billing Counter POS Link (Cashier / Manager):*\n` +
         `${host}/dashboard.html?restaurant=${id}\n` +
-        `PIN: 1234\n\n` +
-        `*🍳 Kitchen KDS Station Link:*\n` +
+        `Cashier PIN: ${pin}\n\n` +
+        `*🍳 Kitchen KDS Station Link (Chef Only - No Billing Access):*\n` +
         `${host}/kds.html?restaurant=${id}\n` +
-        `Passkey: 1234\n\n` +
+        `Chef Passkey: ${kitchenPin}\n\n` +
         `*🍽️ Sample Table 1 NFC Menu Demo:*\n` +
         `${host}/menu.html?restaurant=${id}&table=1\n\n` +
         `Physical NFC Table Cards are being configured and dispatched from Super Admin HQ.\n\n` +
