@@ -35,6 +35,14 @@
       }
     }
   </script>
+  <style>
+    html, body {
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
 </head>
 <body class="bg-slate-900 text-slate-100 font-sans min-h-screen antialiased selection:bg-brand-500 selection:text-white overflow-x-hidden">
 
@@ -57,25 +65,25 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-1 sm:gap-2.5 shrink-0">
-        <button onclick="resetAllData()" class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs transition flex items-center gap-1" title="Clear all orders and make all tables free">
+      <div class="flex items-center gap-1 sm:gap-2 shrink-0">
+        <button onclick="resetAllData()" class="p-1.5 sm:px-3 sm:py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 font-bold text-xs transition flex items-center gap-1" title="Clear all orders and make all tables free">
           <span>🧹</span>
           <span class="hidden sm:inline">Reset Orders</span>
         </button>
-        <a href="/kds.html" target="_blank" class="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-bold text-amber-300 transition flex items-center gap-1" title="Open Kitchen KDS Display">
+        <a href="/kds.html" target="_blank" class="p-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-bold text-amber-300 transition flex items-center gap-1" title="Open Kitchen KDS Display">
           <span>🍳</span>
           <span class="hidden sm:inline">Kitchen KDS</span>
         </a>
-        <a href="/dashboard.html" class="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition flex items-center gap-1">
+        <a href="/dashboard.html" class="p-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition flex items-center gap-1" title="Open Billing Counter POS">
           <span>👑</span>
           <span class="hidden sm:inline">Billing POS ➔</span>
         </a>
-        <button onclick="openOnboardModal()" class="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-lg shadow-brand-500/25 transition flex items-center gap-1 active:scale-95">
+        <button onclick="openOnboardModal()" class="px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-lg shadow-brand-500/25 transition flex items-center gap-1 active:scale-95" title="Add Restaurant">
           <span>＋</span>
           <span class="hidden sm:inline">Add Restaurant</span>
           <span class="sm:hidden font-bold">Add</span>
         </button>
-        <button onclick="lockAdminSession()" class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-amber-300 transition flex items-center gap-1" title="Lock Super Admin Portal">
+        <button onclick="lockAdminSession()" class="p-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-amber-300 transition flex items-center gap-1" title="Lock Super Admin Portal">
           <span>🔒</span>
           <span class="hidden sm:inline">Lock HQ</span>
         </button>

@@ -37,6 +37,12 @@
     }
   </script>
   <style>
+    html, body {
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     @keyframes flashLate {
       0%, 100% { border-color: #ef4444; background-color: rgba(239, 68, 68, 0.12); }
       50% { border-color: #f87171; background-color: rgba(239, 68, 68, 0.25); }
