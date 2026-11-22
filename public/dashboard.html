@@ -1252,7 +1252,10 @@
     let audioCtx = null;
 
     const urlParams = new URLSearchParams(window.location.search);
-    let currentRestaurantId = urlParams.get('restaurant') || 'tiptap-bistro';
+    let currentRestaurantId = urlParams.get('restaurant') || 
+                              sessionStorage.getItem('tiptap_active_restaurant') || 
+                              localStorage.getItem('tiptap_active_restaurant') || 
+                              'tiptap-bistro';
 
     function switchRestaurant(newId) {
       if (!newId || newId === currentRestaurantId) return;
@@ -1476,6 +1479,8 @@
         appState = await res.json();
         
         currentRestaurantId = appState.restaurant.id;
+        sessionStorage.setItem('tiptap_active_restaurant', currentRestaurantId);
+        localStorage.setItem('tiptap_active_restaurant', currentRestaurantId);
 
         // Populate restaurant selector
         const selector = document.getElementById('restaurantSelector');
@@ -1615,7 +1620,7 @@
         }
 
         return `
-          <div class="p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border-2 ${bg} shadow-sm space-y-2.5 sm:space-y-3 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:border-sky-400 group cursor-pointer overflow-hidden">
+          <div onclick="handleTableCardClick(${table.id}, ${order ? `'${order.id}'` : 'null'})" class="p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border-2 ${bg} shadow-sm space-y-2.5 sm:space-y-3 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:border-sky-400 group cursor-pointer overflow-hidden active:scale-[0.99]">
             <div class="space-y-2">
               <div class="flex items-center justify-between pb-2 border-b border-slate-100 gap-1.5">
                 <div class="flex items-center gap-1.5 sm:gap-2 min-w-0">
@@ -1653,26 +1658,26 @@
               ` : ''}
             </div>
 
-            <div class="pt-2 flex flex-col gap-1.5">
+            <div class="pt-2 flex flex-col gap-1.5" onclick="event.stopPropagation()">
               ${order ? `
                 <div class="grid grid-cols-2 gap-1.5 sm:gap-2">
-                  <button onclick="openTransferTableModal(${table.id})" class="py-2 px-1 rounded-xl border border-sky-300 hover:border-sky-500 hover:bg-sky-50 text-[11px] sm:text-xs font-black text-sky-800 transition flex items-center justify-center gap-1 shadow-xs">
+                  <button onclick="event.stopPropagation(); openTransferTableModal(${table.id})" class="py-2 px-1 rounded-xl border border-sky-300 hover:border-sky-500 hover:bg-sky-50 text-[11px] sm:text-xs font-black text-sky-800 transition flex items-center justify-center gap-1 shadow-xs">
                     <span>🔀</span> <span class="truncate">Shift</span>
                   </button>
-                  <button onclick="openSettleModal('${order.id}')" class="py-2 px-1 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-display font-black text-[11px] sm:text-xs shadow-md shadow-sky-400/25 transition active:scale-95 flex items-center justify-center gap-1">
+                  <button onclick="event.stopPropagation(); openSettleModal('${order.id}')" class="py-2 px-1 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-display font-black text-[11px] sm:text-xs shadow-md shadow-sky-400/25 transition active:scale-95 flex items-center justify-center gap-1">
                     <span>💳</span> <span class="truncate">Settle</span>
                   </button>
                 </div>
               ` : (table.status === 'reserved' ? `
-                <button onclick="openReserveModal(${table.id})" class="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-sm transition truncate">
+                <button onclick="event.stopPropagation(); openReserveModal(${table.id})" class="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-sm transition truncate">
                   View Reservation 📅
                 </button>
               ` : `
                 <div class="grid grid-cols-2 gap-1.5 sm:gap-2">
-                  <button onclick="openReserveModal(${table.id})" class="py-2 px-1 rounded-xl border border-purple-200 hover:bg-purple-50 text-[11px] sm:text-xs font-bold text-purple-700 transition truncate">
+                  <button onclick="event.stopPropagation(); openReserveModal(${table.id})" class="py-2 px-1 rounded-xl border border-purple-200 hover:bg-purple-50 text-[11px] sm:text-xs font-bold text-purple-700 transition truncate">
                     📅 Reserve
                   </button>
-                  <button onclick="setTableStatus(${table.id}, '${table.status === 'cleaning' ? 'free' : 'cleaning'}')" class="py-2 px-1 rounded-xl border border-slate-200 hover:bg-sky-50 text-[11px] sm:text-xs font-bold text-slate-700 transition truncate">
+                  <button onclick="event.stopPropagation(); setTableStatus(${table.id}, '${table.status === 'cleaning' ? 'free' : 'cleaning'}')" class="py-2 px-1 rounded-xl border border-slate-200 hover:bg-sky-50 text-[11px] sm:text-xs font-bold text-slate-700 transition truncate">
                     ${table.status === 'cleaning' ? '✓ Free' : '🧹 Clean'}
                   </button>
                 </div>
@@ -1687,6 +1692,21 @@
 
       // Render Live Table Orders Stream (Read-only kitchen status at Billing Counter)
       renderCounterLiveOrders();
+    }
+
+    function handleTableCardClick(tableId, orderId) {
+      if (orderId) {
+        openSettleModal(orderId);
+      } else {
+        const table = (appState?.tables || []).find(t => t.id === tableId);
+        if (table && table.status === 'reserved') {
+          openReserveModal(tableId);
+        } else if (table && table.status === 'cleaning') {
+          setTableStatus(tableId, 'free');
+        } else {
+          openReserveModal(tableId);
+        }
+      }
     }
 
     function renderCounterLiveOrders() {

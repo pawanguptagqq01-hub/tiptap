@@ -15,16 +15,16 @@ if (!fs.existsSync(path.join(__dirname, 'data'))) {
 }
 
 // Starter template for a newly onboarded restaurant
-function createDefaultRestaurant(id, name, phone, address, gstin, tableCount = 8) {
+function createDefaultRestaurant(id, name, phone, address, gstin, tableCount = 8, isSample = false) {
   const tables = [];
   for (let i = 1; i <= tableCount; i++) {
     tables.push({
       id: i,
       name: `Table ${i}`,
       capacity: i <= 2 ? 2 : (i <= 6 ? 4 : 6),
-      status: i === 2 ? 'occupied' : (i === 5 ? 'cleaning' : 'free'),
-      currentOrderId: i === 2 ? `ORD-${id}-101` : null,
-      seatingTime: i === 2 ? new Date(Date.now() - 15 * 60000).toISOString() : null
+      status: isSample ? (i === 2 ? 'occupied' : (i === 5 ? 'cleaning' : 'free')) : 'free',
+      currentOrderId: isSample && i === 2 ? `ORD-${id}-101` : null,
+      seatingTime: isSample && i === 2 ? new Date(Date.now() - 15 * 60000).toISOString() : null
     });
   }
 
@@ -147,7 +147,7 @@ function createDefaultRestaurant(id, name, phone, address, gstin, tableCount = 8
         addons: [{ name: 'Extra Chocolate Drizzle', price: 20 }]
       }
     ],
-    orders: [
+    orders: isSample ? [
       {
         id: `ORD-${id}-101`,
         tableId: 2,
@@ -165,22 +165,22 @@ function createDefaultRestaurant(id, name, phone, address, gstin, tableCount = 8
         createdAt: new Date(Date.now() - 12 * 60000).toISOString(),
         updatedAt: new Date(Date.now() - 8 * 60000).toISOString()
       }
-    ],
-    serviceRequests: [
+    ] : [],
+    serviceRequests: isSample ? [
       { id: `SR-${id}-1`, tableId: 2, tableName: 'Table 2', type: 'water', status: 'pending', time: new Date(Date.now() - 3 * 60000).toISOString() }
-    ],
+    ] : [],
     completedOrders: [],
     promoCodes: [
       { code: 'WELCOME10', type: 'percent', value: 10, minOrder: 200, description: '10% OFF on orders above ₹200' },
       { code: 'FLAT50', type: 'flat', value: 50, minOrder: 400, description: 'Flat ₹50 OFF on orders above ₹400' }
     ],
-    customers: [
+    customers: isSample ? [
       { phone: '9876543210', name: 'Rahul Sharma', visits: 4, totalSpent: 2850, loyaltyPoints: 285, lastVisit: new Date().toISOString() },
       { phone: '9811122233', name: 'Priya Verma', visits: 2, totalSpent: 1420, loyaltyPoints: 142, lastVisit: new Date().toISOString() }
-    ],
-    reviews: [
+    ] : [],
+    reviews: isSample ? [
       { id: 'rev-1', tableId: 2, customerName: 'Rahul Sharma', rating: 5, comment: 'Paneer Butter Masala was super fresh and creamy! 10/10.', time: new Date(Date.now() - 25 * 60000).toISOString() }
-    ]
+    ] : []
   };
 }
 
@@ -238,6 +238,10 @@ function loadDb() {
       }
       if (data.restaurants) {
         Object.values(data.restaurants).forEach(r => {
+          if (!r.plan) r.plan = 'Pro Plan (Active)';
+          if (!r.orders) r.orders = [];
+          if (!r.completedOrders) r.completedOrders = [];
+          if (!r.serviceRequests) r.serviceRequests = [];
           if (r.menu) {
             const sampleImages = {
               'Paneer Butter Masala': 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80',
@@ -410,7 +414,7 @@ const server = http.createServer((req, res) => {
         name: r.name,
         phone: r.phone,
         address: r.address,
-        plan: r.plan,
+        plan: r.plan || 'Pro Plan (Active)',
         tableCount: (r.tables || []).length,
         activeOrdersCount: (r.orders || []).length,
         menuItemsCount: (r.menu || []).length,
@@ -444,7 +448,8 @@ const server = http.createServer((req, res) => {
           data.phone || '+91 98000 00000',
           data.address || 'India',
           data.gstin || '',
-          tablesCount
+          tablesCount,
+          false
         );
 
         if (data.pin) newRestaurant.pin = data.pin;
@@ -470,15 +475,14 @@ const server = http.createServer((req, res) => {
     const deleteRestMatch = pathname.match(/^\/api\/restaurants\/([A-Za-z0-9_-]+)$/);
     if (deleteRestMatch && req.method === 'DELETE') {
       const delId = deleteRestMatch[1];
-      if (Object.keys(db.restaurants).length <= 1) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Cannot delete the only remaining restaurant' }));
-        return;
-      }
       if (!db.restaurants[delId]) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Restaurant not found' }));
         return;
+      }
+      if (Object.keys(db.restaurants).length <= 1) {
+        const fallbackSlug = delId === 'tiptap-bistro' ? 'new-restaurant' : 'tiptap-bistro';
+        db.restaurants[fallbackSlug] = createDefaultRestaurant(fallbackSlug, 'TipTap Smart Dining', '+91 98000 00000', 'India', '', 8, false);
       }
       delete db.restaurants[delId];
       saveDb(db);
@@ -503,6 +507,7 @@ const server = http.createServer((req, res) => {
           t.reservedTime = null;
         });
         broadcastEvent(r.id, 'order:update', {});
+        broadcastEvent(r.id, 'service:resolved', { all: true });
         broadcastEvent(r.id, 'table:update', r.tables);
       });
       saveDb(db);
@@ -577,7 +582,8 @@ const server = http.createServer((req, res) => {
         lead.phone,
         lead.address || lead.city || 'India',
         '',
-        tablesCount
+        tablesCount,
+        false
       );
 
       if (lead.upiVpa) {
@@ -664,8 +670,8 @@ const server = http.createServer((req, res) => {
         const targetRest = Object.values(db.restaurants).find(r => {
           const rPhoneClean = (r.phone || '').replace(/[^0-9]/g, '');
           const phoneMatch = cleanIdentPhone && rPhoneClean && (rPhoneClean.endsWith(cleanIdentPhone) || cleanIdentPhone.endsWith(rPhoneClean));
-          const idMatch = r.id.toLowerCase() === rawIdent;
-          const nameMatch = r.name.toLowerCase() === rawIdent;
+          const idMatch = r.id.toLowerCase() === rawIdent || rawIdent.includes(r.id.toLowerCase());
+          const nameMatch = r.name.toLowerCase() === rawIdent || r.name.toLowerCase().includes(rawIdent) || rawIdent.includes(r.name.toLowerCase());
           return phoneMatch || idMatch || nameMatch;
         });
 
@@ -1292,6 +1298,12 @@ const server = http.createServer((req, res) => {
         if (!fromTable || !toTable) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Source or destination table not found' }));
+          return;
+        }
+
+        if (toTable.status === 'occupied') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `${toTable.name} is already occupied! Please select an available free table.` }));
           return;
         }
 

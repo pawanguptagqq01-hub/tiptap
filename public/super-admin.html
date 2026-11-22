@@ -124,7 +124,7 @@
 
       <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700/80 shadow-md">
         <div class="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
-          <span>MONTHLY REVENUE (ARR)</span>
+          <span>MONTHLY REVENUE (MRR)</span>
           <span class="text-lg">💰</span>
         </div>
         <p class="text-3xl font-black text-emerald-400" id="statSaaSRevenue">₹0</p>
@@ -364,7 +364,7 @@
                 <p class="text-xs text-brand-400 font-mono mt-0.5">id: ${r.id}</p>
               </div>
               <span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
-                ${r.plan}
+                ${r.plan || 'Pro Plan (Active)'}
               </span>
             </div>
 
@@ -412,7 +412,7 @@
             </div>
 
             <button onclick="shareWelcomeOnWhatsApp('${r.name}', '${r.id}', '${r.phone}')" class="w-full py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-700/60 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition">
-              <span>💬</span> Send Login & NFC Pack via WhatsApp
+              <span>💬</span> Send POS & KDS Access via WhatsApp
             </button>
 
             <div class="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-700/60">
@@ -481,16 +481,18 @@
 
     function shareWelcomeOnWhatsApp(name, id, phone) {
       const host = window.location.origin;
-      const message = `*🌟 Welcome to TipTap NFC Dining Platform!*\n\n` +
+      const message = `*🌟 Welcome to TipTap Smart Dining Platform!*\n\n` +
         `Dear Owner of *${name}*,\n` +
-        `Your smart NFC table ordering & kitchen POS platform is now live!\n\n` +
-        `*🔑 Your Staff Dashboard Link:*\n` +
+        `Your smart restaurant ordering & kitchen station system is now active!\n\n` +
+        `*👑 Billing Counter POS Link:*\n` +
         `${host}/dashboard.html?restaurant=${id}\n` +
         `PIN: 1234\n\n` +
-        `*📱 Sample Guest Menu (Table 1):*\n` +
+        `*🍳 Kitchen KDS Station Link:*\n` +
+        `${host}/kds.html?restaurant=${id}\n` +
+        `Passkey: 1234\n\n` +
+        `*🍽️ Sample Table 1 NFC Menu Demo:*\n` +
         `${host}/menu.html?restaurant=${id}&table=1\n\n` +
-        `*💳 Printable Table NFC Tent Cards:*\n` +
-        `${host}/nfc-manager.html?restaurant=${id}\n\n` +
+        `Physical NFC Table Cards are being configured and dispatched from Super Admin HQ.\n\n` +
         `Powered by TipTap Technologies 🚀`;
 
       const cleanPhone = (phone || '').replace(/[^0-9]/g, '');

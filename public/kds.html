@@ -385,6 +385,13 @@
         const data = await res.json();
         
         appState.restaurant = data.restaurant || {};
+        if (data.restaurant && data.restaurant.id) {
+          restaurantId = data.restaurant.id;
+          sessionStorage.setItem('tiptap_active_restaurant', restaurantId);
+          localStorage.setItem('tiptap_active_restaurant', restaurantId);
+          const btn = document.getElementById('btnBillingCounter');
+          if (btn) btn.href = `/dashboard.html?restaurant=${restaurantId}`;
+        }
         appState.orders = data.orders || [];
         appState.serviceRequests = data.serviceRequests || [];
 
