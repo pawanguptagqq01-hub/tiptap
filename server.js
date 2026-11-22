@@ -701,9 +701,14 @@ const server = http.createServer((req, res) => {
     // 2j. Verify Restaurant Staff PIN: POST /api/auth/verify-restaurant-pin
     if (pathname === '/api/auth/verify-restaurant-pin' && req.method === 'POST') {
       readJsonBody((err, data) => {
-        const restId = (data.restaurantId || '').toString().trim();
+        let restId = (data.restaurantId || '').toString().trim();
         const pin = (data.pin || '').toString().trim();
         const masterPin = db.superAdmin?.pin || '0000';
+
+        if (!restId || !db.restaurants[restId]) {
+          const firstRest = Object.values(db.restaurants)[0];
+          restId = firstRest ? firstRest.id : 'tiptap-bistro';
+        }
 
         const r = db.restaurants[restId];
         if (!r) {
@@ -715,10 +720,10 @@ const server = http.createServer((req, res) => {
         const validPin = r.pin || '1234';
         if (pin === validPin || pin === masterPin || pin === 'pawan999') {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, restaurantName: r.name }));
+          res.end(JSON.stringify({ success: true, restaurantId: r.id, restaurantName: r.name }));
         } else {
           res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Incorrect PIN' }));
+          res.end(JSON.stringify({ error: 'Incorrect Staff Passkey / PIN. (Default: 1234)' }));
         }
       });
       return;

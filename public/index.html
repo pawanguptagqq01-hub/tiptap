@@ -148,7 +148,15 @@
       </nav>
 
       <!-- Action Buttons & Hamburger (Mobile + Desktop) -->
-      <div class="flex items-center gap-2 sm:gap-3">
+      <div class="flex items-center gap-2 sm:gap-2.5">
+        <!-- Direct Kitchen KDS Passkey Login Button -->
+        <button onclick="openKitchenPasskeyModal()" title="Direct Staff Passkey Login for Kitchen KDS"
+          class="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl sm:rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-300 hover:text-white font-black text-xs transition-all active:scale-95 shadow-md shadow-amber-500/10">
+          <span>🍳</span>
+          <span class="hidden sm:inline">Kitchen KDS</span>
+          <span class="sm:hidden">KDS</span>
+        </button>
+
         <a href="/login.html" class="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/20 border border-sky-400/30 text-sky-200 hover:text-white font-bold text-xs transition-all active:scale-95 shadow-sm">
           <span>🔐</span>
           <span class="hidden sm:inline">Partner Login</span>
@@ -198,6 +206,11 @@
       </div>
 
       <div class="pt-2 border-t border-slate-800 space-y-2">
+        <button onclick="toggleMobileMenu(); openKitchenPasskeyModal();"
+          class="w-full py-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-extrabold text-xs text-center flex items-center justify-center gap-2 border border-amber-500/40">
+          <span>🍳 Kitchen KDS (Staff Passkey)</span>
+          <span>➔</span>
+        </button>
         <a href="#partner-registration" onclick="toggleMobileMenu()"
           class="w-full py-3.5 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 font-black text-xs text-center flex items-center justify-center gap-2 shadow-lg shadow-sky-400/25">
           <span>🚀 Register Your Restaurant</span>
@@ -253,6 +266,15 @@
             <span>🍳 Restaurant Staff Login</span>
             <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
           </a>
+        </div>
+
+        <!-- Direct Quick Link to Kitchen KDS with Passkey -->
+        <div class="pt-2 flex items-center justify-center gap-2 text-xs">
+          <button onclick="openKitchenPasskeyModal()" class="px-5 py-2.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-400/50 hover:border-amber-400 font-bold flex items-center gap-2 transition shadow-lg shadow-amber-500/10 active:scale-95">
+            <span>🍳 Direct Kitchen KDS</span>
+            <span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">Staff Passkey</span>
+            <span>➔</span>
+          </button>
         </div>
 
         <!-- Social Proof Stats Row (Fully Responsive Grid) -->
@@ -1211,7 +1233,137 @@
 
     // Initialize ROI on load
     calculateRoi();
+
+    // ----------------------------------------------------
+    // Kitchen KDS Passkey Modal Logic
+    // ----------------------------------------------------
+    function openKitchenPasskeyModal() {
+      const modal = document.getElementById('kitchenPasskeyModal');
+      const err = document.getElementById('kdsPasskeyError');
+      const input = document.getElementById('kdsPasskeyInput');
+      if (err) err.classList.add('hidden');
+      if (input) {
+        input.value = '';
+        setTimeout(() => input.focus(), 200);
+      }
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeKitchenPasskeyModal() {
+      const modal = document.getElementById('kitchenPasskeyModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function handleKitchenPasskeySubmit(e) {
+      e.preventDefault();
+      const restId = (document.getElementById('kdsPasskeyRestId')?.value || 'tiptap-bistro').trim();
+      const pin = document.getElementById('kdsPasskeyInput')?.value.trim();
+      const err = document.getElementById('kdsPasskeyError');
+      const btn = document.getElementById('btnKdsPasskeySubmit');
+
+      err.classList.add('hidden');
+      btn.disabled = true;
+      btn.innerText = 'Verifying Passkey...';
+
+      try {
+        const res = await fetch('/api/auth/verify-restaurant-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ restaurantId: restId, pin })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          sessionStorage.setItem('tiptap_staff_auth_' + restId, 'true');
+          sessionStorage.setItem('tiptap_active_restaurant', restId);
+          localStorage.setItem('tiptap_staff_auth_' + restId, 'true');
+          localStorage.setItem('tiptap_active_restaurant', restId);
+
+          btn.innerText = '✓ Passkey Verified! Opening KDS...';
+          btn.className = 'w-full py-3.5 rounded-2xl bg-emerald-500 text-slate-950 font-black text-sm shadow-xl flex items-center justify-center gap-2';
+
+          setTimeout(() => {
+            window.location.href = `/kds.html?restaurant=${encodeURIComponent(restId)}`;
+          }, 350);
+        } else {
+          err.innerText = data.error || '❌ Incorrect Passkey. (Default PIN: 1234)';
+          err.classList.remove('hidden');
+          const passInput = document.getElementById('kdsPasskeyInput');
+          if (passInput) {
+            passInput.value = '';
+            passInput.focus();
+          }
+          btn.disabled = false;
+          btn.innerHTML = '<span>🔓</span> <span>Enter Kitchen KDS ➔</span>';
+        }
+      } catch (e) {
+        err.innerText = 'Server error verifying passkey';
+        err.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = '<span>🔓</span> <span>Enter Kitchen KDS ➔</span>';
+      }
+    }
   </script>
+
+  <!-- Kitchen KDS Passkey Quick Access Modal -->
+  <div id="kitchenPasskeyModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-slate-900 border-2 border-amber-500/50 rounded-3xl max-w-sm w-full p-6 sm:p-7 shadow-2xl space-y-5 relative overflow-hidden text-slate-100">
+      
+      <!-- Top Glow Accent -->
+      <div class="absolute -top-20 -right-20 w-40 h-40 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+      <!-- Close Button -->
+      <button onclick="closeKitchenPasskeyModal()" class="absolute right-4 top-4 w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-sm transition">
+        ✕
+      </button>
+
+      <!-- Modal Header -->
+      <div class="text-center space-y-1.5 pt-2">
+        <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-400 flex items-center justify-center text-2xl shadow-xl shadow-amber-500/30">
+          🍳
+        </div>
+        <h3 class="font-display font-black text-white text-xl tracking-tight">Kitchen KDS Login</h3>
+        <p class="text-xs text-slate-400">
+          Enter 4-digit Staff Passkey to unlock live kitchen order tickets.
+        </p>
+      </div>
+
+      <!-- Error Notice -->
+      <div id="kdsPasskeyError" class="hidden p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold text-center">
+        ❌ Incorrect Passkey / PIN. Please try again.
+      </div>
+
+      <!-- Form -->
+      <form id="kdsPasskeyForm" onsubmit="handleKitchenPasskeySubmit(event)" class="space-y-4">
+        
+        <div>
+          <label class="block text-[11px] font-bold text-slate-400 mb-1">Restaurant Branch ID</label>
+          <input type="text" id="kdsPasskeyRestId" value="tiptap-bistro" placeholder="e.g. tiptap-bistro"
+            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-xs font-mono focus:border-amber-400 focus:outline-none transition">
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-[11px] font-bold text-slate-300">Staff Passkey / PIN *</label>
+            <span class="text-[10px] text-amber-400 font-mono">Default: 1234</span>
+          </div>
+          <input type="password" id="kdsPasskeyInput" maxlength="8" placeholder="••••" required
+            class="w-full text-center tracking-[0.4em] font-mono text-2xl py-3 px-4 rounded-xl bg-slate-800 border-2 border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 text-white outline-none transition">
+        </div>
+
+        <button type="submit" id="btnKdsPasskeySubmit" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-display font-black text-sm shadow-xl shadow-amber-500/25 transition flex items-center justify-center gap-2 active:scale-98">
+          <span>🔓</span>
+          <span>Enter Kitchen KDS ➔</span>
+        </button>
+
+      </form>
+
+      <div class="pt-2 border-t border-slate-800/80 text-center text-[10px] text-slate-500">
+        TipTap Kitchen Station • Real-Time Order Dispatch
+      </div>
+
+    </div>
+  </div>
 
 </body>
 </html>

@@ -71,6 +71,46 @@
     <p class="text-center text-[10px] pt-2">TipTap Cloud KDS • Direct Kitchen Dispatch</p>
   </div>
 
+  <!-- Kitchen Station Passkey Security Gate Modal -->
+  <div id="kdsSecurityGateModal" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4">
+    <div class="bg-slate-900 border-2 border-amber-500/50 rounded-3xl max-w-sm w-full p-6 sm:p-8 shadow-2xl space-y-5 text-center relative overflow-hidden text-slate-100">
+      <div class="absolute -top-20 -right-20 w-40 h-40 bg-amber-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div class="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-amber-500 to-orange-400 flex items-center justify-center text-3xl shadow-xl shadow-amber-500/30">
+        🍳
+      </div>
+
+      <div class="space-y-1">
+        <h2 class="font-display font-black text-white text-2xl tracking-tight">Kitchen KDS Gate</h2>
+        <p class="text-xs text-slate-400">
+          Enter 4-digit Staff Passkey to unlock the live kitchen display station.
+        </p>
+      </div>
+
+      <div id="kdsGateError" class="hidden p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold">
+        ❌ Incorrect Passkey. (Default: 1234)
+      </div>
+
+      <form id="kdsGateForm" onsubmit="handleKdsGateUnlock(event)" class="space-y-4">
+        <div>
+          <input type="password" id="kdsGatePinInput" maxlength="8" placeholder="••••" required autofocus
+            class="w-full text-center tracking-[0.5em] font-mono text-3xl py-3.5 px-4 rounded-2xl bg-slate-800 border-2 border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 text-white outline-none transition">
+          <p class="text-[11px] text-amber-400/90 font-mono mt-1.5">Default Staff Passkey: 1234</p>
+        </div>
+
+        <button type="submit" id="btnUnlockKdsGate" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-display font-black text-sm shadow-xl shadow-amber-500/25 transition flex items-center justify-center gap-2 active:scale-98">
+          <span>🔓</span>
+          <span>Unlock Kitchen KDS</span>
+        </button>
+      </form>
+
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
+        <a href="/" class="hover:text-slate-300 transition">🏠 Back to Home</a>
+        <a href="/login.html" class="hover:text-slate-300 transition">Staff Portal ➔</a>
+      </div>
+    </div>
+  </div>
+
   <!-- Main KDS Interface -->
   <div class="flex-1 flex flex-col">
 
@@ -143,6 +183,12 @@
           <button onclick="toggleFullscreen()" class="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1 transition" title="Full Screen View for Wall TV / Tablet">
             <span>⛶</span>
             <span class="hidden lg:inline">Fullscreen</span>
+          </button>
+
+          <!-- Lock Station Button (Passkey Protected) -->
+          <button onclick="lockKdsSession()" title="Lock Station (Passkey Protected)" class="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-500/40 text-xs font-bold transition flex items-center gap-1">
+            <span>🔒</span>
+            <span class="hidden sm:inline">Lock</span>
           </button>
 
           <!-- Switch to Billing Counter POS -->
@@ -692,6 +738,70 @@
     document.addEventListener('click', () => {
       initAudioContext();
     }, { once: true });
+
+    // ----------------------------------------------------
+    // 9. Passkey Security Gate Check
+    // ----------------------------------------------------
+    function checkKdsAuthentication() {
+      const isAuth = sessionStorage.getItem('tiptap_staff_auth_' + restaurantId) === 'true' ||
+                     localStorage.getItem('tiptap_staff_auth_' + restaurantId) === 'true';
+      const modal = document.getElementById('kdsSecurityGateModal');
+      if (!isAuth) {
+        modal.classList.remove('hidden');
+        setTimeout(() => document.getElementById('kdsGatePinInput')?.focus(), 200);
+      } else {
+        modal.classList.add('hidden');
+      }
+    }
+
+    async function handleKdsGateUnlock(e) {
+      e.preventDefault();
+      const pin = document.getElementById('kdsGatePinInput').value.trim();
+      const err = document.getElementById('kdsGateError');
+      const btn = document.getElementById('btnUnlockKdsGate');
+      err.classList.add('hidden');
+      btn.disabled = true;
+      btn.innerText = 'Verifying Passkey...';
+
+      try {
+        const res = await fetch('/api/auth/verify-restaurant-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ restaurantId, pin })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          sessionStorage.setItem('tiptap_staff_auth_' + restaurantId, 'true');
+          localStorage.setItem('tiptap_staff_auth_' + restaurantId, 'true');
+          document.getElementById('kdsSecurityGateModal').classList.add('hidden');
+          initAudioContext();
+          playChime(true);
+          fetchKdsState();
+        } else {
+          err.innerText = data.error || '❌ Incorrect Passkey. (Default: 1234)';
+          err.classList.remove('hidden');
+          const pInput = document.getElementById('kdsGatePinInput');
+          if (pInput) {
+            pInput.value = '';
+            pInput.focus();
+          }
+        }
+      } catch (err) {
+        err.innerText = 'Connection error';
+        err.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🔓</span> <span>Unlock Kitchen KDS</span>';
+      }
+    }
+
+    function lockKdsSession() {
+      sessionStorage.removeItem('tiptap_staff_auth_' + restaurantId);
+      localStorage.removeItem('tiptap_staff_auth_' + restaurantId);
+      checkKdsAuthentication();
+    }
+
+    checkKdsAuthentication();
   </script>
 </body>
 </html>
