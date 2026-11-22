@@ -117,8 +117,8 @@
   <header class="sticky top-0 z-40 bg-[#0a192f]/95 text-white border-b border-sky-400/20 backdrop-blur-md shadow-xl transition-all duration-300">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
       
-      <!-- Logo -->
-      <a href="/" class="flex items-center gap-3 group">
+      <!-- Logo (Secret Admin Access: Triple-Click / 3 Taps) -->
+      <a href="/" onclick="handleAdminLogoTap(event)" class="flex items-center gap-3 group" title="TipTap Home">
         <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-sky-400 via-sky-500 to-[#0a192f] border border-sky-400/40 flex items-center justify-center text-white shadow-lg shadow-sky-500/30 group-hover:scale-110 group-hover:rotate-6 transition transform duration-300">
           <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
@@ -1198,6 +1198,39 @@
         btn.innerHTML = `<span>🚀 Submit Restaurant Application</span><span>➔</span>`;
       }
     }
+
+    // Secret Super Admin Trigger: Triple-click logo or Ctrl+Shift+A
+    let logoTapCount = 0;
+    let logoTapTimer = null;
+    function handleAdminLogoTap(e) {
+      logoTapCount++;
+      clearTimeout(logoTapTimer);
+      logoTapTimer = setTimeout(() => { logoTapCount = 0; }, 800);
+      if (logoTapCount >= 3) {
+        e.preventDefault();
+        logoTapCount = 0;
+        const pin = prompt('👑 TipTap Super Admin - Enter Master PIN:');
+        if (pin === '0000' || pin === 'pawan999' || pin === '9999') {
+          sessionStorage.setItem('tiptap_admin_auth', 'true');
+          window.location.href = '/super-admin.html';
+        } else if (pin) {
+          alert('❌ Incorrect Master PIN');
+        }
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        const pin = prompt('👑 TipTap Super Admin - Enter Master PIN:');
+        if (pin === '0000' || pin === 'pawan999' || pin === '9999') {
+          sessionStorage.setItem('tiptap_admin_auth', 'true');
+          window.location.href = '/super-admin.html';
+        } else if (pin) {
+          alert('❌ Incorrect Master PIN');
+        }
+      }
+    });
 
     // Initialize ROI on load
     calculateRoi();
