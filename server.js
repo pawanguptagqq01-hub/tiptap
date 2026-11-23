@@ -345,12 +345,110 @@ function loadDb() {
 
 let db = loadDb();
 
+// ====================================================
+// CLOUD DATABASE PERSISTENCE (MongoDB Atlas / Supabase)
+// ====================================================
+let mongoClient = null;
+let mongoDb = null;
+let isMongoConnected = false;
+let mongoCollection = null;
+
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_URL || process.env.DATABASE_URL;
+
+async function initCloudDatabase() {
+  if (!MONGODB_URI) {
+    console.log('ℹ️  [TipTap DB] MONGODB_URI not set. Running in Persistent Local File Mode (data/tiptap-db.json).');
+    console.log('💡 [TipTap DB Tip] Set MONGODB_URI in Render Environment Variables for 100% permanent cloud persistence across redeployments!');
+    return;
+  }
+
+  try {
+    const { MongoClient } = require('mongodb');
+    mongoClient = new MongoClient(MONGODB_URI, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 10000
+    });
+
+    await mongoClient.connect();
+    isMongoConnected = true;
+    mongoDb = mongoClient.db('tiptap');
+    mongoCollection = mongoDb.collection('system_store');
+
+    console.log('✅ [TipTap Cloud DB] Successfully connected to MongoDB Atlas Cloud Cluster!');
+
+    // Check if cloud database already has saved state
+    const cloudRecord = await mongoCollection.findOne({ _id: 'tiptap_main_store' });
+
+    if (cloudRecord && cloudRecord.restaurants && Object.keys(cloudRecord.restaurants).length > 0) {
+      console.log('🔄 [TipTap Cloud DB] Loaded persistent restaurants & orders from MongoDB Atlas!');
+      const { _id, ...cleanData } = cloudRecord;
+      db = cleanData;
+      try {
+        fs.writeFileSync(DB_PATH, JSON.stringify(cleanData, null, 2), 'utf8');
+      } catch (e) {}
+    } else {
+      console.log('📤 [TipTap Cloud DB] Initializing fresh MongoDB collection with local database seed...');
+      await mongoCollection.updateOne(
+        { _id: 'tiptap_main_store' },
+        { $set: db },
+        { upsert: true }
+      );
+      console.log('✅ [TipTap Cloud DB] Local restaurants and menu uploaded to MongoDB Atlas successfully.');
+    }
+  } catch (err) {
+    console.error('⚠️ [TipTap Cloud DB] MongoDB connection failed:', err.message);
+    console.log('ℹ️  [TipTap DB] Falling back safely to Local File Mode.');
+    isMongoConnected = false;
+  }
+}
+
 function saveDb(data) {
+  // 1. Save to local disk immediately
   try {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
-    console.error('Error saving DB:', err.message);
+    console.error('Error saving local DB:', err.message);
   }
+
+  // 2. If connected to MongoDB, persist to cloud asynchronously (zero latency to client response)
+  if (isMongoConnected && mongoCollection) {
+    mongoCollection.updateOne(
+      { _id: 'tiptap_main_store' },
+      { $set: data },
+      { upsert: true }
+    ).catch(err => {
+      console.error('⚠️ [TipTap Cloud DB] Background sync error:', err.message);
+    });
+  }
+}
+
+// In-Memory Rate Limiting for Security
+const authAttempts = new Map();
+
+function isRateLimited(ip, maxAttempts = 8, windowMs = 300000) {
+  const now = Date.now();
+  let record = authAttempts.get(ip);
+  if (!record || now > record.resetAt) {
+    record = { count: 0, resetAt: now + windowMs };
+    authAttempts.set(ip, record);
+  }
+  return record.count >= maxAttempts;
+}
+
+function recordFailedAttempt(ip, windowMs = 300000) {
+  const now = Date.now();
+  let record = authAttempts.get(ip);
+  if (!record || now > record.resetAt) {
+    record = { count: 1, resetAt: now + windowMs };
+  } else {
+    record.count++;
+  }
+  authAttempts.set(ip, record);
+}
+
+function clearAttempts(ip) {
+  authAttempts.delete(ip);
 }
 
 // Helper: Get restaurant or default
@@ -418,9 +516,14 @@ const MIME_TYPES = {
 
 // HTTP Request Handler
 const server = http.createServer((req, res) => {
+  // Production Security & CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -431,6 +534,30 @@ const server = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
   const searchParams = parsedUrl.searchParams;
+
+  // ----------------------------------------------------
+  // HEALTH CHECK & UPTIME KEEP-ALIVE: /healthz or /api/health
+  // ----------------------------------------------------
+  if (pathname === '/healthz' || pathname === '/api/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'healthy',
+      platform: 'TipTap Smart Dining POS',
+      version: '2.5.0-production',
+      uptimeSeconds: Math.floor(process.uptime()),
+      database: {
+        mode: isMongoConnected ? 'mongodb-atlas-cloud' : 'local-json-persistent',
+        connected: true,
+        restaurantsCount: db.restaurants ? Object.keys(db.restaurants).length : 0
+      },
+      realtime: {
+        sseClientsConnected: sseClients.size
+      },
+      systemMemoryMb: Math.round(process.memoryUsage().rss / (1024 * 1024)),
+      timestamp: new Date().toISOString()
+    }));
+    return;
+  }
 
   // ----------------------------------------------------
   // SSE REAL-TIME ENDPOINT: /api/events or /events
@@ -739,13 +866,22 @@ const server = http.createServer((req, res) => {
 
     // 2h. Verify Super Admin Master PIN: POST /api/admin/verify-pin
     if (pathname === '/api/admin/verify-pin' && req.method === 'POST') {
+      const clientIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+      if (isRateLimited(clientIp)) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Too many failed login attempts. Please wait 5 minutes.' }));
+        return;
+      }
+
       readJsonBody((err, data) => {
         const pin = (data.pin || '').trim();
         const masterPin = db.superAdmin?.pin || '0000';
         if (pin === masterPin || pin === 'pawan999' || pin === '9999') {
+          clearAttempts(clientIp);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, message: 'Super Admin PIN verified' }));
         } else {
+          recordFailedAttempt(clientIp);
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, error: 'Invalid Master PIN' }));
         }
@@ -856,6 +992,13 @@ const server = http.createServer((req, res) => {
 
     // 2j. Verify Restaurant Staff PIN: POST /api/auth/verify-restaurant-pin
     if (pathname === '/api/auth/verify-restaurant-pin' && req.method === 'POST') {
+      const clientIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+      if (isRateLimited(clientIp)) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Too many failed login attempts. Please wait 5 minutes.' }));
+        return;
+      }
+
       readJsonBody((err, data) => {
         let restId = (data.restaurantId || '').toString().trim();
         const pin = (data.pin || '').toString().trim();
@@ -881,6 +1024,7 @@ const server = http.createServer((req, res) => {
         if (station === 'kds') {
           // Kitchen KDS unlock
           if (pin === kitchenPin || pin === counterPin || isMaster) {
+            clearAttempts(clientIp);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ 
               success: true, 
@@ -889,12 +1033,14 @@ const server = http.createServer((req, res) => {
               restaurantName: r.name 
             }));
           } else {
+            recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: 'Incorrect Kitchen Chef Passkey.' }));
           }
         } else {
           // Billing Counter unlock: strictly blocks kitchen passkey!
           if (pin === counterPin || isMaster) {
+            clearAttempts(clientIp);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ 
               success: true, 
@@ -903,9 +1049,11 @@ const server = http.createServer((req, res) => {
               restaurantName: r.name 
             }));
           } else if (pin === kitchenPin) {
+            recordFailedAttempt(clientIp);
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: '🚫 Access Denied: Kitchen Chef passkey cannot access the Billing Counter. Please enter Cashier / Owner PIN.' }));
           } else {
+            recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: 'Incorrect Cashier / Manager PIN.' }));
           }
@@ -2005,4 +2153,35 @@ function startServer(portIndex = 0) {
   });
 }
 
-startServer();
+// Graceful Process Termination Handlers
+function handleShutdown(signal) {
+  console.log(`\n🛑 [TipTap Server] Received ${signal}. Gracefully closing connections...`);
+  for (const client of sseClients) {
+    try {
+      client.res.write(`event: server_restarting\ndata: {"message":"Server is redeploying/restarting, reconnecting..."}\n\n`);
+      client.res.end();
+    } catch (e) {}
+  }
+  sseClients.clear();
+
+  if (mongoClient) {
+    mongoClient.close().catch(() => {});
+  }
+
+  server.close(() => {
+    console.log('✅ [TipTap Server] HTTP server closed cleanly. Exiting.');
+    process.exit(0);
+  });
+
+  setTimeout(() => process.exit(0), 4000);
+}
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+
+async function boot() {
+  await initCloudDatabase();
+  startServer();
+}
+
+boot();
