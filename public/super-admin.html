@@ -578,10 +578,10 @@
       try {
         const res = await fetch('/api/admin/reset', { 
           method: 'POST',
-          headers: {
+          headers: getAuthHeaders({
             'Content-Type': 'application/json',
             'x-master-pin': pin
-          },
+          }),
           body: JSON.stringify({ pin })
         });
         const data = await res.json();
@@ -607,10 +607,10 @@
       try {
         const res = await fetch(`/api/admin/reset?restaurant=${id}`, { 
           method: 'POST',
-          headers: {
+          headers: getAuthHeaders({
             'Content-Type': 'application/json',
             'x-master-pin': pin
-          },
+          }),
           body: JSON.stringify({ pin, restaurant: id })
         });
         const data = await res.json();
@@ -636,9 +636,9 @@
       try {
         const res = await fetch(`/api/restaurants/${id}`, { 
           method: 'DELETE',
-          headers: {
+          headers: getAuthHeaders({
             'x-master-pin': pin
-          }
+          })
         });
         if (res.ok) {
           alert(`Restaurant "${name}" has been deleted.`);

@@ -401,12 +401,23 @@
              '';
     }
 
+    function getKdsAuthHeaders(extra = {}) {
+      const h = { ...extra };
+      const csrf = sessionStorage.getItem('tiptap_csrf_token') || localStorage.getItem('tiptap_csrf_token') || '';
+      const sess = sessionStorage.getItem('tiptap_session_id') || localStorage.getItem('tiptap_session_id') || '';
+      const pin = getKdsPin();
+      if (csrf) h['X-CSRF-Token'] = csrf;
+      if (sess) h['Authorization'] = 'Bearer ' + sess;
+      if (pin) h['x-staff-pin'] = pin;
+      return h;
+    }
+
     // 2. Data Fetching & Sync
     // ----------------------------------------------------
     async function fetchKdsState() {
       try {
         const res = await fetch(`/api/state?restaurant=${restaurantId}`, {
-          headers: { 'x-staff-pin': getKdsPin() }
+          headers: getKdsAuthHeaders()
         });
         if (!res.ok) throw new Error('State fetch failed');
         const data = await res.json();
@@ -683,10 +694,7 @@
       try {
         const res = await fetch(`/api/orders/${orderId}?restaurant=${restaurantId}`, {
           method: 'PATCH',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-staff-pin': getKdsPin()
-          },
+          headers: getKdsAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ status, kitchenStatus: status })
         });
         if (res.ok) {
@@ -730,7 +738,7 @@
       try {
         await fetch(`/api/service-request/${id}?restaurant=${restaurantId}`, { 
           method: 'DELETE',
-          headers: { 'x-staff-pin': getKdsPin() }
+          headers: getKdsAuthHeaders()
         });
         fetchKdsState();
       } catch (e) {}

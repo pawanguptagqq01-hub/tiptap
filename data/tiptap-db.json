@@ -18,9 +18,9 @@
           "id": 1,
           "name": "Table 1",
           "capacity": 2,
-          "status": "free",
-          "currentOrderId": null,
-          "seatingTime": null,
+          "status": "occupied",
+          "currentOrderId": "ORD-9352",
+          "seatingTime": "2026-11-23T20:54:49.352Z",
           "reservedFor": null,
           "reservedTime": null
         },
@@ -343,6 +343,66 @@
               "addons": [],
               "itemTotal": 90,
               "kotNumber": 4
+            },
+            {
+              "id": "tiptap-bistro_m1",
+              "name": "Paneer Butter Masala",
+              "variant": "",
+              "price": 280,
+              "qty": 2,
+              "addons": [],
+              "itemTotal": 560,
+              "kotNumber": 5
+            },
+            {
+              "id": "tiptap-bistro_m5",
+              "name": "Butter Naan",
+              "variant": "",
+              "price": 45,
+              "qty": 3,
+              "addons": [],
+              "itemTotal": 135,
+              "kotNumber": 5
+            },
+            {
+              "id": "tiptap-bistro_m6",
+              "name": "Gulab Jamun (2 Pcs)",
+              "variant": "",
+              "price": 90,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 90,
+              "kotNumber": 6
+            },
+            {
+              "id": "tiptap-bistro_m1",
+              "name": "Paneer Butter Masala",
+              "variant": "",
+              "price": 280,
+              "qty": 2,
+              "addons": [],
+              "itemTotal": 560,
+              "kotNumber": 7
+            },
+            {
+              "id": "tiptap-bistro_m5",
+              "name": "Butter Naan",
+              "variant": "",
+              "price": 45,
+              "qty": 3,
+              "addons": [],
+              "itemTotal": 135,
+              "kotNumber": 7
+            },
+            {
+              "id": "tiptap-bistro_m6",
+              "name": "Gulab Jamun (2 Pcs)",
+              "variant": "",
+              "price": 90,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 90,
+              "kotNumber": 8
             }
           ],
           "kots": [
@@ -443,25 +503,237 @@
               ],
               "orderedAt": "2026-11-23T20:14:02.602Z",
               "status": "received"
+            },
+            {
+              "kotNumber": 5,
+              "items": [
+                {
+                  "id": "tiptap-bistro_m1",
+                  "name": "Paneer Butter Masala",
+                  "variant": "",
+                  "price": 280,
+                  "qty": 2,
+                  "addons": [],
+                  "itemTotal": 560,
+                  "kotNumber": 5
+                },
+                {
+                  "id": "tiptap-bistro_m5",
+                  "name": "Butter Naan",
+                  "variant": "",
+                  "price": 45,
+                  "qty": 3,
+                  "addons": [],
+                  "itemTotal": 135,
+                  "kotNumber": 5
+                }
+              ],
+              "orderedAt": "2026-11-23T20:53:44.338Z",
+              "status": "received"
+            },
+            {
+              "kotNumber": 6,
+              "items": [
+                {
+                  "id": "tiptap-bistro_m6",
+                  "name": "Gulab Jamun (2 Pcs)",
+                  "variant": "",
+                  "price": 90,
+                  "qty": 1,
+                  "addons": [],
+                  "itemTotal": 90,
+                  "kotNumber": 6
+                }
+              ],
+              "orderedAt": "2026-11-23T20:53:44.343Z",
+              "status": "received"
+            },
+            {
+              "kotNumber": 7,
+              "items": [
+                {
+                  "id": "tiptap-bistro_m1",
+                  "name": "Paneer Butter Masala",
+                  "variant": "",
+                  "price": 280,
+                  "qty": 2,
+                  "addons": [],
+                  "itemTotal": 560,
+                  "kotNumber": 7
+                },
+                {
+                  "id": "tiptap-bistro_m5",
+                  "name": "Butter Naan",
+                  "variant": "",
+                  "price": 45,
+                  "qty": 3,
+                  "addons": [],
+                  "itemTotal": 135,
+                  "kotNumber": 7
+                }
+              ],
+              "orderedAt": "2026-11-23T20:58:14.020Z",
+              "status": "received"
+            },
+            {
+              "kotNumber": 8,
+              "items": [
+                {
+                  "id": "tiptap-bistro_m6",
+                  "name": "Gulab Jamun (2 Pcs)",
+                  "variant": "",
+                  "price": 90,
+                  "qty": 1,
+                  "addons": [],
+                  "itemTotal": 90,
+                  "kotNumber": 8
+                }
+              ],
+              "orderedAt": "2026-11-23T20:58:14.025Z",
+              "status": "received"
             }
           ],
           "notes": "",
-          "subtotal": 1570,
+          "subtotal": 3140,
           "discount": 0,
           "promoCode": "",
           "packagingCharge": 0,
-          "gst": 78.5,
-          "total": 1648.5,
+          "gst": 157,
+          "total": 3297,
           "status": "received",
           "kitchenStatus": "received",
           "paymentStatus": "unpaid",
           "isPaid": false,
           "paymentMethod": null,
           "createdAt": "2026-11-23T20:13:03.193Z",
-          "updatedAt": "2026-11-23T20:14:02.602Z"
+          "updatedAt": "2026-11-23T20:58:14.025Z"
+        },
+        {
+          "id": "ORD-9352",
+          "orderType": "dinein",
+          "tableId": 1,
+          "tableName": "Table 1",
+          "customerName": "",
+          "customerPhone": "",
+          "deliveryAddress": "",
+          "items": [
+            {
+              "id": "m1",
+              "name": "Paneer Butter Masala",
+              "variant": "",
+              "price": 280,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 280,
+              "kotNumber": 1
+            },
+            {
+              "id": "m1",
+              "name": "Paneer Butter Masala",
+              "variant": "",
+              "price": 280,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 280,
+              "kotNumber": 2
+            },
+            {
+              "id": "m1",
+              "name": "Paneer Butter Masala",
+              "variant": "",
+              "price": 280,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 280,
+              "kotNumber": 3
+            }
+          ],
+          "kots": [
+            {
+              "kotNumber": 1,
+              "items": [
+                {
+                  "id": "m1",
+                  "name": "Paneer Butter Masala",
+                  "variant": "",
+                  "price": 280,
+                  "qty": 1,
+                  "addons": [],
+                  "itemTotal": 280,
+                  "kotNumber": 1
+                }
+              ],
+              "orderedAt": "2026-11-23T20:54:49.352Z",
+              "status": "received"
+            },
+            {
+              "kotNumber": 2,
+              "items": [
+                {
+                  "id": "m1",
+                  "name": "Paneer Butter Masala",
+                  "variant": "",
+                  "price": 280,
+                  "qty": 1,
+                  "addons": [],
+                  "itemTotal": 280,
+                  "kotNumber": 2
+                }
+              ],
+              "orderedAt": "2026-11-23T20:56:45.703Z",
+              "status": "received"
+            },
+            {
+              "kotNumber": 3,
+              "items": [
+                {
+                  "id": "m1",
+                  "name": "Paneer Butter Masala",
+                  "variant": "",
+                  "price": 280,
+                  "qty": 1,
+                  "addons": [],
+                  "itemTotal": 280,
+                  "kotNumber": 3
+                }
+              ],
+              "orderedAt": "2026-11-23T20:57:57.666Z",
+              "status": "received"
+            }
+          ],
+          "notes": "",
+          "subtotal": 840,
+          "discount": 0,
+          "promoCode": "",
+          "packagingCharge": 0,
+          "gst": 42,
+          "total": 882,
+          "status": "ready",
+          "kitchenStatus": "preparing",
+          "paymentStatus": "unpaid",
+          "isPaid": false,
+          "paymentMethod": null,
+          "createdAt": "2026-11-23T20:54:49.352Z",
+          "updatedAt": "2026-11-23T20:57:57.685Z"
         }
       ],
       "serviceRequests": [
+        {
+          "id": "SR-4023",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "type": "water",
+          "status": "pending",
+          "time": "2026-11-23T20:58:14.023Z"
+        },
+        {
+          "id": "SR-4340",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "type": "water",
+          "status": "pending",
+          "time": "2026-11-23T20:53:44.340Z"
+        },
         {
           "id": "SR-2599",
           "tableId": 2,
@@ -549,8 +821,317 @@
         }
       ],
       "plan": "Pro Plan (Active)",
-      "pin": "scrypt$e78bd5abd4f582dfdcec6f7a79097490$9eb73a897775eba7c7a4419c71c0677b930b935ec28e434b4da4c46ad70233ee",
+      "pin": "scrypt$e4c008fb09c0b892db332ae9c04ae41d$ab977c23b460b82e95a93579e5dfe400d79e2077ac05088ddaab86de68a0ec4f",
       "kitchenPin": "scrypt$8cf140f8094916b737d344c0fe471fca$a3f81b3ca2461b2bcacc6adcbd42ebbdd1bf86a99efe7dcf89ed8cfa4039077a"
+    },
+    "sharma-dhaba": {
+      "id": "sharma-dhaba",
+      "name": "Sharma Ji Shuddh Shakahari Dhaba",
+      "tagline": "Smart NFC Table Dining",
+      "phone": "+91 98111 22233",
+      "gstin": "07BBBBB1111B2Z6",
+      "address": "Highway 44, Near Toll Plaza",
+      "gstPercent": 5,
+      "rushMode": false,
+      "pin": "scrypt$27418ca64af4ac03ef6bf9fb489def7d$34215b06ab7f58d1c615cc536a17bae28892fef53967b12898112447cea5b3a7",
+      "kitchenPin": "scrypt$be83986188f36649d994c3c887dd7374$214d35ade2344aec9d24b8eb28cfb45ec1eda6f07b3e777952fe955705394c4b",
+      "plan": "Pro Plan (Active)",
+      "createdAt": "2026-11-23T20:53:07.713Z",
+      "tables": [
+        {
+          "id": 1,
+          "name": "Table 1",
+          "capacity": 2,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 2,
+          "name": "Table 2",
+          "capacity": 2,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 3,
+          "name": "Table 3",
+          "capacity": 4,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 4,
+          "name": "Table 4",
+          "capacity": 4,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 5,
+          "name": "Table 5",
+          "capacity": 4,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 6,
+          "name": "Table 6",
+          "capacity": 4,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 7,
+          "name": "Table 7",
+          "capacity": 6,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 8,
+          "name": "Table 8",
+          "capacity": 6,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 9,
+          "name": "Table 9",
+          "capacity": 6,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        },
+        {
+          "id": 10,
+          "name": "Table 10",
+          "capacity": 6,
+          "status": "free",
+          "currentOrderId": null,
+          "seatingTime": null
+        }
+      ],
+      "menu": [
+        {
+          "id": "sharma-dhaba_m1",
+          "name": "Paneer Butter Masala",
+          "category": "Main Course",
+          "type": "veg",
+          "isJain": true,
+          "price": 280,
+          "image": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80",
+          "description": "Rich, creamy cottage cheese curry cooked with aromatic butter & royal spices.",
+          "inStock": true,
+          "variants": [
+            {
+              "name": "Half",
+              "price": 160
+            },
+            {
+              "name": "Full",
+              "price": 280
+            }
+          ],
+          "addons": [
+            {
+              "name": "Extra Butter Cube",
+              "price": 20
+            },
+            {
+              "name": "Garlic Toss",
+              "price": 30
+            }
+          ]
+        },
+        {
+          "id": "sharma-dhaba_m2",
+          "name": "Butter Chicken Special",
+          "category": "Main Course",
+          "type": "nonveg",
+          "isJain": false,
+          "price": 340,
+          "image": "https://images.unsplash.com/photo-1588166524941-3bf61a9c41db?auto=format&fit=crop&w=600&q=80",
+          "description": "Smoked tandoori chicken cooked in velvety tomato-cashew makhani gravy.",
+          "inStock": true,
+          "variants": [
+            {
+              "name": "Half",
+              "price": 210
+            },
+            {
+              "name": "Full",
+              "price": 340
+            }
+          ],
+          "addons": [
+            {
+              "name": "Extra Chicken Piece",
+              "price": 60
+            }
+          ]
+        },
+        {
+          "id": "sharma-dhaba_m3",
+          "name": "Crispy Veg Spring Rolls",
+          "category": "Starters",
+          "type": "veg",
+          "isJain": false,
+          "price": 180,
+          "image": "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80",
+          "description": "Golden fried crispy rolls stuffed with shredded veggies, served with chili dip.",
+          "inStock": true,
+          "variants": [],
+          "addons": [
+            {
+              "name": "Cheesy Dip",
+              "price": 30
+            }
+          ]
+        },
+        {
+          "id": "sharma-dhaba_m4",
+          "name": "Amritsari Fish Tikka",
+          "category": "Starters",
+          "type": "nonveg",
+          "isJain": false,
+          "price": 320,
+          "image": "https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?auto=format&fit=crop&w=600&q=80",
+          "description": "Carom seed-flavored crispy fried fish served with tangy mint chutney.",
+          "inStock": true,
+          "variants": [],
+          "addons": []
+        },
+        {
+          "id": "sharma-dhaba_m5",
+          "name": "Butter Naan / Garlic Naan",
+          "category": "Breads",
+          "type": "veg",
+          "isJain": true,
+          "price": 55,
+          "image": "https://images.unsplash.com/photo-1626074353765-517a681e40be?auto=format&fit=crop&w=600&q=80",
+          "description": "Clay oven baked Indian flatbread brushed with fresh creamy butter.",
+          "inStock": true,
+          "variants": [
+            {
+              "name": "Butter Naan",
+              "price": 55
+            },
+            {
+              "name": "Garlic Naan",
+              "price": 75
+            }
+          ],
+          "addons": []
+        },
+        {
+          "id": "sharma-dhaba_m6",
+          "name": "Blueberry Cheesecake",
+          "category": "Desserts",
+          "type": "veg",
+          "isJain": true,
+          "price": 195,
+          "image": "https://images.unsplash.com/photo-1533134242443-d4fd215305ad?auto=format&fit=crop&w=600&q=80",
+          "description": "Silky smooth New York style cheesecake topped with wild blueberry glaze.",
+          "inStock": true,
+          "variants": [],
+          "addons": []
+        },
+        {
+          "id": "sharma-dhaba_m7",
+          "name": "Sky Blue Lagoon Mojito",
+          "category": "Beverages",
+          "type": "veg",
+          "isJain": true,
+          "price": 140,
+          "image": "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80",
+          "description": "Refreshing blue curacao cooler with fresh mint leaves and sparkling soda.",
+          "inStock": true,
+          "variants": [],
+          "addons": []
+        },
+        {
+          "id": "sharma-dhaba_m8",
+          "name": "Cold Coffee with Ice Cream",
+          "category": "Beverages",
+          "type": "veg",
+          "isJain": true,
+          "price": 160,
+          "image": "https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=600&q=80",
+          "description": "Rich blended espresso coffee served chilled with a scoop of vanilla ice cream.",
+          "inStock": true,
+          "variants": [],
+          "addons": [
+            {
+              "name": "Extra Chocolate Drizzle",
+              "price": 20
+            }
+          ]
+        },
+        {
+          "id": "sharma-dhaba_m9",
+          "name": "Packaged Mineral Water Bottle (1L)",
+          "category": "Beverages",
+          "type": "veg",
+          "isJain": true,
+          "price": 20,
+          "image": "https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&w=600&q=80",
+          "description": "Sealed 1 Litre chilled / room temperature mineral drinking water bottle.",
+          "inStock": true,
+          "variants": [
+            {
+              "name": "Chilled",
+              "price": 20
+            },
+            {
+              "name": "Room Temp",
+              "price": 20
+            }
+          ],
+          "addons": []
+        },
+        {
+          "id": "sharma-dhaba_m10",
+          "name": "Tandoori Butter Roti",
+          "category": "Breads",
+          "type": "veg",
+          "isJain": true,
+          "price": 25,
+          "image": "https://images.unsplash.com/photo-1626074353765-517a681e40be?auto=format&fit=crop&w=600&q=80",
+          "description": "Fresh crisp tandoor-baked whole wheat roti brushed with pure desi butter.",
+          "inStock": true,
+          "variants": [],
+          "addons": []
+        }
+      ],
+      "orders": [],
+      "serviceRequests": [],
+      "completedOrders": [],
+      "promoCodes": [
+        {
+          "code": "WELCOME10",
+          "type": "percent",
+          "value": 10,
+          "minOrder": 200,
+          "description": "10% OFF on orders above ₹200"
+        },
+        {
+          "code": "FLAT50",
+          "type": "flat",
+          "value": 50,
+          "minOrder": 400,
+          "description": "Flat ₹50 OFF on orders above ₹400"
+        }
+      ],
+      "customers": [],
+      "reviews": []
     }
   }
 }
