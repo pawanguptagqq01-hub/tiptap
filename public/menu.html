@@ -833,25 +833,27 @@
     let appliedPromo = null;
     let selectedRating = 5;
     let customizingItem = null;
-    let appCustomers = [];
 
-    function checkLoyaltyOnPhoneInput() {
+    async function checkLoyaltyOnPhoneInput() {
       const phoneInp = document.getElementById('custPhoneInp');
-      const phone = phoneInp ? phoneInp.value.trim() : '';
+      const phone = phoneInp ? phoneInp.value.trim().replace(/[^0-9]/g, '') : '';
       const loyaltyBadge = document.getElementById('customerLoyaltyBadge');
-      if (phone.length === 10 && appCustomers.length > 0) {
-        const found = appCustomers.find(c => c.phone === phone);
-        if (found) {
-          const nameInp = document.getElementById('custNameInp');
-          if (found.name && nameInp && !nameInp.value) {
-            nameInp.value = found.name;
+      if (phone.length === 10) {
+        try {
+          const res = await fetch(`/api/customer-lookup?restaurant=${currentRestaurantId}&phone=${phone}`);
+          const data = await res.json();
+          if (data && data.found) {
+            const nameInp = document.getElementById('custNameInp');
+            if (data.name && nameInp && !nameInp.value) {
+              nameInp.value = data.name;
+            }
+            if (loyaltyBadge) {
+              loyaltyBadge.innerHTML = `🪙 Welcome back, <b>${data.name || 'Friend'}</b>! You have <b>${data.loyaltyPoints || 0} TipTap Coins</b> available.`;
+              loyaltyBadge.classList.remove('hidden');
+            }
+            return;
           }
-          if (loyaltyBadge) {
-            loyaltyBadge.innerHTML = `🪙 Welcome back, <b>${found.name || 'Friend'}</b>! You have <b>${found.loyaltyPoints || 0} TipTap Coins</b> available.`;
-            loyaltyBadge.classList.remove('hidden');
-          }
-          return;
-        }
+        } catch (e) {}
       }
       if (loyaltyBadge) loyaltyBadge.classList.add('hidden');
     }
@@ -949,7 +951,7 @@
 
     async function loadState() {
       try {
-        const res = await fetch(`/api/state?restaurant=${currentRestaurantId}`);
+        const res = await fetch(`/api/state?restaurant=${currentRestaurantId}&table=${currentTableId}`);
         const data = await res.json();
         appState = data;
         
@@ -964,7 +966,6 @@
         }
 
         menuData = data.menu || [];
-        appCustomers = (data.restaurant && data.restaurant.customers) || data.customers || [];
         renderCategories();
         renderMenu();
 
@@ -1754,7 +1755,7 @@
       clearInterval(gwPollingTimer);
       gwPollingTimer = setInterval(async () => {
         try {
-          const res = await fetch(`/api/state?restaurant=${currentRestaurantId}`);
+          const res = await fetch(`/api/state?restaurant=${currentRestaurantId}&table=${currentTableId}&orderId=${orderId}`);
           const data = await res.json();
           const ord = (data.orders || []).find(o => o.id === orderId);
           const completedOrd = (data.completedOrders || []).find(o => o.id === orderId);

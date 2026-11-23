@@ -90,13 +90,10 @@
           </div>
         </a>
 
-        <!-- Restaurant Selector Dropdown (Clean, Sleek Pill) -->
-        <div class="relative">
-          <select id="restaurantSelector" onchange="switchRestaurant(this.value)" 
-            class="bg-[#112240] text-sky-200 hover:text-white font-bold text-xs rounded-xl pl-3 pr-8 py-2 border border-sky-400/30 hover:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400 cursor-pointer transition-all shadow-sm appearance-none max-w-[125px] sm:max-w-[200px] md:max-w-xs truncate">
-            <option value="">Select Branch...</option>
-          </select>
-          <span class="pointer-events-none absolute right-2.5 top-2.5 text-[10px] text-sky-400">▼</span>
+        <!-- Active Restaurant Brand Pill -->
+        <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-950/70 border border-sky-400/30 shadow-inner max-w-[150px] sm:max-w-xs truncate">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+          <span id="activeRestaurantDisplay" class="font-bold text-xs text-sky-200 truncate">Billing POS</span>
         </div>
       </div>
 
@@ -1118,7 +1115,7 @@
         <div>
           <input type="password" id="staffPinInput" autocomplete="off" maxlength="8" placeholder="••••" required autofocus
             class="w-full text-center tracking-[0.5em] text-2xl font-mono py-3 sm:py-3.5 px-4 rounded-2xl bg-slate-800 border-2 border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/20 text-white outline-none transition">
-          <p id="staffGateErrorMsg" class="hidden text-rose-400 text-xs font-bold mt-2">❌ Incorrect Cashier PIN. (Default: 1234)</p>
+          <p id="staffGateErrorMsg" class="hidden text-rose-400 text-xs font-bold mt-2">❌ Incorrect Cashier PIN. Please check and try again.</p>
         </div>
 
         <button type="submit" id="btnUnlockStaff" class="w-full py-3 sm:py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-amber-400/25 transition flex items-center justify-center gap-2 active:scale-98">
@@ -1127,8 +1124,8 @@
         </button>
 
         <div class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-800">
-          <span class="font-mono">Default PIN: 1234</span>
-          <a href="/login.html" class="text-sky-400 hover:underline">Change Restaurant ➔</a>
+          <span class="text-slate-400 text-[10px]">Restricted Cashier & Manager POS</span>
+          <a href="/login.html" class="text-sky-400 hover:underline">Switch Restaurant ➔</a>
         </div>
         <div class="pt-2 text-center">
           <a id="linkGoToKds" href="/kds.html" class="inline-flex items-center gap-1.5 text-xs text-amber-400/90 hover:text-amber-300 hover:underline">
@@ -1322,9 +1319,8 @@
                               localStorage.getItem('tiptap_active_restaurant') || 
                               'tiptap-bistro';
 
-    function switchRestaurant(newId) {
-      if (!newId || newId === currentRestaurantId) return;
-      window.location.href = `/dashboard.html?restaurant=${newId}`;
+    function getStaffPin() {
+      return sessionStorage.getItem('tiptap_staff_pin_' + currentRestaurantId) || '';
     }
 
     // Web Audio Synthesized Chime (Ding!)
@@ -1540,21 +1536,19 @@
     // Fetch Full App State
     async function fetchState() {
       try {
-        const res = await fetch(`/api/state?restaurant=${currentRestaurantId}`);
+        const res = await fetch(`/api/state?restaurant=${currentRestaurantId}`, {
+          headers: { 'x-staff-pin': getStaffPin() }
+        });
         appState = await res.json();
         
         currentRestaurantId = appState.restaurant.id;
         sessionStorage.setItem('tiptap_active_restaurant', currentRestaurantId);
         localStorage.setItem('tiptap_active_restaurant', currentRestaurantId);
 
-        // Populate restaurant selector
-        const selector = document.getElementById('restaurantSelector');
-        if (appState.allRestaurants && selector) {
-          selector.innerHTML = appState.allRestaurants.map(r => `
-            <option value="${r.id}" ${r.id === currentRestaurantId ? 'selected' : ''}>
-              ${r.name}
-            </option>
-          `).join('');
+        // Display active restaurant name
+        const restDisplay = document.getElementById('activeRestaurantDisplay');
+        if (restDisplay && appState.restaurant) {
+          restDisplay.innerText = appState.restaurant.name;
         }
 
         // Kitchen KDS Links
@@ -1602,7 +1596,10 @@
       try {
         await fetch(`/api/settings?restaurant=${currentRestaurantId}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-staff-pin': getStaffPin()
+          },
           body: JSON.stringify({ rushMode: newRush })
         });
       } catch (e) {
@@ -2648,7 +2645,8 @@
       if (!confirm(`Are you sure you want to cancel the order #${order.id} for ${order.tableName}? The table will be set to free.`)) return;
       try {
         const res = await fetch(`/api/orders/${order.id}?restaurant=${currentRestaurantId}`, {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: { 'x-staff-pin': getStaffPin() }
         });
         if (res.ok) {
           closeSettleModal();
@@ -3016,7 +3014,10 @@
       try {
         const res = await fetch(`/api/settings?restaurant=${currentRestaurantId}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-staff-pin': getStaffPin()
+          },
           body: JSON.stringify(payload)
         });
         if (res.ok) {
@@ -3145,6 +3146,7 @@
         const data = await res.json();
         if (res.ok && data.success) {
           sessionStorage.setItem('tiptap_counter_auth_' + currentRestaurantId, 'true');
+          sessionStorage.setItem('tiptap_staff_pin_' + currentRestaurantId, pin);
           localStorage.setItem('tiptap_counter_auth_' + currentRestaurantId, 'true');
           sessionStorage.setItem('tiptap_role', 'counter');
           localStorage.setItem('tiptap_role', 'counter');
@@ -3152,7 +3154,7 @@
           fetchState();
           setupSSE();
         } else {
-          errEl.innerText = data.error || '❌ Incorrect Cashier PIN. (Default: 1234)';
+          errEl.innerText = data.error || '❌ Incorrect Cashier PIN. Please check and try again.';
           errEl.classList.remove('hidden');
           document.getElementById('staffPinInput').value = '';
           document.getElementById('staffPinInput').focus();
@@ -3168,6 +3170,7 @@
 
     function lockStaffSession() {
       sessionStorage.removeItem('tiptap_counter_auth_' + currentRestaurantId);
+      sessionStorage.removeItem('tiptap_staff_pin_' + currentRestaurantId);
       localStorage.removeItem('tiptap_counter_auth_' + currentRestaurantId);
       sessionStorage.removeItem('tiptap_role');
       localStorage.removeItem('tiptap_role');

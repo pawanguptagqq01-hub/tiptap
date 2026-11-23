@@ -357,10 +357,14 @@
 
     async function loadRestaurants() {
       try {
-        const res = await fetch('/api/restaurants');
-        restaurants = await res.json();
-        renderKPIs();
-        renderRestaurantsList();
+        const res = await fetch('/api/restaurants', {
+          headers: { 'x-master-pin': getAdminPin() }
+        });
+        if (res.ok) {
+          restaurants = await res.json();
+          renderKPIs();
+          renderRestaurantsList();
+        }
       } catch (err) {
         console.error('Failed to load restaurants:', err);
       }
@@ -688,9 +692,13 @@
 
     async function loadLeads() {
       try {
-        const res = await fetch('/api/leads');
-        leads = await res.json();
-        renderLeadsList();
+        const res = await fetch('/api/leads', {
+          headers: { 'x-master-pin': getAdminPin() }
+        });
+        if (res.ok) {
+          leads = await res.json();
+          renderLeadsList();
+        }
       } catch (err) {
         console.error('Failed to load leads:', err);
       }

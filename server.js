@@ -465,8 +465,14 @@ const server = http.createServer((req, res) => {
       return Boolean(provided && (provided === configuredPin || provided === 'pawan999' || provided === '9999'));
     }
 
-    // 1. List All Restaurants (Super Admin)
+    // 1. List All Restaurants (Restricted to Super Admin HQ)
     if (pathname === '/api/restaurants' && req.method === 'GET') {
+      if (!verifyMasterPin()) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized: Super Admin Master PIN required to view restaurants list' }));
+        return;
+      }
+
       const list = Object.values(db.restaurants).map(r => ({
         id: r.id,
         name: r.name,
@@ -631,8 +637,14 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // 2e. List All Leads: GET /api/leads
+    // 2e. List All Leads (Restricted to Super Admin HQ)
     if (pathname === '/api/leads' && req.method === 'GET') {
+      if (!verifyMasterPin()) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized: Super Admin Master PIN required to view onboarding leads' }));
+        return;
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(db.leads || []));
       return;
@@ -909,10 +921,71 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // 4. Restaurant Full State: GET /api/state or GET /api/r/:id/state
+    // 4. Restaurant State (Role-Filtered & Tenant Isolated): GET /api/state or GET /api/r/:id/state
     if ((pathname === '/api/state' || pathname === `/api/r/${targetRestId}/state`) && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
+      const staffPin = (req.headers['x-staff-pin'] || searchParams.get('staffPin') || '').toString().trim();
+      const masterPin = (req.headers['x-master-pin'] || searchParams.get('masterPin') || '').toString().trim();
+      const isMaster = verifyMasterPin(masterPin);
+      const isCounterStaff = (staffPin && staffPin === restaurant.pin) || isMaster;
+      const isKitchenStaff = (staffPin && staffPin === restaurant.kitchenPin) || isCounterStaff;
+      const isAnyStaff = isCounterStaff || isKitchenStaff;
+
+      // Base sanitized restaurant info (Never leak secret credentials)
+      const sanitizedPaymentConfig = {
+        upiVpa: restaurant.paymentConfig?.upiVpa || 'tiptap.merchant@icici',
+        merchantName: restaurant.paymentConfig?.merchantName || restaurant.name,
+        mode: restaurant.paymentConfig?.mode || 'upi_dynamic'
+      };
+
+      if (!isAnyStaff) {
+        // Customer / Public Diner at Table View:
+        const tableQuery = searchParams.get('table');
+        const orderIdQuery = searchParams.get('orderId');
+
+        // Only return order(s) for the specific table or order queried
+        const customerOrders = (restaurant.orders || []).filter(o => {
+          if (orderIdQuery && o.id === orderIdQuery) return true;
+          if (tableQuery) {
+            return o.tableId == tableQuery || o.tableName === `Table ${tableQuery}` || o.tableName === `T-${tableQuery}` || o.tableName === `T0${tableQuery}`;
+          }
+          return false;
+        });
+
+        const customerCompleted = orderIdQuery
+          ? (restaurant.completedOrders || []).filter(o => o.id === orderIdQuery)
+          : [];
+
+        const customerService = tableQuery
+          ? (restaurant.serviceRequests || []).filter(s => s.tableId == tableQuery)
+          : [];
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          restaurant: {
+            id: restaurant.id,
+            name: restaurant.name,
+            tagline: restaurant.tagline,
+            phone: restaurant.phone,
+            address: restaurant.address,
+            gstin: restaurant.gstin,
+            gstPercent: restaurant.gstPercent,
+            rushMode: restaurant.rushMode,
+            plan: restaurant.plan,
+            paymentConfig: sanitizedPaymentConfig
+          },
+          tables: (restaurant.tables || []).map(t => ({ id: t.id, name: t.name, status: t.status })),
+          menu: restaurant.menu,
+          orders: customerOrders,
+          serviceRequests: customerService,
+          completedOrders: customerCompleted,
+          promoCodes: restaurant.promoCodes || [],
+          reviews: restaurant.reviews || []
+        }));
+        return;
+      }
+
+      // Staff View (Billing Counter or Kitchen KDS):
+      const statePayload = {
         restaurant: {
           id: restaurant.id,
           name: restaurant.name,
@@ -923,24 +996,48 @@ const server = http.createServer((req, res) => {
           gstPercent: restaurant.gstPercent,
           rushMode: restaurant.rushMode,
           plan: restaurant.plan,
-          paymentConfig: restaurant.paymentConfig || {
-            upiVpa: 'tiptap.merchant@icici',
-            merchantName: restaurant.name || 'TipTap Bistro',
-            mode: 'upi_dynamic',
-            razorpayKeyId: 'rzp_test_TipTapPOS99',
-            razorpayKeySecret: ''
-          }
+          paymentConfig: isCounterStaff ? (restaurant.paymentConfig || sanitizedPaymentConfig) : sanitizedPaymentConfig
         },
         tables: restaurant.tables,
         menu: restaurant.menu,
         orders: restaurant.orders,
         serviceRequests: restaurant.serviceRequests,
-        completedOrders: restaurant.completedOrders,
         promoCodes: restaurant.promoCodes || [],
-        customers: restaurant.customers || [],
-        reviews: restaurant.reviews || [],
-        allRestaurants: Object.keys(db.restaurants).map(k => ({ id: k, name: db.restaurants[k].name }))
-      }));
+        reviews: restaurant.reviews || []
+      };
+
+      // Only Counter Staff gets completed orders & customer CRM for this restaurant
+      if (isCounterStaff) {
+        statePayload.completedOrders = restaurant.completedOrders || [];
+        statePayload.customers = restaurant.customers || [];
+      }
+
+      // ONLY Platform Super Admin gets the global restaurants directory!
+      if (isMaster) {
+        statePayload.allRestaurants = Object.keys(db.restaurants).map(k => ({ id: k, name: db.restaurants[k].name }));
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(statePayload));
+      return;
+    }
+
+    // 4b. Safe Customer Loyalty Lookup (Phone only, no customer list leak): GET /api/customer-lookup
+    if (pathname === '/api/customer-lookup' && req.method === 'GET') {
+      const cleanPhone = (searchParams.get('phone') || '').replace(/[^0-9]/g, '');
+      if (!cleanPhone || cleanPhone.length < 10) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ found: false }));
+        return;
+      }
+      const match = (restaurant.customers || []).find(c => (c.phone || '').replace(/[^0-9]/g, '').endsWith(cleanPhone.slice(-10)));
+      if (match) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ found: true, name: match.name || '', loyaltyPoints: match.loyaltyPoints || 0 }));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ found: false, loyaltyPoints: 0 }));
+      }
       return;
     }
 
@@ -1407,6 +1504,12 @@ const server = http.createServer((req, res) => {
       const orderId = orderMatch[1];
 
       if (req.method === 'DELETE') {
+        if (!verifyStaffAuth(null, 'counter')) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to cancel order' }));
+          return;
+        }
+
         const order = restaurant.orders.find(o => o.id === orderId);
         if (!order) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -1652,9 +1755,27 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // Helper: Verify restaurant staff authorization (Counter PIN or Kitchen PIN)
+    function verifyStaffAuth(data, roleRequired = 'any') {
+      const staffPin = (req.headers['x-staff-pin'] || data?.staffPin || searchParams.get('staffPin') || '').toString().trim();
+      const masterPin = (req.headers['x-master-pin'] || data?.masterPin || searchParams.get('masterPin') || '').toString().trim();
+      if (verifyMasterPin(masterPin)) return true;
+      if (!staffPin) return false;
+      if (roleRequired === 'counter') {
+        return staffPin === restaurant.pin;
+      }
+      return staffPin === restaurant.pin || staffPin === restaurant.kitchenPin;
+    }
+
     // 10. Add New Dish: POST /api/menu
     if (pathname.endsWith('/menu') && req.method === 'POST') {
       readJsonBody((err, data) => {
+        if (!verifyStaffAuth(data, 'counter')) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unauthorized: Cashier PIN required to add dishes' }));
+          return;
+        }
+
         if (err || !data.name || !data.price) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid dish data' }));
@@ -1689,6 +1810,12 @@ const server = http.createServer((req, res) => {
     if (menuMatch && req.method === 'PATCH') {
       const dishId = menuMatch[1];
       readJsonBody((err, data) => {
+        if (!verifyStaffAuth(data, 'any')) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unauthorized: Staff Passkey required to modify dish stock/price' }));
+          return;
+        }
+
         const dish = restaurant.menu.find(d => d.id === dishId);
         if (!dish) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -1710,6 +1837,12 @@ const server = http.createServer((req, res) => {
     // 12. Update Restaurant Settings: POST /api/settings
     if (pathname.endsWith('/settings') && req.method === 'POST') {
       readJsonBody((err, data) => {
+        if (!verifyStaffAuth(data, 'counter')) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to update settings' }));
+          return;
+        }
+
         if (typeof data.rushMode === 'boolean') restaurant.rushMode = data.rushMode;
         if (data.name) restaurant.name = data.name;
         if (data.phone) restaurant.phone = data.phone;

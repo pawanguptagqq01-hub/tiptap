@@ -94,14 +94,14 @@
       </div>
 
       <div id="kdsGateError" class="hidden p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold">
-        ❌ Incorrect Chef Passkey. (Default: 5678)
+        ❌ Incorrect Chef Passkey. Please try again.
       </div>
 
       <form id="kdsGateForm" onsubmit="handleKdsGateUnlock(event)" class="space-y-4">
         <div>
           <input type="password" id="kdsGatePinInput" maxlength="8" placeholder="••••" required autofocus
             class="w-full text-center tracking-[0.5em] font-mono text-2xl sm:text-3xl py-3 sm:py-3.5 px-4 rounded-2xl bg-slate-800 border-2 border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 text-white outline-none transition">
-          <p class="text-[11px] text-amber-400/90 font-mono mt-1.5">Default Chef Passkey: 5678</p>
+          <p class="text-[11px] text-slate-400 font-mono mt-1.5">Chef Kitchen Station Security Passkey</p>
         </div>
 
         <button type="submit" id="btnUnlockKdsGate" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-display font-black text-sm shadow-xl shadow-amber-500/25 transition flex items-center justify-center gap-2 active:scale-98">
@@ -382,11 +382,17 @@
     }
 
     // ----------------------------------------------------
+    function getKdsPin() {
+      return sessionStorage.getItem('tiptap_kds_pin_' + restaurantId) || '';
+    }
+
     // 2. Data Fetching & Sync
     // ----------------------------------------------------
     async function fetchKdsState() {
       try {
-        const res = await fetch(`/api/state?restaurant=${restaurantId}`);
+        const res = await fetch(`/api/state?restaurant=${restaurantId}`, {
+          headers: { 'x-staff-pin': getKdsPin() }
+        });
         if (!res.ok) throw new Error('State fetch failed');
         const data = await res.json();
         
@@ -856,6 +862,7 @@
         const data = await res.json();
         if (res.ok && data.success) {
           sessionStorage.setItem('tiptap_kds_auth_' + restaurantId, 'true');
+          sessionStorage.setItem('tiptap_kds_pin_' + restaurantId, pin);
           localStorage.setItem('tiptap_kds_auth_' + restaurantId, 'true');
           if (data.role === 'kitchen') {
             sessionStorage.setItem('tiptap_role', 'kitchen');
@@ -869,7 +876,7 @@
           playChime(true);
           fetchKdsState();
         } else {
-          err.innerText = data.error || '❌ Incorrect Chef Passkey. (Default: 5678)';
+          err.innerText = data.error || '❌ Incorrect Chef Passkey. Please try again.';
           err.classList.remove('hidden');
           const pInput = document.getElementById('kdsGatePinInput');
           if (pInput) {
@@ -888,6 +895,7 @@
 
     function lockKdsSession() {
       sessionStorage.removeItem('tiptap_kds_auth_' + restaurantId);
+      sessionStorage.removeItem('tiptap_kds_pin_' + restaurantId);
       localStorage.removeItem('tiptap_kds_auth_' + restaurantId);
       sessionStorage.removeItem('tiptap_counter_auth_' + restaurantId);
       localStorage.removeItem('tiptap_counter_auth_' + restaurantId);

@@ -67,9 +67,9 @@
       </div>
 
       <div class="flex items-center gap-1.5 sm:gap-3 shrink-0">
-        <a href="/dashboard.html" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs transition">
-          <span class="hidden sm:inline">Back to Dashboard</span>
-          <span class="sm:hidden">⬅ POS</span>
+        <a href="/super-admin.html" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold text-xs transition">
+          <span class="hidden sm:inline">⬅ Back to Super Admin HQ</span>
+          <span class="sm:hidden">⬅ Super Admin</span>
         </a>
         <button onclick="window.print()" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-md transition flex items-center gap-1">
           <span>🖨️</span>
@@ -163,6 +163,14 @@
   </main>
 
   <script>
+    function checkAdminAccess() {
+      const isAuth = sessionStorage.getItem('tiptap_admin_auth') || localStorage.getItem('tiptap_admin_auth');
+      if (isAuth !== 'true') {
+        window.location.href = '/super-admin.html';
+      }
+    }
+    checkAdminAccess();
+
     let localIp = 'localhost';
     let localPort = 3030;
     let currentRestaurant = 'tiptap-bistro';
@@ -186,8 +194,11 @@
         localIp = netData.localIp || window.location.hostname;
         localPort = netData.port || window.location.port || 3030;
 
-        // Fetch state of target restaurant
-        const stateRes = await fetch(`/api/state?restaurant=${currentRestaurant}`);
+        // Fetch state of target restaurant with Super Admin authorization
+        const adminPin = sessionStorage.getItem('tiptap_admin_pin') || '';
+        const stateRes = await fetch(`/api/state?restaurant=${currentRestaurant}`, {
+          headers: { 'x-master-pin': adminPin }
+        });
         const state = await stateRes.json();
 
         currentRestaurant = state.restaurant.id;
