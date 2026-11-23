@@ -175,18 +175,18 @@
           <!-- Voice Soundbox Dropdown Toggle -->
           <div class="relative">
             <button onclick="toggleSoundboxMenu()" id="soundboxBtn" title="Voice Soundbox"
-              class="px-2.5 py-2 rounded-xl bg-[#112240] hover:bg-[#1b3457] text-sky-200 hover:text-white text-xs font-bold border border-sky-400/30 flex items-center gap-1 transition">
+              class="px-2.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#fef3e2] hover:text-white text-xs font-bold border border-[#f4ae52]/40 flex items-center gap-1 transition">
               <span class="text-amber-400 text-sm">📢</span>
               <span>Soundbox</span>
               <span id="soundboxWaves" class="hidden text-emerald-400 text-xs font-black animate-pulse">🔊</span>
             </button>
             
             <!-- Soundbox Popover -->
-            <div id="soundboxDropdown" class="hidden absolute right-0 top-12 w-64 bg-slate-900 border border-sky-400/40 rounded-2xl shadow-2xl p-4 z-50 text-white space-y-3 font-sans">
-              <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div id="soundboxDropdown" class="hidden absolute right-0 top-12 w-64 bg-[#2a1a0e] border border-[#f4ae52]/40 rounded-2xl shadow-2xl p-4 z-50 text-[#fef3e2] space-y-3 font-sans">
+              <div class="flex items-center justify-between border-b border-[#352112] pb-2">
                 <div class="flex items-center gap-2">
                   <span class="text-base">📢</span>
-                  <span class="font-extrabold text-xs text-sky-200 font-display">TipTap Voice Soundbox</span>
+                  <span class="font-extrabold text-xs text-[#f4ae52] font-display">TipTap Voice Soundbox</span>
                 </div>
                 <button onclick="toggleSoundboxMenu()" class="text-xs text-slate-400 hover:text-white">✕</button>
               </div>
@@ -200,8 +200,8 @@
 
               <div class="space-y-1 text-xs">
                 <label class="block text-slate-400 font-bold text-[10px] uppercase">Voice Language:</label>
-                <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-800/80 rounded-xl text-xs font-bold">
-                  <button onclick="setSoundboxLang('hi-IN')" id="sbLang-hi" class="py-1 rounded-lg bg-sky-500 text-slate-950 font-black">
+                <div class="grid grid-cols-2 gap-1.5 p-1 bg-[#352112] rounded-xl text-xs font-bold">
+                  <button onclick="setSoundboxLang('hi-IN')" id="sbLang-hi" class="py-1 rounded-lg bg-[#d4621a] text-white font-black">
                     🇮🇳 हिन्दी
                   </button>
                   <button onclick="setSoundboxLang('en-IN')" id="sbLang-en" class="py-1 rounded-lg text-slate-300 hover:text-white">
@@ -210,7 +210,7 @@
                 </div>
               </div>
 
-              <button onclick="testSoundboxVoice()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black text-xs shadow-md transition active:scale-95 flex items-center justify-center gap-1.5 font-display">
+              <button onclick="testSoundboxVoice()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-white font-black text-xs shadow-md transition active:scale-95 flex items-center justify-center gap-1.5 font-display">
                 <span>▶️</span> Test Voice Announcement
               </button>
             </div>
@@ -218,14 +218,14 @@
 
           <!-- Sound Toggle -->
           <button onclick="toggleSound()" id="soundBtn" title="Sound Bell Alerts"
-            class="px-2.5 py-2 rounded-xl bg-[#112240] hover:bg-[#1b3457] text-sky-200 hover:text-white text-xs font-bold flex items-center gap-1 border border-sky-400/30 transition">
+            class="px-2.5 py-2 rounded-xl bg-[#112240] hover:bg-[#1b3457] text-[#fef3e2]/75 hover:text-white text-xs font-bold flex items-center gap-1 border border-[#f4ae52]/30 transition">
             <span id="soundIcon">🔊</span>
             <span>Bell</span>
           </button>
 
           <!-- Rush Mode Switch -->
           <button onclick="toggleRushMode()" id="rushBtn" title="Kitchen Rush Hour Warning"
-            class="px-2.5 py-2 rounded-xl bg-[#112240] hover:bg-[#1b3457] text-sky-200 hover:text-white text-xs font-bold border border-sky-400/30 flex items-center gap-1 transition">
+            class="px-2.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#fef3e2] hover:text-white text-xs font-bold border border-[#f4ae52]/40 flex items-center gap-1 transition">
             <span id="rushDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
             <span id="rushText">Rush: OFF</span>
           </button>
@@ -234,18 +234,18 @@
         <!-- Mobile More Tools Popover Button -->
         <div class="relative md:hidden">
           <button onclick="toggleMobileToolsMenu()" id="mobileToolsBtn" title="More Tools"
-            class="px-2 py-1.5 rounded-xl bg-[#112240] hover:bg-[#1b3457] text-sky-200 hover:text-white text-xs font-bold border border-sky-400/30 flex items-center gap-1 transition">
+            class="px-2 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#fef3e2] hover:text-white text-xs font-bold border border-[#f4ae52]/40 flex items-center gap-1 transition">
             <span>⚡</span>
             <span>Tools</span>
           </button>
 
           <!-- Mobile Tools Dropdown -->
-          <div id="mobileToolsDropdown" class="hidden absolute right-0 top-10 w-56 bg-slate-900 border border-sky-400/40 rounded-2xl shadow-2xl p-3 z-50 text-white space-y-2 font-sans text-xs">
-            <button onclick="toggleSound(); toggleMobileToolsMenu();" class="w-full p-2 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-between font-bold">
+          <div id="mobileToolsDropdown" class="hidden absolute right-0 top-10 w-56 bg-[#2a1a0e] border border-[#f4ae52]/40 rounded-2xl shadow-2xl p-3 z-50 text-[#fef3e2] space-y-2 font-sans text-xs">
+            <button onclick="toggleSound(); toggleMobileToolsMenu();" class="w-full p-2 rounded-xl bg-[#352112] hover:bg-[#432918] flex items-center justify-between font-bold">
               <span>🔊 Bell Alerts</span>
-              <span id="mSoundStatus" class="text-sky-300">ON</span>
+              <span id="mSoundStatus" class="text-[#f4ae52]">ON</span>
             </button>
-            <button onclick="toggleRushMode(); toggleMobileToolsMenu();" class="w-full p-2 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-between font-bold">
+            <button onclick="toggleRushMode(); toggleMobileToolsMenu();" class="w-full p-2 rounded-xl bg-[#352112] hover:bg-[#432918] flex items-center justify-between font-bold">
               <span>🔥 Rush Mode</span>
               <span id="mRushStatus" class="text-slate-400">OFF</span>
             </button>
@@ -266,7 +266,7 @@
 
         <!-- Lock POS / Logout Button -->
         <button onclick="lockStaffSession()" id="lockPosBtn" title="Lock POS Counter (Staff Logout)"
-          class="px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white text-xs font-bold border border-slate-700 hover:border-amber-400/50 flex items-center gap-1 transition">
+          class="px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl bg-[#352112] hover:bg-[#432918] text-amber-300 hover:text-white text-xs font-bold border border-slate-700 hover:border-amber-400/50 flex items-center gap-1 transition">
           <span>🔒</span>
           <span class="hidden sm:inline">Lock</span>
         </button>
@@ -276,12 +276,12 @@
     </div>
 
     <!-- Mobile Role Tabs Bar (Smooth Swipe on Phones) -->
-    <div class="md:hidden flex items-center overflow-x-auto custom-scroll px-3 py-2 bg-[#071324] border-t border-sky-500/20 text-xs font-bold gap-1.5">
-      <button onclick="setRole('counter')" id="m-tab-counter" class="shrink-0 px-3 py-1.5 rounded-lg bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 font-black">👑 Counter</button>
-      <button onclick="setRole('kitchen')" id="m-tab-kitchen" class="shrink-0 px-3 py-1.5 rounded-lg text-sky-200">🍳 Kitchen</button>
-      <button onclick="setRole('menu')" id="m-tab-menu" class="shrink-0 px-3 py-1.5 rounded-lg text-sky-200">📋 Stock</button>
-      <button onclick="setRole('crm')" id="m-tab-crm" class="shrink-0 px-3 py-1.5 rounded-lg text-sky-200">👥 CRM</button>
-      <button onclick="setRole('analytics')" id="m-tab-analytics" class="shrink-0 px-3 py-1.5 rounded-lg text-sky-200">📊 Reports</button>
+    <div class="md:hidden flex items-center overflow-x-auto custom-scroll px-3 py-2 bg-[#2a1a0e] border-t border-[#f4ae52]/30 text-xs font-bold gap-1.5">
+      <button onclick="setRole('counter')" id="m-tab-counter" class="shrink-0 px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#d4621a] to-[#f4ae52] text-white font-black">👑 Counter</button>
+      <button onclick="setRole('kitchen')" id="m-tab-kitchen" class="shrink-0 px-3 py-1.5 rounded-lg text-[#fef3e2]/75">🍳 Kitchen</button>
+      <button onclick="setRole('menu')" id="m-tab-menu" class="shrink-0 px-3 py-1.5 rounded-lg text-[#fef3e2]/75">📋 Stock</button>
+      <button onclick="setRole('crm')" id="m-tab-crm" class="shrink-0 px-3 py-1.5 rounded-lg text-[#fef3e2]/75">👥 CRM</button>
+      <button onclick="setRole('analytics')" id="m-tab-analytics" class="shrink-0 px-3 py-1.5 rounded-lg text-[#fef3e2]/75">📊 Reports</button>
     </div>
   </header>
 
@@ -301,7 +301,7 @@
             <span>Today's Sales</span>
             <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs sm:text-sm shadow-xs">💳</div>
           </div>
-          <p class="font-display text-2xl sm:text-4xl font-black text-slate-900 truncate">₹<span id="metricRevenue">0</span></p>
+          <p class="font-display text-2xl sm:text-4xl font-black text-[#2a1a0e] truncate">₹<span id="metricRevenue">0</span></p>
           <p class="text-[10px] sm:text-[11px] text-emerald-600 font-bold mt-1 sm:mt-1.5 flex items-center gap-1">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             <span>Real-time Incl. 5% GST</span>
@@ -343,7 +343,7 @@
       <div class="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-sm space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 class="text-base sm:text-lg font-black text-slate-900">Floor Tables & Direct Billing</h2>
+            <h2 class="text-base sm:text-lg font-black text-[#2a1a0e]">Floor Tables & Direct Billing</h2>
             <p class="text-xs text-slate-500">Click on any table to settle bill, collect payment (UPI/Cash/Card), and send WhatsApp receipt.</p>
           </div>
           <div class="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs font-bold text-slate-500 flex-wrap">
@@ -357,7 +357,7 @@
         <!-- Floor Area Section Pills -->
         <div class="flex items-center gap-2 pt-1 border-t border-slate-100 overflow-x-auto no-scrollbar text-xs font-bold py-1">
           <span class="text-slate-400 uppercase tracking-wider text-[10px] shrink-0">Area:</span>
-          <button onclick="setFloorSection('all')" id="secFilter-all" class="px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-black shadow-xs shrink-0">
+          <button onclick="setFloorSection('all')" id="secFilter-all" class="px-3.5 py-1.5 rounded-xl bg-[#d4621a] text-white font-black font-black shadow-xs shrink-0">
             🏢 All Tables
           </button>
           <button onclick="setFloorSection('ac')" id="secFilter-ac" class="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 shrink-0">
@@ -382,7 +382,7 @@
           <div>
             <div class="flex items-center gap-2 flex-wrap">
               <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <h3 class="font-display font-black text-slate-900 text-base sm:text-lg tracking-tight">🔴 Live Table Orders Stream</h3>
+              <h3 class="font-display font-black text-[#2a1a0e] text-base sm:text-lg tracking-tight">🔴 Live Table Orders Stream</h3>
               <span class="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
                 🔒 Kitchen Status Read-Only
               </span>
@@ -393,7 +393,7 @@
           </div>
           <div class="flex items-center gap-2">
             <a id="btnCounterKdsLink" href="/kds.html" target="_blank"
-              class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-display font-black text-xs shadow-md shadow-amber-500/20 transition flex items-center gap-1.5">
+              class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-white font-display font-black text-xs shadow-md shadow-amber-500/20 transition flex items-center gap-1.5">
               <span>🍳</span>
               <span>Open Kitchen KDS Screen ↗</span>
             </a>
@@ -412,7 +412,7 @@
         <!-- Tabbed Header -->
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1">
-            <button onclick="setCounterSubTab('bills')" id="subtab-bills" class="shrink-0 px-3 sm:px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-xs transition shadow-sm">
+            <button onclick="setCounterSubTab('bills')" id="subtab-bills" class="shrink-0 px-3 sm:px-3.5 py-1.5 rounded-xl bg-[#d4621a] text-white font-black font-bold text-xs transition shadow-sm">
               📝 Active Bills
             </button>
             <button onclick="setCounterSubTab('crm')" id="subtab-crm" class="shrink-0 px-3 sm:px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 font-bold text-xs transition">
@@ -495,7 +495,7 @@
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div class="flex items-center gap-2">
-            <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">Kitchen Display System (KOT) & Service</h2>
+            <h2 class="text-lg sm:text-xl font-extrabold text-[#2a1a0e]">Kitchen Display System (KOT) & Service</h2>
             <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
               🔒 Counter Read-Only
             </span>
@@ -504,7 +504,7 @@
         </div>
         <div class="flex items-center gap-2">
           <a id="btnOpenDedicatedKdsTab" href="/kds.html" target="_blank"
-             class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-xs shadow-md shadow-amber-500/20 flex items-center gap-1.5 transition">
+             class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-display font-black text-xs shadow-md shadow-amber-500/20 flex items-center gap-1.5 transition">
             <span>🍳</span>
             <span>Open Dedicated Kitchen KDS ↗</span>
           </a>
@@ -519,14 +519,14 @@
         <div class="flex items-center gap-3">
           <span class="text-3xl">🍳</span>
           <div>
-            <h3 class="font-display font-black text-slate-900 text-sm sm:text-base">Dedicated Kitchen KDS Station</h3>
+            <h3 class="font-display font-black text-[#2a1a0e] text-sm sm:text-base">Dedicated Kitchen KDS Station</h3>
             <p class="text-xs text-slate-600">
               For kitchen tablets and chef wall screens, open the dedicated full-screen Kitchen Station. Preparation status updates are handled from there to prevent billing conflicts.
             </p>
           </div>
         </div>
         <a id="btnOpenDedicatedKdsTabBanner" href="/kds.html" target="_blank"
-           class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-xs shadow-md shadow-amber-500/25 flex items-center gap-1.5 shrink-0 justify-center">
+           class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-display font-black text-xs shadow-md shadow-amber-500/25 flex items-center gap-1.5 shrink-0 justify-center">
           <span>🍳</span>
           <span>Launch Kitchen KDS Screen ↗</span>
         </a>
@@ -534,7 +534,7 @@
 
       <!-- Order Type Filters (Dine-in / Takeaway / Delivery) -->
       <div class="flex items-center gap-2 overflow-x-auto text-xs font-bold no-scrollbar py-1">
-        <button onclick="setKitchenFilter('all')" id="kfilter-all" class="shrink-0 px-3.5 py-1.5 rounded-xl bg-slate-900 text-white shadow-sm">All Tickets</button>
+        <button onclick="setKitchenFilter('all')" id="kfilter-all" class="shrink-0 px-3.5 py-1.5 rounded-xl bg-[#d4621a] text-white font-black shadow-sm">All Tickets</button>
         <button onclick="setKitchenFilter('dinein')" id="kfilter-dinein" class="shrink-0 px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50">🍽️ Dine-In</button>
         <button onclick="setKitchenFilter('takeaway')" id="kfilter-takeaway" class="shrink-0 px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50">🥡 Takeaway</button>
         <button onclick="setKitchenFilter('delivery')" id="kfilter-delivery" class="shrink-0 px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50">🛵 Delivery</button>
@@ -564,7 +564,7 @@
       
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 class="text-lg sm:text-xl font-extrabold text-slate-900">Menu & Stock Availability</h2>
+          <h2 class="text-lg sm:text-xl font-extrabold text-[#2a1a0e]">Menu & Stock Availability</h2>
           <p class="text-xs text-slate-500">Toggle sold out items in real-time. Instantly updates customer phone menus.</p>
         </div>
         <button onclick="openAddDishModal()" class="self-start sm:self-auto px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-md transition">
@@ -599,7 +599,7 @@
       
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 class="text-lg sm:text-xl font-extrabold text-slate-900 font-display">Customer CRM & Loyalty Rewards</h2>
+          <h2 class="text-lg sm:text-xl font-extrabold text-[#2a1a0e] font-display">Customer CRM & Loyalty Rewards</h2>
           <p class="text-xs text-slate-500">Track guest visit frequency, lifetime spend, and send 1-tap WhatsApp coupons & bills.</p>
         </div>
         <div class="flex items-center gap-2">
@@ -613,8 +613,8 @@
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <div class="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm">
           <span class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Registered Guests</span>
-          <p class="text-2xl sm:text-3xl font-black text-slate-900 font-display truncate" id="crmMetricTotal">0</p>
-          <p class="text-[10px] sm:text-[11px] text-sky-600 font-bold mt-1">NFC Table records</p>
+          <p class="text-2xl sm:text-3xl font-black text-[#2a1a0e] font-display truncate" id="crmMetricTotal">0</p>
+          <p class="text-[10px] sm:text-[11px] text-[#d4621a] font-bold mt-1">NFC Table records</p>
         </div>
         <div class="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm">
           <span class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Loyalty Coins</span>
@@ -637,11 +637,11 @@
       <div class="bg-white p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
         <div class="relative w-full sm:w-80">
           <input type="text" id="crmSearchInput" oninput="filterCrmTable()" placeholder="Search guest name or phone..."
-            class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-sky-400">
+            class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#d4621a]">
           <span class="absolute left-3 top-3 text-xs text-slate-400">🔍</span>
         </div>
         <div class="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto no-scrollbar text-xs font-bold py-1">
-          <button onclick="setCrmTierFilter('all')" id="crmFilter-all" class="shrink-0 px-3 py-1.5 rounded-xl bg-slate-900 text-white font-black">All Guests</button>
+          <button onclick="setCrmTierFilter('all')" id="crmFilter-all" class="shrink-0 px-3 py-1.5 rounded-xl bg-[#d4621a] text-white font-black font-black">All Guests</button>
           <button onclick="setCrmTierFilter('vip')" id="crmFilter-vip" class="shrink-0 px-3 py-1.5 rounded-xl text-slate-600 hover:bg-slate-100">👑 Gold VIP</button>
           <button onclick="setCrmTierFilter('regular')" id="crmFilter-regular" class="shrink-0 px-3 py-1.5 rounded-xl text-slate-600 hover:bg-slate-100">⭐ Regular</button>
         </div>
@@ -676,11 +676,11 @@
       
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 class="text-lg sm:text-xl font-extrabold text-slate-900 font-display">Business Analytics & Peak Sales Reports</h2>
+          <h2 class="text-lg sm:text-xl font-extrabold text-[#2a1a0e] font-display">Business Analytics & Peak Sales Reports</h2>
           <p class="text-xs text-slate-500">Live revenue breakdown, top best-selling dishes, peak dining rush, and official Z-Report.</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <button onclick="printZReport()" class="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5 active:scale-95">
+          <button onclick="printZReport()" class="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-[#2a1a0e] hover:bg-[#352112] text-white font-extrabold text-xs shadow-md transition flex items-center gap-1.5 active:scale-95">
             <span>🖨️</span> Print Z-Report
           </button>
           <button onclick="exportCsv()" class="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 font-extrabold text-xs transition flex items-center gap-1.5">
@@ -694,7 +694,7 @@
         
         <div class="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm">
           <span class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Gross Sales</span>
-          <p class="text-2xl sm:text-3xl font-black text-slate-900 font-display truncate">₹<span id="anaMetricGross">0</span></p>
+          <p class="text-2xl sm:text-3xl font-black text-[#2a1a0e] font-display truncate">₹<span id="anaMetricGross">0</span></p>
           <p class="text-[10px] sm:text-[11px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
             <span>Real-time Settled</span>
@@ -729,7 +729,7 @@
 
           <!-- Payment Methods Breakdown -->
           <div class="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <h3 class="font-black text-slate-900 text-sm font-display flex items-center justify-between">
+            <h3 class="font-black text-[#2a1a0e] text-sm font-display flex items-center justify-between">
               <span>💳 Payment Channels</span>
               <span class="text-xs text-slate-400 font-normal">Real-time collections</span>
             </h3>
@@ -738,7 +738,7 @@
               <div>
                 <div class="flex justify-between font-bold mb-1">
                   <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Online UPI / QR</span>
-                  <span class="text-slate-900 font-black">₹<span id="anaPayUpi">0</span> (<span id="anaPayUpiPct">0%</span>)</span>
+                  <span class="text-[#2a1a0e] font-black">₹<span id="anaPayUpi">0</span> (<span id="anaPayUpiPct">0%</span>)</span>
                 </div>
                 <div class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
                   <div id="anaPayUpiBar" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 0%"></div>
@@ -748,7 +748,7 @@
               <div>
                 <div class="flex justify-between font-bold mb-1">
                   <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Cash Counter</span>
-                  <span class="text-slate-900 font-black">₹<span id="anaPayCash">0</span> (<span id="anaPayCashPct">0%</span>)</span>
+                  <span class="text-[#2a1a0e] font-black">₹<span id="anaPayCash">0</span> (<span id="anaPayCashPct">0%</span>)</span>
                 </div>
                 <div class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
                   <div id="anaPayCashBar" class="h-full bg-amber-500 rounded-full transition-all duration-500" style="width: 0%"></div>
@@ -757,11 +757,11 @@
 
               <div>
                 <div class="flex justify-between font-bold mb-1">
-                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Card / Razorpay</span>
-                  <span class="text-slate-900 font-black">₹<span id="anaPayCard">0</span> (<span id="anaPayCardPct">0%</span>)</span>
+                  <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#d4621a]"></span> Card / Razorpay</span>
+                  <span class="text-[#2a1a0e] font-black">₹<span id="anaPayCard">0</span> (<span id="anaPayCardPct">0%</span>)</span>
                 </div>
                 <div class="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
-                  <div id="anaPayCardBar" class="h-full bg-sky-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                  <div id="anaPayCardBar" class="h-full bg-[#d4621a] rounded-full transition-all duration-500" style="width: 0%"></div>
                 </div>
               </div>
             </div>
@@ -769,7 +769,7 @@
 
           <!-- Peak Hourly Dining Rush -->
           <div class="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
-            <h3 class="font-black text-slate-900 text-sm font-display flex items-center justify-between">
+            <h3 class="font-black text-[#2a1a0e] text-sm font-display flex items-center justify-between">
               <span>⏰ Peak Dining Rush</span>
               <span class="text-xs text-slate-400 font-normal">Table turn volume</span>
             </h3>
@@ -777,7 +777,7 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
               <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
                 <span class="text-lg">🌅</span>
-                <p class="font-black text-slate-900 text-sm" id="rushMorningCount">0</p>
+                <p class="font-black text-[#2a1a0e] text-sm" id="rushMorningCount">0</p>
                 <p class="text-[10px] text-slate-500 font-semibold">Morning<br>8AM - 12PM</p>
               </div>
               <div class="p-3 rounded-2xl bg-amber-50/80 border border-amber-200 space-y-1">
@@ -787,7 +787,7 @@
               </div>
               <div class="p-3 rounded-2xl bg-slate-50 border border-slate-100 space-y-1">
                 <span class="text-lg">☕</span>
-                <p class="font-black text-slate-900 text-sm" id="rushSnacksCount">0</p>
+                <p class="font-black text-[#2a1a0e] text-sm" id="rushSnacksCount">0</p>
                 <p class="text-[10px] text-slate-500 font-semibold">Tea & Snacks<br>4PM - 7PM</p>
               </div>
               <div class="p-3 rounded-2xl bg-rose-50/80 border border-rose-200 space-y-1">
@@ -804,7 +804,7 @@
         <div class="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm space-y-4">
           <div class="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
-              <h3 class="font-black text-slate-900 text-sm font-display">🏆 Top 5 Best-Selling Dishes</h3>
+              <h3 class="font-black text-[#2a1a0e] text-sm font-display">🏆 Top 5 Best-Selling Dishes</h3>
               <p class="text-[11px] text-slate-400">Ranked by plates sold & revenue earned</p>
             </div>
             <span class="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-black">Best Sellers</span>
@@ -822,12 +822,12 @@
   </main>
 
   <!-- Bill Settlement Modal (POS) -->
-  <div id="settleModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+  <div id="settleModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
           <span class="text-[10px] sm:text-[11px] font-bold text-brand-600 tracking-wider uppercase">Billing & Settle</span>
-          <h3 id="settleTitle" class="font-black text-slate-900 text-base sm:text-lg">Table 2 • Bill Settlement</h3>
+          <h3 id="settleTitle" class="font-black text-[#2a1a0e] text-base sm:text-lg">Table 2 • Bill Settlement</h3>
         </div>
         <button onclick="closeSettleModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 font-bold text-slate-600">✕</button>
       </div>
@@ -840,13 +840,13 @@
         <div class="pt-2 border-t border-slate-200 space-y-1">
           <div class="flex justify-between text-slate-600">
             <span>Subtotal:</span>
-            <span class="font-bold text-slate-900">₹<span id="settleSubtotal">0</span></span>
+            <span class="font-bold text-[#2a1a0e]">₹<span id="settleSubtotal">0</span></span>
           </div>
           <div class="flex justify-between text-slate-600">
             <span>GST (5%):</span>
-            <span class="font-bold text-slate-900">₹<span id="settleGst">0</span></span>
+            <span class="font-bold text-[#2a1a0e]">₹<span id="settleGst">0</span></span>
           </div>
-          <div class="flex justify-between text-sm font-extrabold text-slate-900 pt-1 border-t border-slate-200">
+          <div class="flex justify-between text-sm font-extrabold text-[#2a1a0e] pt-1 border-t border-slate-200">
             <span>Grand Total:</span>
             <span class="text-brand-600 text-base">₹<span id="settleTotal">0</span></span>
           </div>
@@ -897,13 +897,13 @@
   </div>
 
   <!-- POS Quick Add Dish / Water Bottle Modal (Punches KOT to Active Table) -->
-  <div id="posQuickAddModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+  <div id="posQuickAddModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div class="flex items-center gap-2">
           <span class="text-xl">➕</span>
           <div>
-            <h3 class="font-extrabold text-slate-900 text-base" id="posQuickAddTitle">Table 1 • Quick Add Item (KOT)</h3>
+            <h3 class="font-extrabold text-[#2a1a0e] text-base" id="posQuickAddTitle">Table 1 • Quick Add Item (KOT)</h3>
             <p class="text-[11px] text-slate-500 font-medium">Add dishes, rotis, or mineral water directly to table's bill</p>
           </div>
         </div>
@@ -919,10 +919,10 @@
           <button type="button" onclick="quickPunchItemByName('Packaged Mineral Water Bottle')" class="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 font-bold hover:bg-amber-200 shrink-0">
             🍾 + Mineral Water (₹20)
           </button>
-          <button type="button" onclick="quickPunchItemByName('Roti')" class="px-2.5 py-1 rounded-lg bg-sky-100 text-sky-900 font-bold hover:bg-sky-200 shrink-0">
+          <button type="button" onclick="quickPunchItemByName('Roti')" class="px-2.5 py-1 rounded-lg bg-[#fef3e2] text-[#d4621a] border border-[#f4ae52]/30 text-[#2a1a0e] font-bold hover:bg-[#fce3c0] shrink-0">
             🫓 + Roti
           </button>
-          <button type="button" onclick="quickPunchItemByName('Naan')" class="px-2.5 py-1 rounded-lg bg-sky-100 text-sky-900 font-bold hover:bg-sky-200 shrink-0">
+          <button type="button" onclick="quickPunchItemByName('Naan')" class="px-2.5 py-1 rounded-lg bg-[#fef3e2] text-[#d4621a] border border-[#f4ae52]/30 text-[#2a1a0e] font-bold hover:bg-[#fce3c0] shrink-0">
             🫓 + Naan
           </button>
         </div>
@@ -943,10 +943,10 @@
   </div>
 
   <!-- Add Dish Modal -->
-  <div id="addDishModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+  <div id="addDishModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 class="font-extrabold text-slate-900 text-base">Add New Menu Dish</h3>
+        <h3 class="font-extrabold text-[#2a1a0e] text-base">Add New Menu Dish</h3>
         <button onclick="closeAddDishModal()" class="w-8 h-8 rounded-full bg-slate-100 font-bold text-slate-600">✕</button>
       </div>
 
@@ -1054,10 +1054,10 @@
   </div>
 
   <!-- Table Reservation Modal -->
-  <div id="reserveTableModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+  <div id="reserveTableModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white rounded-2xl sm:rounded-3xl max-w-sm w-full p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 class="font-black text-slate-900 text-base" id="reserveModalTitle">Reserve Table</h3>
+        <h3 class="font-black text-[#2a1a0e] text-base" id="reserveModalTitle">Reserve Table</h3>
         <button onclick="closeReserveModal()" class="w-8 h-8 rounded-full bg-slate-100 font-bold text-slate-600">✕</button>
       </div>
       <form onsubmit="handleReserveSubmit(event)" class="space-y-3 text-xs">
@@ -1084,12 +1084,12 @@
   </div>
 
   <!-- Table Transfer / Shift Order Modal -->
-  <div id="transferTableModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+  <div id="transferTableModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white rounded-2xl sm:rounded-3xl max-w-sm w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-fade-in max-h-[92vh] overflow-y-auto">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
-          <span class="text-[10px] font-black uppercase text-sky-600 tracking-wider">Floor Operations</span>
-          <h3 class="font-black text-slate-900 text-base font-display" id="transferModalTitle">Shift / Move Table</h3>
+          <span class="text-[10px] font-black uppercase text-[#d4621a] tracking-wider">Floor Operations</span>
+          <h3 class="font-black text-[#2a1a0e] text-base font-display" id="transferModalTitle">Shift / Move Table</h3>
         </div>
         <button onclick="closeTransferModal()" class="w-8 h-8 rounded-full bg-slate-100 font-bold text-slate-600">✕</button>
       </div>
@@ -1097,13 +1097,13 @@
       
       <div>
         <label class="block font-bold text-slate-700 text-xs mb-1.5">Select Destination Table:</label>
-        <select id="transferTargetTableSelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-sky-400">
+        <select id="transferTargetTableSelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#d4621a]">
           <!-- Injected by JS -->
         </select>
       </div>
 
       <div class="pt-2 flex gap-2">
-        <button type="button" onclick="confirmTableTransfer()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-sky-500 to-[#0284c7] hover:from-sky-400 hover:to-sky-500 text-white font-black text-xs shadow-md shadow-sky-500/25 transition active:scale-95">
+        <button type="button" onclick="confirmTableTransfer()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#d4621a] to-[#f4ae52] hover:from-[#b04913] hover:to-[#d4621a] text-white font-black text-xs shadow-md shadow-[#d4621a]/25 transition active:scale-95">
           🔀 Confirm & Move Order
         </button>
         <button type="button" onclick="closeTransferModal()" class="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs">
@@ -1114,18 +1114,18 @@
   </div>
 
   <!-- Staff POS Security Lock Gate Modal (Stage 3 Staff PIN Protection) -->
-  <div id="staffSecurityGateModal" class="hidden fixed inset-0 z-50 bg-[#0a192f]/95 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4">
-    <div class="bg-slate-900 border border-sky-500/30 rounded-2xl sm:rounded-3xl max-w-md w-full p-5 sm:p-8 shadow-2xl space-y-5 sm:space-y-6 text-center text-white relative overflow-hidden max-h-[94vh] overflow-y-auto">
+  <div id="staffSecurityGateModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/95 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white border-2 border-[#d4621a] rounded-2xl sm:rounded-3xl max-w-md w-full p-5 sm:p-8 shadow-2xl space-y-5 sm:space-y-6 text-center text-[#2a1a0e] relative overflow-hidden max-h-[94vh] overflow-y-auto">
       
-      <div class="absolute -top-20 -right-20 w-40 h-40 bg-sky-500/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -top-20 -right-20 w-40 h-40 bg-[#d4621a]/20 rounded-full blur-3xl pointer-events-none"></div>
 
-      <div class="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-3xl bg-gradient-to-tr from-sky-400 to-[#0a192f] border border-sky-400/40 flex items-center justify-center text-2xl sm:text-3xl shadow-xl shadow-sky-500/30">
+      <div class="w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-3xl bg-gradient-to-tr from-[#d4621a] to-[#f4ae52] border border-[#f4ae52]/40 flex items-center justify-center text-2xl sm:text-3xl text-white shadow-xl shadow-[#d4621a]/30">
         🔒
       </div>
 
       <div>
         <span id="gateRestPill" class="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-amber-300 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">👑 Cashier & Billing Counter POS</span>
-        <h2 id="gateRestTitle" class="text-xl sm:text-2xl font-black text-white mt-2">Cashier Login Required</h2>
+        <h2 id="gateRestTitle" class="text-xl sm:text-2xl font-black text-[#2a1a0e] mt-2">Cashier Login Required</h2>
         <p class="text-xs text-slate-400 mt-1.5 leading-relaxed">
           Enter your Cashier / Manager PIN to unlock billing, floor tables, and financial ledger. Kitchen staff cannot access this station.
         </p>
@@ -1133,19 +1133,18 @@
 
       <form id="staffGateForm" onsubmit="handleStaffPinSubmit(event)" class="space-y-4">
         <div>
-          <input type="password" id="staffPinInput" autocomplete="off" maxlength="8" placeholder="••••" required autofocus
-            class="w-full text-center tracking-[0.5em] text-2xl font-mono py-3 sm:py-3.5 px-4 rounded-2xl bg-slate-800 border-2 border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/20 text-white outline-none transition">
+          <input type="password" id="staffPinInput" autocomplete="off" maxlength="8" placeholder="••••" required autofocus class="w-full text-center tracking-[0.5em] text-2xl font-mono py-3 sm:py-3.5 px-4 rounded-2xl bg-[#fef9f2] border-2 border-[#ede3d8] focus:border-[#d4621a] focus:ring-4 focus:ring-[#f4ae52]/20 text-[#2a1a0e] outline-none transition">
           <p id="staffGateErrorMsg" class="hidden text-rose-400 text-xs font-bold mt-2">❌ Incorrect Cashier PIN. Please check and try again.</p>
         </div>
 
-        <button type="submit" id="btnUnlockStaff" class="w-full py-3 sm:py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs sm:text-sm shadow-xl shadow-amber-400/25 transition flex items-center justify-center gap-2 active:scale-98">
+        <button type="submit" id="btnUnlockStaff" class="w-full py-3 sm:py-3.5 rounded-2xl bg-gradient-to-r from-[#d4621a] to-[#f4ae52] hover:from-[#b04913] hover:to-[#d4621a] text-white font-black text-xs sm:text-sm shadow-xl shadow-[#d4621a]/25 transition flex items-center justify-center gap-2 active:scale-98">
           <span>🔓</span>
           <span>Unlock Billing Counter</span>
         </button>
 
         <div class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-800">
           <span class="text-slate-400 text-[10px]">Restricted Cashier & Manager POS</span>
-          <a href="/login.html" class="text-sky-400 hover:underline">Switch Restaurant ➔</a>
+          <a href="/login.html" class="text-[#d4621a] hover:underline">Switch Restaurant ➔</a>
         </div>
         <div class="pt-2 text-center">
           <a id="linkGoToKds" href="/kds.html" class="inline-flex items-center gap-1.5 text-xs text-amber-400/90 hover:text-amber-300 hover:underline">
@@ -1158,7 +1157,7 @@
   </div>
 
   <!-- Real Payment Gateway & Merchant UPI Setup Modal -->
-  <div id="paymentGatewayModal" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+  <div id="paymentGatewayModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-7 shadow-2xl space-y-4 sm:space-y-5 animate-fade-in max-h-[92vh] overflow-y-auto">
       
       <!-- Modal Header -->
@@ -1168,7 +1167,7 @@
             💳
           </div>
           <div>
-            <h3 class="font-black text-slate-900 text-base font-display">Real Payment Gateway & UPI Setup</h3>
+            <h3 class="font-black text-[#2a1a0e] text-base font-display">Real Payment Gateway & UPI Setup</h3>
             <p class="text-xs text-slate-500">Receive real money directly into your restaurant's bank account.</p>
           </div>
         </div>
@@ -1192,14 +1191,14 @@
             Enter your PhonePe, Google Pay, Paytm, or BHIM merchant VPA. Customer payments land directly in your bank:
           </p>
           <input type="text" id="pgUpiVpaInp" required placeholder="E.g., pawancafe@okhdfcbank or 9876543210@paytm" oninput="updateTestQrPreview()"
-            class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-emerald-300 font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+            class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-emerald-300 font-mono text-xs font-bold text-[#2a1a0e] focus:outline-none focus:ring-2 focus:ring-emerald-400">
         </div>
 
         <!-- 2. Payee / Business Display Name -->
         <div>
           <label class="block font-bold text-slate-700 mb-1">2. Business / Payee Display Name *</label>
           <input type="text" id="pgMerchantNameInp" required placeholder="E.g., Pawan Bistro & Cafe" oninput="updateTestQrPreview()"
-            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-400">
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-[#2a1a0e] focus:outline-none focus:ring-2 focus:ring-[#d4621a]">
           <p class="text-[10px] text-slate-400 mt-1">Appears on the guest's Google Pay / PhonePe screen as the verified shop name.</p>
         </div>
 
@@ -1210,14 +1209,14 @@
             <label class="p-3 rounded-2xl border-2 border-emerald-300 bg-emerald-50/50 flex items-center gap-2 cursor-pointer">
               <input type="radio" name="pgMode" value="upi_dynamic" checked class="text-emerald-600 focus:ring-emerald-500">
               <div>
-                <p class="font-extrabold text-xs text-slate-900">Direct UPI / QR</p>
+                <p class="font-extrabold text-xs text-[#2a1a0e]">Direct UPI / QR</p>
                 <p class="text-[10px] text-emerald-700 font-semibold">0% MDR, Instant to Bank</p>
               </div>
             </label>
-            <label class="p-3 rounded-2xl border-2 border-slate-200 hover:border-sky-300 bg-white flex items-center gap-2 cursor-pointer">
-              <input type="radio" name="pgMode" value="razorpay" class="text-sky-600 focus:ring-sky-500">
+            <label class="p-3 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] bg-white flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="pgMode" value="razorpay" class="text-[#d4621a] focus:ring-[#d4621a]">
               <div>
-                <p class="font-extrabold text-xs text-slate-900">Razorpay Gateway</p>
+                <p class="font-extrabold text-xs text-[#2a1a0e]">Razorpay Gateway</p>
                 <p class="text-[10px] text-slate-500 font-semibold">Cards, NetBanking & UPI</p>
               </div>
             </label>
@@ -1245,12 +1244,12 @@
         </div>
 
         <!-- 5. Live Test QR Preview -->
-        <div class="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between gap-4">
+        <div class="p-4 rounded-2xl bg-[#d4621a] text-white font-black flex items-center justify-between gap-4">
           <div class="space-y-1">
             <span class="text-[10px] font-black uppercase text-emerald-400 tracking-wider">Live Scannable QR Preview</span>
             <p class="text-xs font-bold text-slate-200" id="pgPreviewMerchant">TipTap Bistro</p>
             <p class="text-[10px] font-mono text-slate-400" id="pgPreviewVpa">tiptap.merchant@icici</p>
-            <p class="text-[10px] text-sky-300">Scan this right now with GPay or PhonePe to test!</p>
+            <p class="text-[10px] text-[#f4ae52]">Scan this right now with GPay or PhonePe to test!</p>
           </div>
           <div class="w-24 h-24 p-1.5 bg-white rounded-2xl shadow-md shrink-0 flex items-center justify-center">
             <img id="pgPreviewQrImg" src="" alt="Test QR" class="w-full h-full object-contain">
@@ -1308,7 +1307,7 @@
 
   <!-- Real-Time Online Payment Alert Banner (Cha-Ching Toast) -->
   <div id="paymentAlertToast" class="fixed top-20 right-6 z-50 pointer-events-none transition-all duration-500 opacity-0 transform translate-y-4 max-w-md">
-    <div class="bg-gradient-to-r from-[#06101e] to-[#0a192f] text-white p-4 rounded-2xl shadow-2xl border-2 border-emerald-400/80 flex items-center gap-4">
+    <div class="bg-gradient-to-r from-[#2a1a0e] to-[#352112] text-white p-4 rounded-2xl shadow-2xl border-2 border-emerald-400/80 flex items-center gap-4">
       <div class="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl font-black border border-emerald-400/40 animate-bounce">
         💰
       </div>
@@ -1318,7 +1317,7 @@
           <span class="text-[10px] bg-emerald-500/30 text-emerald-300 font-mono px-2 py-0.5 rounded-full" id="paymentToastTxn">TXN_123</span>
         </div>
         <p class="font-display font-black text-sm text-white" id="paymentToastMsg">Table 2 settled ₹480 via UPI</p>
-        <p class="text-[10px] text-sky-200/70">Ledger & Table status updated automatically</p>
+        <p class="text-[10px] text-[#fef3e2]/75/70">Ledger & Table status updated automatically</p>
       </div>
     </div>
   </div>
@@ -1443,10 +1442,10 @@
       const btnHi = document.getElementById('sbLang-hi');
       const btnEn = document.getElementById('sbLang-en');
       if (lang === 'hi-IN') {
-        if (btnHi) btnHi.className = 'py-1 rounded-lg bg-sky-500 text-slate-950 font-black';
+        if (btnHi) btnHi.className = 'py-1 rounded-lg bg-[#d4621a] text-white font-black';
         if (btnEn) btnEn.className = 'py-1 rounded-lg text-slate-300 hover:text-white';
       } else {
-        if (btnEn) btnEn.className = 'py-1 rounded-lg bg-sky-500 text-slate-950 font-black';
+        if (btnEn) btnEn.className = 'py-1 rounded-lg bg-[#d4621a] text-white font-black';
         if (btnHi) btnHi.className = 'py-1 rounded-lg text-slate-300 hover:text-white';
       }
     }
@@ -1496,7 +1495,7 @@
       const mSound = document.getElementById('mSoundStatus');
       if (mSound) {
         mSound.innerText = soundEnabled ? 'ON' : 'OFF';
-        mSound.className = soundEnabled ? 'text-sky-300' : 'text-slate-500';
+        mSound.className = soundEnabled ? 'text-[#f4ae52]' : 'text-slate-500';
       }
     }
 
@@ -1534,7 +1533,7 @@
         const btn = document.getElementById(`secFilter-${s}`);
         if (btn) {
           if (s === sec) {
-            btn.className = 'px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-black shadow-xs shrink-0';
+            btn.className = 'px-3.5 py-1.5 rounded-xl bg-[#d4621a] text-white font-black font-black shadow-xs shrink-0';
           } else {
             btn.className = 'px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 shrink-0';
           }
@@ -1705,12 +1704,12 @@
         }
 
         return `
-          <div onclick="handleTableCardClick(${table.id}, ${order ? `'${order.id}'` : 'null'})" class="p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border-2 ${bg} shadow-sm space-y-2.5 sm:space-y-3 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:border-sky-400 group cursor-pointer overflow-hidden active:scale-[0.99]">
+          <div onclick="handleTableCardClick(${table.id}, ${order ? `'${order.id}'` : 'null'})" class="p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border-2 ${bg} shadow-sm space-y-2.5 sm:space-y-3 flex flex-col justify-between transition-all duration-300 hover:shadow-xl hover:border-[#d4621a] group cursor-pointer overflow-hidden active:scale-[0.99]">
             <div class="space-y-2">
               <div class="flex items-center justify-between pb-2 border-b border-slate-100 gap-1.5">
                 <div class="flex items-center gap-1.5 sm:gap-2 min-w-0">
                   <span class="w-2.5 h-2.5 rounded-full shrink-0 ${statusDot}"></span>
-                  <span class="font-display font-black text-slate-900 group-hover:text-sky-600 transition-colors text-base sm:text-xl tracking-tight truncate">${table.name}</span>
+                  <span class="font-display font-black text-[#2a1a0e] group-hover:text-[#d4621a] transition-colors text-base sm:text-xl tracking-tight truncate">${table.name}</span>
                 </div>
                 <span class="text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${badgeColor}">
                   ${statusText}
@@ -1730,16 +1729,16 @@
               ` : ''}
 
               ${order ? `
-                <div class="mt-2 p-2.5 sm:p-3 rounded-2xl ${(order.isPaid || order.paymentStatus === 'paid') ? 'bg-emerald-50/90 border border-emerald-300' : 'bg-sky-50/80 border border-sky-200/80'} space-y-1">
+                <div class="mt-2 p-2.5 sm:p-3 rounded-2xl ${(order.isPaid || order.paymentStatus === 'paid') ? 'bg-emerald-50/90 border border-emerald-300' : 'bg-[#fef9f2] border border-[#ede3d8]'} space-y-1">
                   <div class="flex items-center justify-between gap-1">
                     <span class="text-[11px] sm:text-xs font-bold ${(order.isPaid || order.paymentStatus === 'paid') ? 'text-emerald-800' : 'text-slate-500'}">
                       ${(order.isPaid || order.paymentStatus === 'paid') ? '🟢 Paid Online:' : 'Bill:'}
                     </span>
-                    <span class="font-display font-black text-lg sm:text-2xl ${(order.isPaid || order.paymentStatus === 'paid') ? 'text-emerald-900' : 'text-[#0a192f]'}">₹${order.total}</span>
+                    <span class="font-display font-black text-lg sm:text-2xl ${(order.isPaid || order.paymentStatus === 'paid') ? 'text-emerald-900' : 'text-[#2a1a0e]'}">₹${order.total}</span>
                   </div>
                   <div class="flex items-center justify-between text-[10px] sm:text-[11px] font-bold text-slate-600 gap-1 flex-wrap">
                     <span>${order.items.length} items</span>
-                    <span class="uppercase text-[9px] px-1.5 py-0.5 rounded-md font-black shrink-0 ${(order.isPaid || order.paymentStatus === 'paid') ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-sky-100 text-sky-700 border border-sky-300'}">
+                    <span class="uppercase text-[9px] px-1.5 py-0.5 rounded-md font-black shrink-0 ${(order.isPaid || order.paymentStatus === 'paid') ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-[#fef3e2] text-[#d4621a] border border-[#f4ae52]/40'}">
                       ${(order.isPaid || order.paymentStatus === 'paid') ? 'PAID • ' : ''}${order.kitchenStatus || order.status}
                     </span>
                   </div>
@@ -1750,10 +1749,10 @@
             <div class="pt-2 flex flex-col gap-1.5" onclick="event.stopPropagation()">
               ${order ? `
                 <div class="grid grid-cols-2 gap-1.5 sm:gap-2">
-                  <button onclick="event.stopPropagation(); openTransferTableModal(${table.id})" class="py-2 px-1 rounded-xl border border-sky-300 hover:border-sky-500 hover:bg-sky-50 text-[11px] sm:text-xs font-black text-sky-800 transition flex items-center justify-center gap-1 shadow-xs">
+                  <button onclick="event.stopPropagation(); openTransferTableModal(${table.id})" class="py-2 px-1 rounded-xl border border-[#ede3d8] hover:border-[#d4621a] hover:bg-[#fef9f2] text-[11px] sm:text-xs font-black text-[#2a1a0e] transition flex items-center justify-center gap-1 shadow-xs">
                     <span>🔀</span> <span class="truncate">Shift</span>
                   </button>
-                  <button onclick="event.stopPropagation(); openSettleModal('${order.id}')" class="py-2 px-1 rounded-xl ${(order.isPaid || order.paymentStatus === 'paid') ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white shadow-emerald-500/25' : 'bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 shadow-sky-400/25'} font-display font-black text-[11px] sm:text-xs shadow-md transition active:scale-95 flex items-center justify-center gap-1">
+                  <button onclick="event.stopPropagation(); openSettleModal('${order.id}')" class="py-2 px-1 rounded-xl ${(order.isPaid || order.paymentStatus === 'paid') ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white shadow-emerald-500/25' : 'bg-gradient-to-r from-[#d4621a] to-[#f4ae52] text-white font-black hover:from-[#b04913] hover:to-[#d4621a] text-white shadow-[#d4621a]/25'} font-display font-black text-[11px] sm:text-xs shadow-md transition active:scale-95 flex items-center justify-center gap-1">
                     <span>${(order.isPaid || order.paymentStatus === 'paid') ? '✓' : '💳'}</span> <span class="truncate">${(order.isPaid || order.paymentStatus === 'paid') ? 'Paid Bill' : 'Settle'}</span>
                   </button>
                 </div>
@@ -1769,7 +1768,7 @@
                   <button onclick="event.stopPropagation(); openReserveModal(${table.id})" class="py-2 px-1 rounded-xl border border-purple-200 hover:bg-purple-50 text-[11px] sm:text-xs font-bold text-purple-700 transition truncate">
                     📅 Reserve
                   </button>
-                  <button onclick="event.stopPropagation(); setTableStatus(${table.id}, '${table.status === 'cleaning' ? 'free' : 'cleaning'}')" class="py-2 px-1 rounded-xl border border-slate-200 hover:bg-sky-50 text-[11px] sm:text-xs font-bold text-slate-700 transition truncate">
+                  <button onclick="event.stopPropagation(); setTableStatus(${table.id}, '${table.status === 'cleaning' ? 'free' : 'cleaning'}')" class="py-2 px-1 rounded-xl border border-slate-200 hover:bg-[#fef9f2] text-[11px] sm:text-xs font-bold text-slate-700 transition truncate">
                     ${table.status === 'cleaning' ? '✓ Free' : '🧹 Clean'}
                   </button>
                 </div>
@@ -1834,7 +1833,7 @@
           `;
         } else if (kStatus === 'preparing') {
           statusBadge = `
-            <span class="px-2.5 py-1 rounded-full text-xs font-black bg-sky-100 text-sky-900 border border-sky-300 inline-flex items-center gap-1.5">
+            <span class="px-2.5 py-1 rounded-full text-xs font-black bg-[#fef3e2] text-[#d4621a] border border-[#f4ae52]/40 inline-flex items-center gap-1.5">
               <span>🍳</span> <span>Cooking in Kitchen</span>
             </span>
           `;
@@ -1857,11 +1856,11 @@
           : `<span class="px-2.5 py-1 rounded-full text-xs font-black bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-1"><span>⏳</span> <span>BILL UNPAID</span></span>`;
 
         return `
-          <div class="p-4 sm:p-5 rounded-2xl border-2 border-slate-200 bg-white shadow-xs hover:border-sky-300 transition-all space-y-3">
+          <div class="p-4 sm:p-5 rounded-2xl border-2 border-slate-200 bg-white shadow-xs hover:border-[#d4621a] transition-all space-y-3">
             
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
               <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-display font-black text-slate-900 text-lg sm:text-xl">${order.tableName}</span>
+                <span class="font-display font-black text-[#2a1a0e] text-lg sm:text-xl">${order.tableName}</span>
                 <span class="font-mono text-xs text-slate-400">#${order.id}</span>
                 <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${order.orderType === 'takeaway' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-brand-50 text-brand-700 border border-brand-200'}">
                   ${order.orderType === 'takeaway' ? '🥡 Takeaway' : '🍽️ Dine-In'}
@@ -1878,13 +1877,13 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 py-1">
               ${(order.items || []).map(i => `
                 <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs flex items-start gap-2.5">
-                  <span class="w-6 h-6 rounded-lg bg-slate-900 text-white font-mono font-black text-xs flex items-center justify-center shrink-0">
+                  <span class="w-6 h-6 rounded-lg bg-[#d4621a] text-white font-black font-mono font-black text-xs flex items-center justify-center shrink-0">
                     ${i.qty}x
                   </span>
                   <div class="flex-1 min-w-0">
-                    <p class="font-bold text-slate-900 truncate">${i.name}</p>
+                    <p class="font-bold text-[#2a1a0e] truncate">${i.name}</p>
                     <div class="flex items-center gap-1.5 mt-0.5 flex-wrap text-[10px]">
-                      ${i.variant ? `<span class="text-sky-700 font-bold bg-sky-50 px-1.5 py-0.2 rounded border border-sky-200">${i.variant}</span>` : ''}
+                      ${i.variant ? `<span class="text-[#d4621a] font-bold bg-[#fef3e2] px-1.5 py-0.5 rounded border border-[#f4ae52]/30">${i.variant}</span>` : ''}
                       ${(i.addons && i.addons.length) ? `<span class="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">${i.addons.join(', ')}</span>` : ''}
                       <span class="text-slate-500 font-mono font-semibold">₹${i.itemTotal}</span>
                     </div>
@@ -1908,12 +1907,12 @@
               </div>
 
               <div class="w-full sm:w-auto flex flex-wrap items-center justify-between sm:justify-end gap-2">
-                <span class="font-display font-black text-slate-900 text-base sm:text-lg">Total: ₹${order.total}</span>
+                <span class="font-display font-black text-[#2a1a0e] text-base sm:text-lg">Total: ₹${order.total}</span>
                 <div class="flex items-center gap-2">
                   <button onclick="printKOT('${order.id}')" class="px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs" title="Print Kitchen Slip">
                     🖨️ KOT Slip
                   </button>
-                  <button onclick="openSettleModal('${order.id}')" class="px-3 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-display font-black text-xs shadow-md shadow-sky-400/20">
+                  <button onclick="openSettleModal('${order.id}')" class="px-3 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#d4621a] to-[#f4ae52] text-white font-black hover:from-[#b04913] hover:to-[#d4621a] text-white font-display font-black text-xs shadow-md shadow-[#d4621a]/20">
                     💳 Settle Bill
                   </button>
                 </div>
@@ -1936,7 +1935,7 @@
           <div class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div class="space-y-1">
               <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="font-black text-slate-900">${order.tableName}</span>
+                <span class="font-black text-[#2a1a0e]">${order.tableName}</span>
                 <span class="text-slate-400 font-mono text-[11px]">#${order.id}</span>
                 <span class="font-bold px-2 py-0.5 rounded bg-brand-50 text-brand-700 uppercase text-[10px]">${order.orderType || 'dinein'}</span>
                 <span class="font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px]">${order.status}</span>
@@ -1944,7 +1943,7 @@
               ${order.customerPhone ? `<p class="text-slate-500 text-[11px] truncate">👤 ${order.customerName || 'Guest'} (${order.customerPhone})</p>` : ''}
             </div>
             <div class="flex items-center justify-between sm:justify-end gap-2.5 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-              <span class="font-display font-black text-slate-900 text-base">₹${order.total}</span>
+              <span class="font-display font-black text-[#2a1a0e] text-base">₹${order.total}</span>
               <div class="flex items-center gap-1.5">
                 <button onclick="printKOT('${order.id}')" class="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs" title="Print Kitchen Slip">
                   🖨️ KOT
@@ -1966,10 +1965,10 @@
       } else {
         crmTbody.innerHTML = custs.map(c => `
           <tr class="hover:bg-slate-50">
-            <td class="p-3 font-bold text-slate-900">${c.name || 'Valued Guest'}</td>
+            <td class="p-3 font-bold text-[#2a1a0e]">${c.name || 'Valued Guest'}</td>
             <td class="p-3 font-mono font-medium">${c.phone}</td>
             <td class="p-3 font-bold text-brand-700">${c.visits} visits</td>
-            <td class="p-3 font-black text-slate-900">₹${c.totalSpent.toLocaleString('en-IN')}</td>
+            <td class="p-3 font-black text-[#2a1a0e]">₹${c.totalSpent.toLocaleString('en-IN')}</td>
             <td class="p-3 font-black text-amber-600">🪙 ${c.loyaltyPoints || 0} pts</td>
             <td class="p-3 text-slate-400 text-[11px]">${new Date(c.lastVisit).toLocaleDateString()}</td>
           </tr>
@@ -1986,7 +1985,7 @@
         reviewsDiv.innerHTML = reviews.map(r => `
           <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-1.5">
             <div class="flex items-center justify-between">
-              <span class="font-bold text-slate-900">${r.customerName}</span>
+              <span class="font-bold text-[#2a1a0e]">${r.customerName}</span>
               <span class="text-amber-500 font-bold">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
             </div>
             <p class="text-slate-600 italic leading-relaxed">"${r.comment || 'Great food and quick service!'}"</p>
@@ -2016,7 +2015,7 @@
         if (content) content.classList.toggle('hidden', t !== tab);
         if (btn) {
           if (t === tab) {
-            btn.className = 'px-3.5 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-xs transition shadow-sm';
+            btn.className = 'px-3.5 py-1.5 rounded-xl bg-[#d4621a] text-white font-black font-bold text-xs transition shadow-sm';
           } else {
             btn.className = 'px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 font-bold text-xs transition';
           }
@@ -2031,7 +2030,7 @@
         const btn = document.getElementById(`kfilter-${k}`);
         if (btn) {
           if (k === f) {
-            btn.className = 'px-3.5 py-1.5 rounded-xl bg-slate-900 text-white shadow-sm';
+            btn.className = 'px-3.5 py-1.5 rounded-xl bg-[#d4621a] text-white font-black shadow-sm';
           } else {
             btn.className = 'px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50';
           }
@@ -2071,7 +2070,7 @@
             <div class="flex items-center gap-3">
               <span class="text-xl">${r.type === 'water' ? '💧' : '🛎️'}</span>
               <div>
-                <span class="font-black text-slate-900 text-xs">${r.tableName}</span>
+                <span class="font-black text-[#2a1a0e] text-xs">${r.tableName}</span>
                 <p class="text-xs text-amber-900 font-semibold">${r.type === 'water' ? 'Customer asked for Drinking Water' : 'Customer called Waiter to Table'}</p>
               </div>
             </div>
@@ -2120,7 +2119,7 @@
               <div class="flex items-center justify-between pb-3 border-b border-slate-100">
                 <div>
                   <div class="flex items-center gap-2">
-                    <span class="font-display font-black text-slate-900 text-lg sm:text-2xl tracking-tight">${order.tableName}</span>
+                    <span class="font-display font-black text-[#2a1a0e] text-lg sm:text-2xl tracking-tight">${order.tableName}</span>
                     <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-100 text-brand-700 border border-brand-200">
                       ${order.orderType ? order.orderType.toUpperCase() : 'DINEIN'}
                     </span>
@@ -2147,11 +2146,11 @@
               <div class="py-3 space-y-2.5 divide-y divide-slate-100 text-sm">
                 ${(order.items || []).map(i => `
                   <div class="pt-2 flex items-start gap-3">
-                    <span class="w-8 h-8 rounded-xl bg-slate-900 text-white font-display font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
+                    <span class="w-8 h-8 rounded-xl bg-[#d4621a] text-white font-black font-display font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
                       ${i.qty}x
                     </span>
                     <div class="flex-1">
-                      <p class="font-display font-black text-slate-900 text-base leading-snug">${i.name}</p>
+                      <p class="font-display font-black text-[#2a1a0e] text-base leading-snug">${i.name}</p>
                       <div class="flex items-center gap-2 mt-1 flex-wrap">
                         ${i.variant ? `<span class="text-[11px] font-extrabold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-md border border-brand-200">Portion: ${i.variant}</span>` : ''}
                         ${(i.addons && i.addons.length) ? `<span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">Add: ${i.addons.join(', ')}</span>` : ''}
@@ -2172,11 +2171,11 @@
                   <span>⏳ In Kitchen Queue • 🔒 Read-Only</span>
                 </div>
               ` : `
-                <div class="flex-1 py-3 px-3 rounded-2xl bg-sky-50 border border-sky-200 text-sky-900 text-xs font-black flex items-center justify-center gap-1.5" title="Controlled from Kitchen KDS">
+                <div class="flex-1 py-3 px-3 rounded-2xl bg-[#fef9f2] border border-[#f4ae52]/30 text-[#2a1a0e] text-xs font-black flex items-center justify-center gap-1.5" title="Controlled from Kitchen KDS">
                   <span>🍳 Cooking in Kitchen • 🔒 Read-Only</span>
                 </div>
               `}
-              <a href="/kds.html?restaurant=${currentRestaurantId}" target="_blank" class="px-3.5 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-display font-black text-xs shadow-sm transition" title="Open Kitchen KDS to change status">
+              <a href="/kds.html?restaurant=${currentRestaurantId}" target="_blank" class="px-3.5 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-display font-black text-xs shadow-sm transition" title="Open Kitchen KDS to change status">
                 🍳 KDS ↗
               </a>
             </div>
@@ -2297,7 +2296,7 @@
       const tbody = document.getElementById('menuStockTableBody');
       tbody.innerHTML = appState.menu.map(item => `
         <tr class="hover:bg-slate-50/70">
-          <td class="p-4 font-bold text-slate-900">${item.name}</td>
+          <td class="p-4 font-bold text-[#2a1a0e]">${item.name}</td>
           <td class="p-4 text-slate-600">${item.category}</td>
           <td class="p-4">
             <span class="px-2 py-0.5 rounded text-[10px] font-bold ${item.type === 'veg' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">
@@ -2327,7 +2326,7 @@
         const btn = document.getElementById(`crmFilter-${t}`);
         if (btn) {
           if (t === tier) {
-            btn.className = 'px-3 py-1.5 rounded-xl bg-slate-900 text-white font-black';
+            btn.className = 'px-3 py-1.5 rounded-xl bg-[#d4621a] text-white font-black font-black';
           } else {
             btn.className = 'px-3 py-1.5 rounded-xl text-slate-600 hover:bg-slate-100';
           }
@@ -2387,7 +2386,7 @@
         const isRegular = c.visits >= 2 && !isVip;
         let tierBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300">🥉 Bronze Guest</span>';
         if (isVip) {
-          tierBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-xs">👑 Gold VIP</span>';
+          tierBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-gradient-to-r from-amber-400 to-amber-500 text-white shadow-xs">👑 Gold VIP</span>';
         } else if (isRegular) {
           tierBadge = '<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">⭐ Silver Regular</span>';
         }
@@ -2397,12 +2396,12 @@
         return `
           <tr class="hover:bg-slate-50/80 transition">
             <td class="p-4">
-              <p class="font-extrabold text-slate-900">${c.name || 'Dine-In Guest'}</p>
+              <p class="font-extrabold text-[#2a1a0e]">${c.name || 'Dine-In Guest'}</p>
               <p class="text-[11px] text-slate-400 font-mono">${c.phone}</p>
             </td>
             <td class="p-4">${tierBadge}</td>
             <td class="p-4 text-center font-bold text-slate-700">${c.visits || 1}</td>
-            <td class="p-4 font-black text-slate-900">₹${(c.totalSpent || 0).toLocaleString('en-IN')}</td>
+            <td class="p-4 font-black text-[#2a1a0e]">₹${(c.totalSpent || 0).toLocaleString('en-IN')}</td>
             <td class="p-4 font-black text-amber-600">🪙 ${c.loyaltyPoints || 0}</td>
             <td class="p-4 text-slate-500">${dateStr}</td>
             <td class="p-4 text-center">
@@ -2496,7 +2495,7 @@
         document.getElementById('settleItemsList').innerHTML = settlingOrder.kots.map(k => `
           <div class="border-b border-slate-200/80 pb-2 mb-2 last:border-0 last:mb-0 space-y-1">
             <div class="flex items-center justify-between">
-              <span class="text-[10px] font-black uppercase text-sky-800 bg-sky-100 px-2 py-0.5 rounded">KOT Round ${k.kotNumber}</span>
+              <span class="text-[10px] font-black uppercase text-[#d4621a] bg-[#fef3e2] text-[#d4621a] border border-[#f4ae52]/30 px-2 py-0.5 rounded">KOT Round ${k.kotNumber}</span>
               <span class="text-[9px] text-slate-400">${k.orderedAt ? new Date(k.orderedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
             </div>
             ${(k.items || []).map(i => `
@@ -2543,7 +2542,7 @@
         if (payModeSection) payModeSection.classList.add('hidden');
         if (btnConfirmSettle) {
           btnConfirmSettle.innerText = '✓ Complete & Free Table';
-          btnConfirmSettle.className = 'w-full py-3 sm:py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs sm:text-sm shadow-md transition';
+          btnConfirmSettle.className = 'w-full py-3 sm:py-3.5 rounded-xl bg-[#2a1a0e] hover:bg-[#352112] text-white font-black text-xs sm:text-sm shadow-md transition';
         }
       } else {
         if (paidNotice) paidNotice.classList.add('hidden');
@@ -2597,10 +2596,10 @@
       list.innerHTML = filtered.map(m => `
         <div class="flex items-center justify-between py-2 gap-2">
           <div class="min-w-0">
-            <p class="font-bold text-slate-900 text-xs truncate">${m.name}</p>
+            <p class="font-bold text-[#2a1a0e] text-xs truncate">${m.name}</p>
             <p class="text-[10px] text-slate-500 font-mono">₹${m.price} • ${m.category || 'General'}</p>
           </div>
-          <button onclick="punchItemToTable('${m.id}')" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-white font-extrabold text-[11px] shrink-0 shadow-xs active:scale-95 transition">
+          <button onclick="punchItemToTable('${m.id}')" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#d4621a] to-[#f4ae52] hover:from-[#b04913] hover:to-[#d4621a] text-white font-extrabold text-[11px] shrink-0 shadow-xs active:scale-95 transition">
             ＋ Add
           </button>
         </div>
@@ -2976,12 +2975,12 @@
               <div class="flex items-center gap-3">
                 <span class="text-lg">${medals[idx] || '⭐'}</span>
                 <div>
-                  <p class="font-extrabold text-slate-900 text-xs">${d.name}</p>
+                  <p class="font-extrabold text-[#2a1a0e] text-xs">${d.name}</p>
                   <p class="text-[10px] text-slate-500 font-semibold">${d.qty} plates ordered</p>
                 </div>
               </div>
               <div class="text-right">
-                <p class="font-black text-slate-900 text-xs font-display">₹${d.revenue.toLocaleString('en-IN')}</p>
+                <p class="font-black text-[#2a1a0e] text-xs font-display">₹${d.revenue.toLocaleString('en-IN')}</p>
                 <p class="text-[10px] text-emerald-600 font-bold">Revenue</p>
               </div>
             </div>

@@ -176,7 +176,7 @@
   </main>
 
   <!-- Footer -->
-  <footer class="border-t border-slate-900 py-4 text-center text-xs text-slate-600">
+  <footer class="border-t border-[#352112] py-4 text-center text-xs text-slate-600">
     © 2026 TipTap Technologies • Secure Restaurant Multi-Tenant Platform
   </footer>
 
@@ -241,7 +241,7 @@
             sessionStorage.setItem('tiptap_admin_pin', pin);
             localStorage.setItem('tiptap_admin_auth', 'true');
             btn.innerText = '✓ Master PIN Verified! Opening Super Admin HQ...';
-            btn.className = 'w-full py-3.5 rounded-xl bg-amber-500 text-slate-950 font-black text-sm shadow-xl flex items-center justify-center gap-2';
+            btn.className = 'w-full py-3.5 rounded-xl bg-amber-500 text-[#2a1a0e] font-black text-sm shadow-xl flex items-center justify-center gap-2';
             setTimeout(() => {
               window.location.href = data.redirectUrl;
             }, 400);
@@ -283,7 +283,7 @@
 
           btn.innerText = station === 'kds' ? '✓ Success! Opening Kitchen KDS...' : '✓ Success! Opening POS...';
           btn.className = station === 'kds' 
-            ? 'w-full py-3.5 rounded-xl bg-amber-500 text-slate-950 font-extrabold text-sm shadow-xl flex items-center justify-center gap-2'
+            ? 'w-full py-3.5 rounded-xl bg-amber-500 text-[#2a1a0e] font-extrabold text-sm shadow-xl flex items-center justify-center gap-2'
             : 'w-full py-3.5 rounded-xl bg-emerald-600 text-white font-extrabold text-sm shadow-xl flex items-center justify-center gap-2';
           
           setTimeout(() => {

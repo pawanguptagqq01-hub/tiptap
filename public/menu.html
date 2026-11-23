@@ -104,15 +104,15 @@
     }
 
     /* Warm Terracotta Brand Glow Buttons */
-    .btn-sky-glow, .btn-brand-glow {
+    .btn-brand-glow, .btn-brand-glow {
       background: linear-gradient(135deg, #d4621a 0%, #e5872c 100%);
       transition: all 0.25s ease;
     }
-    .btn-sky-glow:hover, .btn-brand-glow:hover {
+    .btn-brand-glow:hover, .btn-brand-glow:hover {
       box-shadow: 0 0 24px rgba(212, 98, 26, 0.6);
       transform: translateY(-2px) scale(1.02);
     }
-    .btn-sky-glow:active, .btn-brand-glow:active {
+    .btn-brand-glow:active, .btn-brand-glow:active {
       transform: scale(0.96);
     }
 
@@ -289,13 +289,13 @@
   </div>
 
   <!-- Cart & Checkout Slide-Over Modal -->
-  <div id="cartModal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col justify-end">
+  <div id="cartModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex flex-col justify-end">
     <div class="bg-white rounded-t-3xl max-h-[92vh] flex flex-col max-w-md mx-auto w-full shadow-2xl overflow-y-auto animate-slide-up">
       
       <!-- Cart Header -->
       <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
         <div>
-          <h3 class="font-extrabold text-slate-900 text-base sm:text-lg font-display">Your Table Order</h3>
+          <h3 class="font-extrabold text-[#2a1a0e] text-base sm:text-lg font-display">Your Table Order</h3>
           <p class="text-xs text-slate-500 font-medium" id="cartModalTableText">Table 1 • TipTap NFC Order</p>
         </div>
         <button onclick="closeCartModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold transition">
@@ -308,10 +308,10 @@
 
       <!-- Dine-In vs Takeaway Switcher -->
       <div class="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-        <button type="button" onclick="setOrderType('dinein')" id="btnOrderDineIn" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#0a192f] to-[#112240] text-sky-300 border border-sky-400/40 font-bold text-xs shadow-md shadow-sky-500/10 flex items-center justify-center gap-1.5 transition">
+        <button type="button" onclick="setOrderType('dinein')" id="btnOrderDineIn" class="flex-1 py-2.5 rounded-xl bg-[#d4621a] text-white border border-[#d4621a] font-bold text-xs shadow-md shadow-[#d4621a]/25 flex items-center justify-center gap-1.5 transition">
           <span>🍽️ Dine-In (Table)</span>
         </button>
-        <button type="button" onclick="setOrderType('takeaway')" id="btnOrderTakeaway" class="flex-1 py-2.5 rounded-xl bg-white border-2 border-slate-200 hover:border-sky-400 hover:text-sky-600 text-slate-600 font-bold text-xs flex items-center justify-center gap-1.5 transition">
+        <button type="button" onclick="setOrderType('takeaway')" id="btnOrderTakeaway" class="flex-1 py-2.5 rounded-xl bg-white border-2 border-[#ede3d8] hover:border-[#d4621a] hover:text-[#d4621a] text-[#2a1a0e] font-bold text-xs flex items-center justify-center gap-1.5 transition">
           <span>🥡 Takeaway (+₹20)</span>
         </button>
       </div>
@@ -348,7 +348,7 @@
         <div class="flex items-center gap-2">
           <input type="text" id="promoCodeInp" placeholder="Coupon Code (e.g. WELCOME10)"
             class="flex-1 text-xs px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none uppercase font-bold tracking-wider font-mono">
-          <button type="button" onclick="applyPromoCode()" class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition">
+          <button type="button" onclick="applyPromoCode()" class="px-4 py-2 rounded-xl bg-[#2a1a0e] hover:bg-[#352112] text-white font-bold text-xs transition">
             Apply
           </button>
         </div>
@@ -359,7 +359,7 @@
       <div class="p-5 border-t border-slate-100 space-y-1 text-xs text-slate-600 bg-slate-50/50 font-medium">
         <div class="flex justify-between">
           <span>Items Subtotal:</span>
-          <span class="font-bold text-slate-900">₹<span id="billSubtotal">0</span></span>
+          <span class="font-bold text-[#2a1a0e]">₹<span id="billSubtotal">0</span></span>
         </div>
         <div id="rowDiscount" class="hidden flex justify-between text-emerald-600 font-bold">
           <span>Promo Discount (<span id="discountCodeText"></span>):</span>
@@ -367,13 +367,13 @@
         </div>
         <div id="rowPackaging" class="hidden flex justify-between text-slate-600">
           <span>Takeaway Packaging:</span>
-          <span class="font-bold text-slate-900">₹20</span>
+          <span class="font-bold text-[#2a1a0e]">₹20</span>
         </div>
         <div class="flex justify-between">
           <span>GST (5% CGST + SGST):</span>
-          <span class="font-bold text-slate-900">₹<span id="billGst">0</span></span>
+          <span class="font-bold text-[#2a1a0e]">₹<span id="billGst">0</span></span>
         </div>
-        <div class="flex justify-between text-base font-black text-slate-900 pt-1.5 border-t border-slate-200 font-display">
+        <div class="flex justify-between text-base font-black text-[#2a1a0e] pt-1.5 border-t border-slate-200 font-display">
           <span>Grand Total:</span>
           <span class="text-brand-600">₹<span id="billTotal">0</span></span>
         </div>
@@ -381,7 +381,7 @@
 
       <!-- Checkout Action Button -->
       <div class="p-4 sm:p-5 border-t border-slate-100 bg-white sticky bottom-0 z-10 shadow-lg">
-        <button id="btnPlaceOrder" onclick="placeOrder()" class="w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-[#0284c7] hover:from-sky-300 hover:to-sky-400 text-slate-950 font-black text-sm sm:text-base shadow-xl shadow-sky-400/40 hover:shadow-[0_0_25px_rgba(56,189,248,0.7)] transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display">
+        <button id="btnPlaceOrder" onclick="placeOrder()" class="w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-[#d4621a] via-[#e5872c] to-[#f4ae52] hover:from-[#b04913] hover:to-[#d4621a] text-white font-black text-sm sm:text-base shadow-xl shadow-[#d4621a]/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display">
           <span>🚀 Place Order to Kitchen</span>
         </button>
       </div>
@@ -390,13 +390,13 @@
   </div>
 
   <!-- Live Order Tracker Modal -->
-  <div id="liveOrderModal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col justify-end sm:justify-center sm:p-4">
+  <div id="liveOrderModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex flex-col justify-end sm:justify-center sm:p-4">
     <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-md mx-auto w-full p-5 sm:p-6 shadow-2xl space-y-5 sm:space-y-6 animate-slide-up max-h-[92vh] overflow-y-auto">
       
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div>
           <span class="text-[11px] font-black text-brand-600 tracking-wider uppercase font-display">Live Kitchen Tracker</span>
-          <h3 id="modalOrderId" class="font-black text-slate-900 text-base sm:text-lg font-display">Order #ORD-101</h3>
+          <h3 id="modalOrderId" class="font-black text-[#2a1a0e] text-base sm:text-lg font-display">Order #ORD-101</h3>
         </div>
         <button onclick="closeLiveOrderModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold">✕</button>
       </div>
@@ -406,7 +406,7 @@
         <div id="statusIcon" class="w-20 h-20 mx-auto rounded-3xl bg-brand-50 border-2 border-brand-500 flex items-center justify-center text-3xl shadow-lg shadow-brand-500/10 pulse-glow">
           🍳
         </div>
-        <h4 id="statusTitle" class="font-black text-slate-900 text-xl font-display">Chef is Preparing</h4>
+        <h4 id="statusTitle" class="font-black text-[#2a1a0e] text-xl font-display">Chef is Preparing</h4>
         <p id="statusDesc" class="text-xs text-slate-500 max-w-xs mx-auto font-medium">Your food is currently being freshly cooked in the kitchen.</p>
       </div>
 
@@ -416,7 +416,7 @@
         <div id="modalOrderItems" class="space-y-1 text-slate-600">
           <!-- Injected by JS -->
         </div>
-        <div class="pt-2 border-t border-slate-200 flex justify-between font-black text-slate-900 text-sm font-display">
+        <div class="pt-2 border-t border-slate-200 flex justify-between font-black text-[#2a1a0e] text-sm font-display">
           <span>Total Bill (Incl. 5% GST):</span>
           <span class="text-brand-600" id="modalOrderTotal">₹0</span>
         </div>
@@ -435,13 +435,13 @@
       </div>
 
       <!-- Pay Bill via Online Gateway (Instant Auto-Verify) -->
-      <div id="upiPaymentSection" class="hidden text-center p-5 rounded-3xl bg-gradient-to-br from-[#06101e] to-[#0a192f] text-white border-2 border-sky-400/40 space-y-3 shadow-xl shadow-sky-500/20">
+      <div id="upiPaymentSection" class="hidden text-center p-5 rounded-3xl bg-[#2a1a0e] text-white border-2 border-[#f4ae52]/40 space-y-3 shadow-xl">
         <div>
-          <span class="text-[10px] font-black uppercase tracking-wider text-sky-300 bg-sky-500/20 px-2.5 py-0.5 rounded-full border border-sky-400/30">Auto-Verified Payment</span>
+          <span class="text-[10px] font-black uppercase tracking-wider text-[#f4ae52] bg-[#f4ae52]/20 px-2.5 py-0.5 rounded-full border border-[#f4ae52]/40">Auto-Verified Payment</span>
           <p class="font-display font-black text-white text-lg mt-1">Settle Bill Table-Side</p>
-          <p class="text-xs text-sky-200/70">Pay via GPay, PhonePe, Paytm, Cards, or NetBanking</p>
+          <p class="text-xs text-white/70">Pay via GPay, PhonePe, Paytm, Cards, or NetBanking</p>
         </div>
-        <button onclick="launchPaymentGatewayForCurrentOrder()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-sky-400 to-sky-500 hover:from-sky-300 hover:to-sky-400 text-slate-950 font-display font-black text-sm shadow-lg shadow-sky-400/40 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
+        <button onclick="launchPaymentGatewayForCurrentOrder()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#d4621a] to-[#f4ae52] hover:from-[#b04913] hover:to-[#d4621a] text-white font-display font-black text-sm shadow-lg shadow-[#d4621a]/30 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
           <span>⚡ Pay ₹<span id="upiPayAmountBtn">0</span> Online (Instant)</span>
           <span>➔</span>
         </button>
@@ -475,14 +475,14 @@
   </div>
 
   <!-- Drinking Water Preference Modal (Free RO Water vs Billed Packaged Mineral Water) -->
-  <div id="waterSelectionModal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col justify-end sm:justify-center sm:p-4">
-    <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-md mx-auto w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-slide-up text-slate-900">
+  <div id="waterSelectionModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex flex-col justify-end sm:justify-center sm:p-4">
+    <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-md mx-auto w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-slide-up text-[#2a1a0e]">
       
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div class="flex items-center gap-2.5">
           <span class="text-2xl">💧</span>
           <div>
-            <h3 class="font-black text-slate-900 text-base font-display">Drinking Water Options</h3>
+            <h3 class="font-black text-[#2a1a0e] text-base font-display">Drinking Water Options</h3>
             <p class="text-[11px] text-slate-500 font-medium">Table <span id="waterModalTableNo">1</span> • Choose preferred water</p>
           </div>
         </div>
@@ -491,20 +491,20 @@
 
       <div class="space-y-3 pt-1">
         <!-- Option 1: Free RO Water -->
-        <div class="p-4 rounded-2xl border-2 border-slate-200 hover:border-sky-400 bg-sky-50/50 transition cursor-pointer flex items-center justify-between gap-3 active:scale-[0.99]" onclick="confirmFreeRoWater()">
+        <div class="p-4 rounded-2xl border-2 border-[#ede3d8] hover:border-[#d4621a] bg-[#fef9f2] transition cursor-pointer flex items-center justify-between gap-3 active:scale-[0.99]" onclick="confirmFreeRoWater()">
           <div class="flex items-center gap-3">
-            <div class="w-11 h-11 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center text-xl shrink-0 font-bold">
+            <div class="w-11 h-11 rounded-2xl bg-[#fef3e2] text-[#d4621a] flex items-center justify-center text-xl shrink-0 font-bold">
               🥛
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-extrabold text-slate-900 text-sm">Regular RO Filtered Water</span>
+                <span class="font-extrabold text-[#2a1a0e] text-sm">Regular RO Filtered Water</span>
                 <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">FREE ₹0</span>
               </div>
               <p class="text-xs text-slate-500 mt-0.5">Complimentary clean RO drinking water served by waiter.</p>
             </div>
           </div>
-          <span class="text-xs font-black text-sky-600 shrink-0">Notify ➔</span>
+          <span class="text-xs font-black text-[#d4621a] shrink-0">Notify ➔</span>
         </div>
 
         <!-- Option 2: Mineral Water Bottle (Billable) -->
@@ -515,7 +515,7 @@
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-extrabold text-slate-900 text-sm">Packaged Mineral Water Bottle</span>
+                <span class="font-extrabold text-[#2a1a0e] text-sm">Packaged Mineral Water Bottle</span>
                 <span class="text-xs font-black font-display text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded-full border border-amber-300">₹20</span>
               </div>
               <p class="text-xs text-slate-500 mt-0.5">1L sealed chilled bottle. Added directly to your Table bill.</p>
@@ -533,13 +533,13 @@
   </div>
 
   <!-- Automatic Payment Gateway Modal (Razorpay / Instant Dynamic UPI) -->
-  <div id="gatewayModal" class="hidden fixed inset-0 z-50 bg-[#06101e]/80 backdrop-blur-md flex flex-col justify-end sm:justify-center sm:p-4 animate-fade-in">
-    <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-md mx-auto w-full shadow-2xl overflow-hidden border border-sky-400/30 flex flex-col max-h-[90vh]">
+  <div id="gatewayModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/80 backdrop-blur-md flex flex-col justify-end sm:justify-center sm:p-4 animate-fade-in">
+    <div class="bg-white rounded-t-3xl sm:rounded-3xl max-w-md mx-auto w-full shadow-2xl overflow-hidden border border-[#f4ae52]/40 flex flex-col max-h-[90vh]">
       
       <!-- Gateway Top Branding Header (Deep Navy Blue) -->
-      <div class="bg-gradient-to-r from-[#06101e] via-[#0a192f] to-[#112240] text-white p-5 border-b border-sky-500/20 flex items-center justify-between">
+      <div class="bg-gradient-to-r from-[#2a1a0e] via-[#352112] to-[#2a1a0e] text-white p-5 border-b border-[#f4ae52]/30 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-400 to-[#0a192f] border border-sky-400/40 flex items-center justify-center text-white font-black text-sm shadow-md shadow-sky-500/30">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#d4621a] to-[#f4ae52] border border-[#f4ae52]/40 flex items-center justify-center text-white font-black text-sm shadow-md shadow-[#d4621a]/30">
             ⚡
           </div>
           <div>
@@ -547,19 +547,19 @@
               <span class="font-display font-black text-base tracking-tight text-white">TipTap Pay</span>
               <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Verified</span>
             </div>
-            <p class="text-[11px] text-sky-200/70" id="gwMerchantName">TipTap Bistro • Safe & Secure</p>
+            <p class="text-[11px] text-white/70" id="gwMerchantName">TipTap Bistro • Safe & Secure</p>
           </div>
         </div>
-        <button onclick="closeGatewayModal()" class="w-8 h-8 rounded-full bg-[#112240] hover:bg-sky-500/20 text-sky-300 hover:text-white flex items-center justify-center text-xs font-bold transition">
+        <button onclick="closeGatewayModal()" class="w-8 h-8 rounded-full bg-[#352112] hover:bg-[#432918] text-[#f4ae52] hover:text-white flex items-center justify-center text-xs font-bold transition">
           ✕
         </button>
       </div>
 
       <!-- Bill Amount Display -->
-      <div class="p-5 bg-sky-50/50 border-b border-slate-100 flex items-center justify-between">
+      <div class="p-5 bg-[#fef9f2] border-b border-[#ede3d8] flex items-center justify-between">
         <div>
           <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Amount To Pay (5% GST Incl.)</span>
-          <p class="font-display text-3xl font-black text-[#0a192f]">₹<span id="gwAmountText">0.00</span></p>
+          <p class="font-display text-3xl font-black text-[#2a1a0e]">₹<span id="gwAmountText">0.00</span></p>
           <p class="text-[10px] text-slate-400 font-mono" id="gwTxnIdText">TXN_ID</p>
         </div>
         <div class="text-right">
@@ -574,13 +574,13 @@
         
         <!-- Method Selector Tabs -->
         <div class="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold text-slate-600">
-          <button onclick="switchGwTab('apps')" id="gwTabBtn-apps" class="py-2 rounded-xl bg-white text-[#0a192f] shadow-sm font-black transition">
+          <button onclick="switchGwTab('apps')" id="gwTabBtn-apps" class="py-2 rounded-xl bg-white text-[#2a1a0e] shadow-sm font-black transition">
             📱 UPI Apps
           </button>
-          <button onclick="switchGwTab('qr')" id="gwTabBtn-qr" class="py-2 rounded-xl text-slate-600 hover:text-slate-900 transition">
+          <button onclick="switchGwTab('qr')" id="gwTabBtn-qr" class="py-2 rounded-xl text-slate-600 hover:text-[#2a1a0e] transition">
             📷 Scan QR
           </button>
-          <button onclick="switchGwTab('card')" id="gwTabBtn-card" class="py-2 rounded-xl text-slate-600 hover:text-slate-900 transition">
+          <button onclick="switchGwTab('card')" id="gwTabBtn-card" class="py-2 rounded-xl text-slate-600 hover:text-[#2a1a0e] transition">
             💳 Card / Net
           </button>
         </div>
@@ -590,34 +590,34 @@
           <p class="text-xs font-bold text-slate-700">Select your preferred UPI app to pay directly:</p>
           
           <div class="grid grid-cols-2 gap-2.5">
-            <a id="gwLinkGpay" href="#" target="_blank" onclick="trackUpiClick('Google Pay')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-sky-400 hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white">
+            <a id="gwLinkGpay" href="#" target="_blank" onclick="trackUpiClick('Google Pay')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white">
               <span class="text-2xl">🟢</span>
               <div class="text-left">
-                <p class="font-extrabold text-xs text-slate-900">Google Pay</p>
+                <p class="font-extrabold text-xs text-[#2a1a0e]">Google Pay</p>
                 <p class="text-[10px] text-slate-400">1-Tap Payment</p>
               </div>
             </a>
 
-            <a id="gwLinkPhonepe" href="#" target="_blank" onclick="trackUpiClick('PhonePe')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-sky-400 hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white">
+            <a id="gwLinkPhonepe" href="#" target="_blank" onclick="trackUpiClick('PhonePe')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white">
               <span class="text-2xl">🟣</span>
               <div class="text-left">
-                <p class="font-extrabold text-xs text-slate-900">PhonePe</p>
+                <p class="font-extrabold text-xs text-[#2a1a0e]">PhonePe</p>
                 <p class="text-[10px] text-slate-400">Instant UPI</p>
               </div>
             </a>
 
-            <a id="gwLinkPaytm" href="#" target="_blank" onclick="trackUpiClick('Paytm')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-sky-400 hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white">
+            <a id="gwLinkPaytm" href="#" target="_blank" onclick="trackUpiClick('Paytm')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white">
               <span class="text-2xl">🔵</span>
               <div class="text-left">
-                <p class="font-extrabold text-xs text-slate-900">Paytm UPI</p>
+                <p class="font-extrabold text-xs text-[#2a1a0e]">Paytm UPI</p>
                 <p class="text-[10px] text-slate-400">Wallet & UPI</p>
               </div>
             </a>
 
-            <a id="gwLinkAnyUpi" href="#" target="_blank" onclick="trackUpiClick('BHIM / CRED')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-sky-400 hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white">
+            <a id="gwLinkAnyUpi" href="#" target="_blank" onclick="trackUpiClick('BHIM / CRED')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white">
               <span class="text-2xl">⚡</span>
               <div class="text-left">
-                <p class="font-extrabold text-xs text-slate-900">BHIM / CRED</p>
+                <p class="font-extrabold text-xs text-[#2a1a0e]">BHIM / CRED</p>
                 <p class="text-[10px] text-slate-400">Any UPI App</p>
               </div>
             </a>
@@ -627,7 +627,7 @@
         <!-- Tab 2: Dynamic Live UPI QR Code -->
         <div id="gwTab-qr" class="hidden text-center space-y-3 pt-1">
           <p class="text-xs text-slate-600 font-medium">Scan this dynamic UPI QR with any mobile app:</p>
-          <div class="w-44 h-44 mx-auto p-2 bg-white rounded-3xl border-2 border-sky-400/40 shadow-xl shadow-sky-500/10 flex items-center justify-center">
+          <div class="w-44 h-44 mx-auto p-2 bg-white rounded-3xl border-2 border-[#f4ae52]/40 shadow-xl shadow-[#d4621a]/10 flex items-center justify-center">
             <img id="gwDynamicQrImg" src="" alt="Live Payment QR" class="w-full h-full object-contain rounded-2xl">
           </div>
           <div class="flex items-center justify-center gap-2 text-xs font-bold text-slate-500">
@@ -640,19 +640,19 @@
         <div id="gwTab-card" class="hidden space-y-3 pt-1 text-xs">
           <div>
             <label class="block font-bold text-slate-700 mb-1">Card Number:</label>
-            <input type="text" placeholder="4111 •••• •••• 1111" maxlength="19" class="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-sky-400">
+            <input type="text" placeholder="4111 •••• •••• 1111" maxlength="19" class="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#d4621a]">
           </div>
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="block font-bold text-slate-700 mb-1">Expiry Date:</label>
-              <input type="text" placeholder="MM/YY" maxlength="5" class="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-sky-400">
+              <input type="text" placeholder="MM/YY" maxlength="5" class="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#d4621a]">
             </div>
             <div>
               <label class="block font-bold text-slate-700 mb-1">CVV:</label>
-              <input type="password" placeholder="•••" maxlength="4" class="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-sky-400">
+              <input type="password" placeholder="•••" maxlength="4" class="w-full p-2.5 rounded-xl border border-slate-200 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#d4621a]">
             </div>
           </div>
-          <button onclick="triggerCardPayment()" class="w-full py-3 rounded-xl bg-[#0a192f] hover:bg-[#112240] text-sky-300 font-bold text-xs shadow-md transition">
+          <button onclick="triggerCardPayment()" class="w-full py-3 rounded-xl bg-[#d4621a] hover:bg-[#b04913] text-[#f4ae52] font-bold text-xs shadow-md transition">
             Pay ₹<span class="gwPayBtnAmount">0</span> Securely via Card ➔
           </button>
         </div>
@@ -670,7 +670,7 @@
           </p>
           <div class="flex gap-2">
             <input type="text" id="inpUpiUtr" maxlength="16" placeholder="E.g. 432109876543" 
-              class="flex-1 px-3 py-2.5 rounded-xl border border-slate-300 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-sky-400">
+              class="flex-1 px-3 py-2.5 rounded-xl border border-slate-300 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[#d4621a]">
             <button onclick="submitUtrPayment()" id="btnSubmitUtr" 
               class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-xs shadow-md transition active:scale-95 shrink-0">
               Verify UTR ✓
@@ -679,12 +679,12 @@
         </div>
 
         <!-- Automatic Bank & Counter Sync Status -->
-        <div class="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200/60 flex items-center justify-between text-xs">
+        <div class="p-3.5 rounded-2xl bg-[#fef9f2] border border-[#ede3d8] flex items-center justify-between text-xs">
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
             <span class="font-bold text-slate-800">Auto-Syncing with POS Counter & Bank</span>
           </div>
-          <span class="text-[10px] text-sky-800 font-extrabold bg-sky-100 px-2.5 py-1 rounded-full">NPCI / Bank</span>
+          <span class="text-[10px] text-[#d4621a] font-extrabold bg-[#fef3e2] border border-[#f4ae52]/40 px-2.5 py-1 rounded-full">NPCI / Bank</span>
         </div>
 
       </div>
@@ -696,18 +696,18 @@
         </div>
         
         <div class="space-y-1">
-          <h4 class="font-display font-black text-2xl text-slate-900 tracking-tight">Payment Verified!</h4>
+          <h4 class="font-display font-black text-2xl text-[#2a1a0e] tracking-tight">Payment Verified!</h4>
           <p class="text-xs text-emerald-600 font-bold">₹<span id="gwSuccessAmount">0</span> received & settled with bank</p>
         </div>
 
         <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-left text-xs space-y-1.5 font-mono">
           <div class="flex justify-between text-slate-500">
             <span>Transaction Ref:</span>
-            <span class="font-bold text-slate-900" id="gwSuccessTxnId">TXN_12345</span>
+            <span class="font-bold text-[#2a1a0e]" id="gwSuccessTxnId">TXN_12345</span>
           </div>
           <div class="flex justify-between text-slate-500">
             <span>Payment Mode:</span>
-            <span class="font-bold text-slate-900" id="gwSuccessMethod">Online UPI</span>
+            <span class="font-bold text-[#2a1a0e]" id="gwSuccessMethod">Online UPI</span>
           </div>
           <div class="flex justify-between text-slate-500">
             <span>Bank Status:</span>
@@ -716,10 +716,10 @@
         </div>
 
         <div class="space-y-2 pt-2">
-          <button onclick="closeGatewayModal(); openLiveOrderModal();" class="w-full py-3.5 rounded-2xl bg-[#0a192f] hover:bg-[#112240] text-sky-300 font-display font-black text-xs shadow-md border border-sky-400/40 transition hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5">
+          <button onclick="closeGatewayModal(); openLiveOrderModal();" class="w-full py-3.5 rounded-2xl bg-[#d4621a] hover:bg-[#b04913] text-[#f4ae52] font-display font-black text-xs shadow-md border border-[#f4ae52]/40 transition hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5">
             <span>🍳 Track Food Cooking Live</span> <span>➔</span>
           </button>
-          <button onclick="printBillReceipt()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-sky-400 to-sky-500 text-slate-950 font-display font-black text-xs shadow-lg shadow-sky-400/30 transition hover:scale-[1.02] active:scale-95">
+          <button onclick="printBillReceipt()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#d4621a] to-[#f4ae52] text-white font-display font-black text-xs shadow-lg shadow-[#d4621a]/30 transition hover:scale-[1.02] active:scale-95">
             📄 View / Download Tax Receipt
           </button>
           <button onclick="closeGatewayModal()" class="w-full py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition">
@@ -732,10 +732,10 @@
   </div>
 
   <!-- Table Switcher Modal -->
-  <div id="tableSelectModal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="tableSelectModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-xs w-full p-6 shadow-2xl space-y-4 animate-fade-in">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 class="font-black text-slate-900 text-base font-display">Select Seated Table</h3>
+        <h3 class="font-black text-[#2a1a0e] text-base font-display">Select Seated Table</h3>
         <button onclick="closeTableSelectModal()" class="w-8 h-8 rounded-full bg-slate-100 text-xs font-bold text-slate-600">✕</button>
       </div>
       <p class="text-xs text-slate-500 font-medium">Pick the table you are currently seated at:</p>
@@ -746,11 +746,11 @@
   </div>
 
   <!-- Dish Customization Modal (Portion & Add-ons) -->
-  <div id="customizeDishModal" class="hidden fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex flex-col justify-end">
+  <div id="customizeDishModal" class="hidden fixed inset-0 z-50 bg-[#2a1a0e]/75 backdrop-blur-md flex flex-col justify-end">
     <div class="bg-white rounded-t-3xl max-w-md mx-auto w-full p-5 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 animate-slide-up max-h-[92vh] overflow-y-auto">
       <div class="flex items-start justify-between border-b border-slate-100 pb-3">
         <div>
-          <h3 id="customModalDishName" class="font-extrabold text-slate-900 text-base sm:text-lg leading-tight font-display">Dish Name</h3>
+          <h3 id="customModalDishName" class="font-extrabold text-[#2a1a0e] text-base sm:text-lg leading-tight font-display">Dish Name</h3>
           <p id="customModalDishDesc" class="text-xs text-slate-500 mt-0.5 font-medium">Description</p>
         </div>
         <button onclick="closeCustomizeModal()" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-100 font-bold text-slate-600">✕</button>
@@ -774,7 +774,7 @@
 
       <!-- Add to Cart Action -->
       <div class="pt-2">
-        <button id="btnConfirmCustomize" onclick="confirmCustomizeAdd()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-[#0284c7] hover:from-sky-300 hover:to-sky-400 text-slate-950 font-black text-sm shadow-xl shadow-sky-400/40 hover:shadow-[0_0_25px_rgba(56,189,248,0.7)] transition-all flex items-center justify-between px-6 hover:scale-[1.02] active:scale-95 font-display">
+        <button id="btnConfirmCustomize" onclick="confirmCustomizeAdd()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-[#d4621a] via-[#e5872c] to-[#f4ae52] hover:from-[#b04913] hover:to-[#d4621a] text-white font-black text-sm sm:text-base shadow-xl shadow-[#d4621a]/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display">
           <span>Add to Order</span>
           <span>₹<span id="customModalPriceTotal">0</span></span>
         </button>
@@ -784,7 +784,7 @@
 
   <!-- Toast Notification Container -->
   <div id="toast" class="fixed top-5 inset-x-4 max-w-sm mx-auto z-50 pointer-events-none transition-all duration-300 opacity-0 transform -translate-y-4">
-    <div class="bg-slate-900/95 backdrop-blur-xl text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-700">
+    <div class="bg-[#2a1a0e]/95 backdrop-blur-xl text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-700">
       <span id="toastIcon" class="text-xl">🛎️</span>
       <p id="toastMessage" class="text-xs font-bold leading-snug">Service requested</p>
     </div>
@@ -1131,7 +1131,7 @@
       const grid = document.getElementById('tablePickerGrid');
       grid.innerHTML = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => `
         <button onclick="selectSeatedTable(${num})" class="py-3 rounded-2xl border-2 transition-all font-display ${
-          num === currentTableId ? 'bg-gradient-to-r from-[#0a192f] to-[#112240] text-sky-300 border-sky-400 shadow-lg shadow-sky-500/25 scale-105' : 'bg-slate-50 hover:bg-sky-50 hover:border-sky-400 border-slate-200 text-slate-700 hover:text-sky-700 hover:scale-105 active:scale-95'
+          num === currentTableId ? 'bg-[#d4621a] text-[#f4ae52] border-[#f4ae52]/40 shadow-lg shadow-[#d4621a]/25 scale-105' : 'bg-slate-50 hover:bg-[#fef9f2] hover:border-[#d4621a] border-slate-200 text-slate-700 hover:text-[#d4621a] hover:scale-105 active:scale-95'
         }">
           T-${num}
         </button>
@@ -1174,12 +1174,12 @@
       if (item.variants && item.variants.length > 0) {
         varSection.classList.remove('hidden');
         varList.innerHTML = item.variants.map((v, i) => `
-          <label class="flex items-center justify-between p-3.5 rounded-2xl border-2 border-slate-200 hover:border-sky-400 hover:bg-sky-50/50 hover:shadow-sm cursor-pointer transition-all">
+          <label class="flex items-center justify-between p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:bg-[#fef9f2] hover:shadow-sm cursor-pointer transition-all">
             <div class="flex items-center gap-2.5">
-              <input type="radio" name="customVariant" value="${v.name}" data-price="${v.price}" ${i === 0 ? 'checked' : ''} onchange="updateCustomizeTotal()" class="accent-sky-500">
-              <span class="font-bold text-slate-900">${v.name}</span>
+              <input type="radio" name="customVariant" value="${v.name}" data-price="${v.price}" ${i === 0 ? 'checked' : ''} onchange="updateCustomizeTotal()" class="accent-[#d4621a]">
+              <span class="font-bold text-[#2a1a0e]">${v.name}</span>
             </div>
-            <span class="font-black text-[#0a192f] font-display">₹${v.price}</span>
+            <span class="font-black text-[#2a1a0e] font-display">₹${v.price}</span>
           </label>
         `).join('');
       } else {
@@ -1192,12 +1192,12 @@
       if (item.addons && item.addons.length > 0) {
         addSection.classList.remove('hidden');
         addList.innerHTML = item.addons.map(ad => `
-          <label class="flex items-center justify-between p-3.5 rounded-2xl border-2 border-slate-200 hover:border-sky-400 hover:bg-sky-50/50 hover:shadow-sm cursor-pointer transition-all">
+          <label class="flex items-center justify-between p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:bg-[#fef9f2] hover:shadow-sm cursor-pointer transition-all">
             <div class="flex items-center gap-2.5">
-              <input type="checkbox" name="customAddon" value="${ad.name}" data-price="${ad.price}" onchange="updateCustomizeTotal()" class="accent-sky-500">
+              <input type="checkbox" name="customAddon" value="${ad.name}" data-price="${ad.price}" onchange="updateCustomizeTotal()" class="accent-[#d4621a]">
               <span class="font-semibold text-slate-700">${ad.name}</span>
             </div>
-            <span class="font-black text-sky-700 font-display">+₹${ad.price}</span>
+            <span class="font-black text-[#d4621a] font-display">+₹${ad.price}</span>
           </label>
         `).join('');
       } else {
@@ -1304,11 +1304,11 @@
       const btnDine = document.getElementById('btnOrderDineIn');
       const btnTake = document.getElementById('btnOrderTakeaway');
       if (type === 'dinein') {
-        btnDine.className = 'flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#0a192f] to-[#112240] text-sky-300 border border-sky-400/40 font-bold text-xs shadow-md shadow-sky-500/10 flex items-center justify-center gap-1.5 transition';
-        btnTake.className = 'flex-1 py-2.5 rounded-xl bg-white border-2 border-slate-200 hover:border-sky-400 hover:text-sky-600 text-slate-600 font-bold text-xs flex items-center justify-center gap-1.5 transition';
+        btnDine.className = 'flex-1 py-2.5 rounded-xl bg-[#d4621a] text-white border border-[#d4621a] font-bold text-xs shadow-md shadow-[#d4621a]/25 flex items-center justify-center gap-1.5 transition';
+        btnTake.className = 'flex-1 py-2.5 rounded-xl bg-white border-2 border-[#ede3d8] hover:border-[#d4621a] hover:text-[#d4621a] text-[#2a1a0e] font-bold text-xs flex items-center justify-center gap-1.5 transition';
       } else {
-        btnTake.className = 'flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#0a192f] to-[#112240] text-sky-300 border border-sky-400/40 font-bold text-xs shadow-md shadow-sky-500/10 flex items-center justify-center gap-1.5 transition';
-        btnDine.className = 'flex-1 py-2.5 rounded-xl bg-white border-2 border-slate-200 hover:border-sky-400 hover:text-sky-600 text-slate-600 font-bold text-xs flex items-center justify-center gap-1.5 transition';
+        btnTake.className = 'flex-1 py-2.5 rounded-xl bg-[#d4621a] text-white border border-[#d4621a] font-bold text-xs shadow-md shadow-[#d4621a]/25 flex items-center justify-center gap-1.5 transition';
+        btnDine.className = 'flex-1 py-2.5 rounded-xl bg-white border-2 border-[#ede3d8] hover:border-[#d4621a] hover:text-[#d4621a] text-[#2a1a0e] font-bold text-xs flex items-center justify-center gap-1.5 transition';
       }
       renderCartModalItems();
     }
@@ -1358,11 +1358,11 @@
         return `
           <div class="py-2.5 flex items-center justify-between gap-3">
             <div>
-              <h4 class="font-extrabold text-slate-900 text-sm font-display">${item.name}</h4>
+              <h4 class="font-extrabold text-[#2a1a0e] text-sm font-display">${item.name}</h4>
               <p class="text-xs text-slate-500 font-medium">${item.variant ? `Size: ${item.variant} • ` : ''}₹${item.price} each</p>
             </div>
             <div class="flex items-center gap-3">
-              <span class="font-black text-slate-900 text-sm font-display">₹${itemLineTotal}</span>
+              <span class="font-black text-[#2a1a0e] text-sm font-display">₹${itemLineTotal}</span>
               <div class="inline-flex items-center rounded-xl bg-slate-100 font-bold text-xs overflow-hidden">
                 <button onclick="changeQty('${item.id}', -1); renderCartModalItems();" class="px-2.5 py-1 hover:bg-slate-200">－</button>
                 <span class="px-2 font-display">${item.qty}</span>
@@ -1404,10 +1404,10 @@
         if (isRunning && currentOrderType === 'dinein') {
           const nextRound = (currentOrder.kots?.length || 1) + 1;
           btn.innerHTML = `<span>➕ Send Round ${nextRound} to Kitchen (Add to Bill)</span>`;
-          btn.className = 'w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm sm:text-base shadow-xl shadow-amber-500/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display';
+          btn.className = 'w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-400 text-white font-black text-sm sm:text-base shadow-xl shadow-amber-500/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display';
         } else {
           btn.innerHTML = `<span>🚀 Place Order to Kitchen</span>`;
-          btn.className = 'w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-sky-400 via-sky-500 to-[#0284c7] hover:from-sky-300 hover:to-sky-400 text-slate-950 font-black text-sm sm:text-base shadow-xl shadow-sky-400/40 hover:shadow-[0_0_25px_rgba(56,189,248,0.7)] transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display';
+          btn.className = 'w-full py-3.5 sm:py-4 rounded-2xl bg-gradient-to-r from-[#d4621a] via-[#e5872c] to-[#f4ae52] hover:from-[#b04913] hover:to-[#d4621a] text-white font-black text-sm sm:text-base shadow-xl shadow-[#d4621a]/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-95 font-display';
         }
       }
     }
@@ -1554,13 +1554,13 @@
         itemsContainer.innerHTML = currentOrder.kots.map(k => `
           <div class="border-b border-slate-200/80 pb-2 pt-1.5 first:pt-0 space-y-1">
             <div class="flex items-center justify-between">
-              <span class="text-[10px] font-black uppercase tracking-wider text-sky-800 bg-sky-100 px-2 py-0.5 rounded-md">KOT Round ${k.kotNumber}</span>
+              <span class="text-[10px] font-black uppercase tracking-wider text-[#d4621a] bg-[#fef3e2] border border-[#f4ae52]/40 px-2 py-0.5 rounded-md">KOT Round ${k.kotNumber}</span>
               <span class="text-[9px] text-slate-400 font-mono">${k.orderedAt ? new Date(k.orderedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
             </div>
             ${(k.items || []).map(i => `
               <div class="flex justify-between py-0.5 pl-1 text-slate-700">
                 <span>${i.qty}x ${i.name} ${i.variant ? `(${i.variant})` : ''}</span>
-                <span class="font-bold text-slate-900">₹${i.itemTotal || (i.price * i.qty)}</span>
+                <span class="font-bold text-[#2a1a0e]">₹${i.itemTotal || (i.price * i.qty)}</span>
               </div>
             `).join('')}
           </div>
@@ -1569,7 +1569,7 @@
         itemsContainer.innerHTML = (currentOrder.items || []).map(i => `
           <div class="flex justify-between py-0.5 text-slate-700">
             <span>${i.qty}x ${i.name} ${i.variant ? `(${i.variant})` : ''}</span>
-            <span class="font-bold text-slate-900">₹${i.itemTotal || (i.price * i.qty)}</span>
+            <span class="font-bold text-[#2a1a0e]">₹${i.itemTotal || (i.price * i.qty)}</span>
           </div>
         `).join('');
       }
@@ -1697,12 +1697,12 @@
         if (t === tab) {
           if (tabEl) tabEl.classList.remove('hidden');
           if (btnEl) {
-            btnEl.className = 'py-2 rounded-xl bg-white text-[#0a192f] shadow-sm font-black transition';
+            btnEl.className = 'py-2 rounded-xl bg-white text-[#2a1a0e] shadow-sm font-black transition';
           }
         } else {
           if (tabEl) tabEl.classList.add('hidden');
           if (btnEl) {
-            btnEl.className = 'py-2 rounded-xl text-slate-600 hover:text-slate-900 transition';
+            btnEl.className = 'py-2 rounded-xl text-slate-600 hover:text-[#2a1a0e] transition';
           }
         }
       });
