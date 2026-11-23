@@ -15,17 +15,32 @@
         extend: {
           colors: {
             brand: {
-              50: '#f0f9ff',
-              100: '#e0f2fe',
-              200: '#bae6fd',
-              300: '#7dd3fc',
-              400: '#38bdf8',
-              500: '#0ea5e9',
-              600: '#0284c7',
-              700: '#0369a1',
-              800: '#075985',
-              900: '#0c4a6e'
-            }
+              50: '#fefbf6',
+              100: '#fef3e2', // ColorHunt Cream
+              200: '#fce3c0',
+              300: '#f8cb8b',
+              400: '#f4ae52', // ColorHunt Amber Gold
+              500: '#e5872c',
+              600: '#d4621a', // ColorHunt Terracotta Orange Primary
+              700: '#b04913',
+              800: '#8c3812',
+              900: '#722f12',
+              950: '#2a1a0e'  // ColorHunt Deep Espresso
+            },
+            espresso: {
+              700: '#432918',
+              800: '#352112',
+              900: '#2a1a0e',
+              950: '#1a1008'
+            },
+            cream: {
+              50: '#fffdfa',
+              100: '#fef9f2',
+              200: '#fef3e2',
+              300: '#fae6cb'
+            },
+            amberGold: '#f4ae52',
+            terracotta: '#d4621a'
           },
           fontFamily: {
             sans: ['"Plus Jakarta Sans"', 'sans-serif'],
@@ -42,47 +57,43 @@
     }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 font-sans min-h-screen antialiased flex flex-col justify-between selection:bg-brand-500 selection:text-white overflow-x-hidden">
+<body class="bg-[#1a1008] text-[#fef3e2] font-sans min-h-screen antialiased flex flex-col justify-between selection:bg-[#d4621a] selection:text-white overflow-x-hidden">
 
   <!-- Top Simple Navigation -->
-  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
+  <header class="border-b border-[#352112] bg-[#2a1a0e]/90 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2">
     <a href="/" class="flex items-center gap-2.5 shrink-0">
-      <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-brand-500 to-sky-400 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-brand-500/25">
-        TT
-      </div>
+      <img src="/logo.png" alt="TipTap Logo" class="h-9 sm:h-10 w-auto object-contain rounded-xl bg-[#fef3e2] p-1 border border-[#f4ae52]/40 shadow-md">
       <div>
-        <span class="font-extrabold text-white text-base tracking-tight">TipTap</span>
-        <span class="text-[10px] font-bold text-brand-400 ml-1 sm:ml-1.5 uppercase px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/20">Staff Portal</span>
+        <span class="font-extrabold text-[#fef3e2] text-base tracking-tight">TipTap</span>
+        <span class="text-[10px] font-bold text-[#f4ae52] ml-1 sm:ml-1.5 uppercase px-2 py-0.5 rounded-full bg-[#d4621a]/20 border border-[#d4621a]/40">Staff Portal</span>
       </div>
     </a>
 
-    <a href="/#partner-registration" class="text-xs font-bold text-slate-400 hover:text-white transition flex items-center gap-1 shrink-0">
+    <a href="/#partner-registration" class="text-xs font-bold text-[#fef3e2]/70 hover:text-white transition flex items-center gap-1 shrink-0">
       <span class="hidden sm:inline">Not yet registered?</span>
-      <span class="text-brand-400 font-extrabold underline">Apply ➔</span>
+      <span class="text-[#f4ae52] font-extrabold underline">Apply ➔</span>
     </a>
   </header>
 
   <!-- Login Card Form Area -->
   <main class="flex-1 flex items-center justify-center p-3 sm:p-6 my-4 sm:my-8">
-    <div class="bg-slate-900/90 border border-slate-800 rounded-3xl max-w-md w-full p-5 sm:p-9 shadow-2xl space-y-5 sm:space-y-6 relative overflow-hidden backdrop-blur-xl">
+    <div class="bg-[#2a1a0e]/95 border border-[#d4621a]/30 rounded-3xl max-w-md w-full p-5 sm:p-9 shadow-2xl space-y-5 sm:space-y-6 relative overflow-hidden backdrop-blur-xl">
       
       <!-- Top Glow Accent -->
-      <div class="absolute -top-24 -right-24 w-48 h-48 bg-brand-500/20 rounded-full blur-3xl pointer-events-none"></div>
-      <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -top-24 -right-24 w-48 h-48 bg-[#d4621a]/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-[#f4ae52]/10 rounded-full blur-3xl pointer-events-none"></div>
 
-      <!-- Header -->
+      <!-- Header with Official Logo -->
       <div class="text-center space-y-2 relative">
-        <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-brand-600 to-sky-400 flex items-center justify-center text-2xl shadow-xl shadow-brand-500/30">
-          🍳
-        </div>
+        <img src="/logo.png" alt="TipTap" class="h-14 mx-auto object-contain rounded-2xl bg-[#fef3e2] p-2 border border-[#f4ae52]/40 shadow-xl mb-1">
         <h1 class="text-2xl font-black text-white tracking-tight">Restaurant Staff Login</h1>
-        <p class="text-xs text-slate-400 leading-relaxed">
+        <p class="text-xs text-[#fef3e2]/70 leading-relaxed">
           Access your restaurant's billing counter, live Kitchen Display (KDS), and floor tables.
         </p>
       </div>
 
       <!-- Error / Status Notice -->
-      <div id="loginAlert" class="hidden p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-2">
+      <div id="loginAlert" class="hidden p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold flex items-center gap-2">
         <span class="text-base shrink-0">⚠️</span>
         <span id="loginAlertText">Invalid credentials.</span>
       </div>
@@ -91,59 +102,59 @@
       <form id="restaurantLoginForm" onsubmit="handleRestaurantLogin(event)" class="space-y-4 text-xs">
         
         <div>
-          <label class="block font-bold text-slate-300 mb-1.5">Registered Mobile Number or Restaurant ID *</label>
+          <label class="block font-bold text-[#fef3e2]/90 mb-1.5">Registered Mobile Number or Restaurant ID *</label>
           <div class="relative">
-            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm">📞</span>
+            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">📞</span>
             <input type="text" id="loginIdentifier" required placeholder="e.g. 9876543210 or royal-biryani"
-              class="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-800/90 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium text-xs sm:text-sm transition">
+              class="w-full pl-10 pr-4 py-3 rounded-xl bg-[#352112] border border-[#d4621a]/30 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#d4621a] font-medium text-xs sm:text-sm transition">
           </div>
-          <p class="text-[10px] text-slate-500 mt-1">The WhatsApp phone number provided during onboarding.</p>
+          <p class="text-[10px] text-[#fef3e2]/60 mt-1">The WhatsApp phone number provided during onboarding.</p>
         </div>
 
         <div>
           <div class="flex items-center justify-between mb-1.5">
-            <label id="lblPinTitle" class="font-bold text-slate-300">Cashier 4-Digit Login PIN *</label>
-            <span id="lblPinHint" class="text-[10px] text-brand-400 font-mono">Default: 1234</span>
+            <label id="lblPinTitle" class="font-bold text-[#fef3e2]/90">Cashier 4-Digit Login PIN *</label>
+            <span id="lblPinHint" class="text-[10px] text-[#f4ae52] font-mono">Default: 1234</span>
           </div>
           <div class="relative">
-            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔒</span>
+            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔒</span>
             <input type="password" id="loginPin" required maxlength="8" placeholder="••••"
-              class="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-800/90 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono tracking-widest text-base transition">
+              class="w-full pl-10 pr-4 py-3 rounded-xl bg-[#352112] border border-[#d4621a]/30 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#d4621a] font-mono tracking-widest text-base transition">
           </div>
         </div>
 
         <!-- Workstation Choice: Billing Counter vs Kitchen KDS -->
         <div>
-          <label class="block font-bold text-slate-300 mb-1.5">Select Workstation Destination *</label>
+          <label class="block font-bold text-[#fef3e2]/90 mb-1.5">Select Workstation Destination *</label>
           <div class="grid grid-cols-2 gap-2 sm:gap-2.5">
-            <label id="lblStationCounter" class="flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-brand-500 bg-brand-500/10 cursor-pointer transition select-none">
+            <label id="lblStationCounter" class="flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-[#d4621a] bg-[#d4621a]/15 cursor-pointer transition select-none">
               <div class="flex items-center justify-between mb-1">
                 <span class="text-base sm:text-lg">👑</span>
-                <input type="radio" name="stationDest" value="counter" checked onchange="handleStationToggle()" class="accent-brand-500 w-4 h-4">
+                <input type="radio" name="stationDest" value="counter" checked onchange="handleStationToggle()" class="accent-[#d4621a] w-4 h-4">
               </div>
               <span class="font-extrabold text-white text-xs truncate">Billing Counter</span>
-              <span class="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">POS, Tables & Live</span>
+              <span class="text-[9px] sm:text-[10px] text-[#fef3e2]/70 mt-0.5 truncate">POS, Tables & Live</span>
             </label>
 
-            <label id="lblStationKds" class="flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600">
+            <label id="lblStationKds" class="flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-[#352112] bg-[#352112]/50 cursor-pointer transition select-none hover:border-[#d4621a]/40">
               <div class="flex items-center justify-between mb-1">
                 <span class="text-base sm:text-lg">🍳</span>
-                <input type="radio" name="stationDest" value="kds" onchange="handleStationToggle()" class="accent-amber-500 w-4 h-4">
+                <input type="radio" name="stationDest" value="kds" onchange="handleStationToggle()" class="accent-[#f4ae52] w-4 h-4">
               </div>
               <span class="font-extrabold text-white text-xs truncate">Kitchen KDS</span>
-              <span class="text-[9px] sm:text-[10px] text-slate-400 mt-0.5 truncate">Direct Chef Orders</span>
+              <span class="text-[9px] sm:text-[10px] text-[#fef3e2]/70 mt-0.5 truncate">Direct Chef Orders</span>
             </label>
           </div>
         </div>
 
-        <div class="flex items-center justify-between pt-1 text-slate-400">
+        <div class="flex items-center justify-between pt-1 text-[#fef3e2]/70">
           <label class="flex items-center gap-2 cursor-pointer select-none text-[11px]">
-            <input type="checkbox" id="rememberMe" checked class="w-4 h-4 rounded bg-slate-800 border-slate-700 text-brand-500 focus:ring-brand-500/20">
+            <input type="checkbox" id="rememberMe" checked class="w-4 h-4 rounded bg-[#352112] border-[#d4621a]/40 text-[#d4621a] focus:ring-[#d4621a]/20">
             <span>Keep me logged in on this counter</span>
           </label>
         </div>
 
-        <button type="submit" id="btnLoginSubmit" class="w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-sm shadow-xl shadow-brand-500/25 transition flex items-center justify-center gap-2 active:scale-98">
+        <button type="submit" id="btnLoginSubmit" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#d4621a] to-[#e5872c] hover:from-[#b04913] hover:to-[#d4621a] text-white font-extrabold text-sm shadow-xl shadow-[#d4621a]/30 transition flex items-center justify-center gap-2 active:scale-98">
           <span>🚀 Enter Billing Counter POS</span>
         </button>
 
@@ -179,24 +190,24 @@
       const lblPinHint = document.getElementById('lblPinHint');
 
       if (isCounter) {
-        lblCounter.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-brand-500 bg-brand-500/10 cursor-pointer transition select-none';
-        lblKds.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600';
+        lblCounter.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-[#d4621a] bg-[#d4621a]/15 cursor-pointer transition select-none';
+        lblKds.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-[#352112] bg-[#352112]/50 cursor-pointer transition select-none hover:border-[#d4621a]/40';
         btn.innerHTML = '<span>🚀 Enter Billing Counter POS</span>';
-        btn.className = 'w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-sm shadow-xl shadow-brand-500/25 transition flex items-center justify-center gap-2 active:scale-98';
+        btn.className = 'w-full py-3.5 rounded-xl bg-gradient-to-r from-[#d4621a] to-[#e5872c] hover:from-[#b04913] hover:to-[#d4621a] text-white font-extrabold text-sm shadow-xl shadow-[#d4621a]/30 transition flex items-center justify-center gap-2 active:scale-98';
         if (lblPinTitle) lblPinTitle.innerText = 'Cashier 4-Digit Login PIN *';
         if (lblPinHint) {
           lblPinHint.innerText = 'Authorized Staff PIN';
-          lblPinHint.className = 'text-[10px] text-brand-400 font-mono';
+          lblPinHint.className = 'text-[10px] text-[#f4ae52] font-mono';
         }
       } else {
-        lblCounter.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-slate-700 bg-slate-800/40 cursor-pointer transition select-none hover:border-slate-600';
-        lblKds.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-amber-500 bg-amber-500/15 cursor-pointer transition select-none';
+        lblCounter.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-[#352112] bg-[#352112]/50 cursor-pointer transition select-none hover:border-[#d4621a]/40';
+        lblKds.className = 'flex flex-col p-2.5 sm:p-3 rounded-2xl border-2 border-[#f4ae52] bg-[#f4ae52]/15 cursor-pointer transition select-none';
         btn.innerHTML = '<span>🍳 Enter Kitchen KDS Screen</span>';
-        btn.className = 'w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-sm shadow-xl shadow-amber-500/25 transition flex items-center justify-center gap-2 active:scale-98';
+        btn.className = 'w-full py-3.5 rounded-xl bg-gradient-to-r from-[#f4ae52] to-[#e5872c] hover:from-[#e5872c] hover:to-[#f4ae52] text-[#2a1a0e] font-extrabold text-sm shadow-xl shadow-[#f4ae52]/25 transition flex items-center justify-center gap-2 active:scale-98';
         if (lblPinTitle) lblPinTitle.innerText = 'Chef 4-Digit Passkey *';
         if (lblPinHint) {
           lblPinHint.innerText = 'Kitchen Station Passkey';
-          lblPinHint.className = 'text-[10px] text-amber-400 font-mono';
+          lblPinHint.className = 'text-[10px] text-[#f4ae52] font-mono';
         }
       }
     }

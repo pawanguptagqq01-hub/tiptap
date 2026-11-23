@@ -15,17 +15,32 @@
         extend: {
           colors: {
             brand: {
-              50: '#f0f9ff',
-              100: '#e0f2fe',
-              200: '#bae6fd',
-              300: '#7dd3fc',
-              400: '#38bdf8',
-              500: '#0ea5e9',
-              600: '#0284c7',
-              700: '#0369a1',
-              800: '#075985',
-              900: '#0c4a6e'
-            }
+              50: '#fefbf6',
+              100: '#fef3e2', // ColorHunt Cream
+              200: '#fce3c0',
+              300: '#f8cb8b',
+              400: '#f4ae52', // ColorHunt Amber Gold
+              500: '#e5872c',
+              600: '#d4621a', // ColorHunt Terracotta Orange Primary
+              700: '#b04913',
+              800: '#8c3812',
+              900: '#722f12',
+              950: '#2a1a0e'  // ColorHunt Deep Espresso
+            },
+            espresso: {
+              700: '#432918',
+              800: '#352112',
+              900: '#2a1a0e',
+              950: '#1a1008'
+            },
+            cream: {
+              50: '#fffdfa',
+              100: '#fef9f2',
+              200: '#fef3e2',
+              300: '#fae6cb'
+            },
+            amberGold: '#f4ae52',
+            terracotta: '#d4621a'
           },
           fontFamily: {
             sans: ['"Plus Jakarta Sans"', 'sans-serif'],
@@ -44,24 +59,24 @@
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-100 font-sans min-h-screen antialiased selection:bg-brand-500 selection:text-white overflow-x-hidden">
+<body class="bg-[#1a1008] text-[#fef3e2] font-sans min-h-screen antialiased selection:bg-[#d4621a] selection:text-white overflow-x-hidden">
 
   <!-- Top Platform Navigation -->
-  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40">
+  <header class="border-b border-[#352112] bg-[#2a1a0e]/95 backdrop-blur-md sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-3 sm:px-6 min-h-16 py-2.5 sm:py-0 flex items-center justify-between gap-2">
       
       <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-brand-500 to-sky-400 flex items-center justify-center text-white font-black text-sm sm:text-base shadow-lg shadow-brand-500/30">
-          TT
-        </div>
+        <a href="/" class="shrink-0">
+          <img src="/logo.png" alt="TipTap Logo" class="h-9 sm:h-10 w-auto object-contain rounded-xl bg-[#fef3e2] p-1 border border-[#f4ae52]/40 shadow-md">
+        </a>
         <div>
           <div class="flex items-center gap-1.5 sm:gap-2">
             <span class="font-extrabold text-white text-base sm:text-lg tracking-tight">TipTap</span>
-            <span class="text-[9px] sm:text-[10px] font-black uppercase px-1.5 sm:px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/40">
+            <span class="text-[9px] sm:text-[10px] font-black uppercase px-1.5 sm:px-2 py-0.5 rounded-full bg-[#d4621a]/25 text-[#f4ae52] border border-[#d4621a]/40">
               <span class="sm:hidden">HQ</span><span class="hidden sm:inline">Super Admin SaaS</span>
             </span>
           </div>
-          <p class="text-[10px] sm:text-[11px] text-slate-400 hidden xs:block">Multi-Restaurant Operations HQ</p>
+          <p class="text-[10px] sm:text-[11px] text-[#f4ae52]/80 hidden xs:block">Multi-Restaurant Operations HQ</p>
         </div>
       </div>
 
@@ -70,20 +85,20 @@
           <span>🧹</span>
           <span class="hidden sm:inline">Reset Orders</span>
         </button>
-        <a href="/kds.html" target="_blank" class="p-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-xs font-bold text-amber-300 transition flex items-center gap-1" title="Open Kitchen KDS Display">
+        <a href="/kds.html" target="_blank" class="p-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-[#f4ae52]/15 hover:bg-[#f4ae52]/25 border border-[#f4ae52]/40 text-xs font-bold text-[#f4ae52] transition flex items-center gap-1" title="Open Kitchen KDS Display">
           <span>🍳</span>
           <span class="hidden sm:inline">Kitchen KDS</span>
         </a>
-        <a href="/dashboard.html" class="p-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition flex items-center gap-1" title="Open Billing Counter POS">
+        <a href="/dashboard.html" class="p-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-[#352112] hover:bg-[#432918] text-xs font-bold text-[#fef3e2] transition flex items-center gap-1 border border-[#d4621a]/30" title="Open Billing Counter POS">
           <span>👑</span>
           <span class="hidden sm:inline">Billing POS ➔</span>
         </a>
-        <button onclick="openOnboardModal()" class="px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-xs shadow-lg shadow-brand-500/25 transition flex items-center gap-1 active:scale-95" title="Add Restaurant">
+        <button onclick="openOnboardModal()" class="px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-[#d4621a] to-[#f4ae52] text-[#2a1a0e] font-extrabold text-xs shadow-lg shadow-[#d4621a]/25 transition flex items-center gap-1 active:scale-95" title="Add Restaurant">
           <span>＋</span>
           <span class="hidden sm:inline">Add Restaurant</span>
           <span class="sm:hidden font-bold">Add</span>
         </button>
-        <button onclick="lockAdminSession()" class="p-1.5 sm:px-3 sm:py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-amber-300 transition flex items-center gap-1" title="Lock Super Admin Portal">
+        <button onclick="lockAdminSession()" class="p-1.5 sm:px-3 sm:py-2 rounded-xl bg-[#352112] hover:bg-[#432918] border border-[#d4621a]/30 text-xs font-bold text-[#f4ae52] transition flex items-center gap-1" title="Lock Super Admin Portal">
           <span>🔒</span>
           <span class="hidden sm:inline">Lock HQ</span>
         </button>

@@ -15,17 +15,32 @@
         extend: {
           colors: {
             brand: {
-              50: '#f0f9ff',
-              100: '#e0f2fe',
-              200: '#bae6fd',
-              300: '#7dd3fc',
-              400: '#38bdf8',
-              500: '#0ea5e9',
-              600: '#0284c7',
-              700: '#0369a1',
-              800: '#075985',
-              900: '#0c4a6e'
-            }
+              50: '#fefbf6',
+              100: '#fef3e2', // ColorHunt Cream
+              200: '#fce3c0',
+              300: '#f8cb8b',
+              400: '#f4ae52', // ColorHunt Amber Gold
+              500: '#e5872c',
+              600: '#d4621a', // ColorHunt Terracotta Orange Primary
+              700: '#b04913',
+              800: '#8c3812',
+              900: '#722f12',
+              950: '#2a1a0e'  // ColorHunt Deep Espresso
+            },
+            espresso: {
+              700: '#432918',
+              800: '#352112',
+              900: '#2a1a0e',
+              950: '#1a1008'
+            },
+            cream: {
+              50: '#fffdfa',
+              100: '#fef9f2',
+              200: '#fef3e2',
+              300: '#fae6cb'
+            },
+            amberGold: '#f4ae52',
+            terracotta: '#d4621a'
           },
           fontFamily: {
             sans: ['"Plus Jakarta Sans"', 'sans-serif'],
@@ -48,21 +63,21 @@
     }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen overflow-x-hidden">
+<body class="bg-[#fef9f2] text-slate-800 font-sans antialiased min-h-screen overflow-x-hidden">
 
   <!-- Navbar -->
-  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+  <header class="bg-white border-b border-[#ede3d8] sticky top-0 z-30 shadow-sm no-print">
     <div class="max-w-7xl mx-auto px-3 sm:px-6 min-h-16 py-2 sm:py-0 flex items-center justify-between gap-2">
       <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-        <a href="/" class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-brand-400 flex items-center justify-center text-white font-bold text-sm shadow">
-          TT
+        <a href="/" class="shrink-0">
+          <img src="/logo.png" alt="TipTap Logo" class="h-9 sm:h-10 w-auto object-contain rounded-xl bg-[#fef3e2] p-1 border border-[#f4ae52]/40 shadow-sm">
         </a>
         <div class="flex items-center gap-1.5 sm:gap-2">
           <span class="font-extrabold text-slate-900 text-base">TipTap</span>
-          <select id="nfcRestSelect" onchange="switchNfcRest(this.value)" class="text-xs font-bold px-2 sm:px-2.5 py-1 rounded-lg bg-brand-50 text-brand-700 border border-brand-200 focus:outline-none max-w-[120px] sm:max-w-none truncate">
+          <select id="nfcRestSelect" onchange="switchNfcRest(this.value)" class="text-xs font-bold px-2 sm:px-2.5 py-1 rounded-lg bg-[#fef3e2] text-[#d4621a] border border-[#f4ae52]/40 focus:outline-none max-w-[120px] sm:max-w-none truncate">
             <option value="">Loading restaurant...</option>
           </select>
-          <span class="hidden sm:inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">NFC Cards</span>
+          <span class="hidden sm:inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-[#fef3e2] text-[#d4621a] border border-[#f4ae52]/30">NFC Cards</span>
         </div>
       </div>
 
@@ -71,7 +86,7 @@
           <span class="hidden sm:inline">⬅ Back to Super Admin HQ</span>
           <span class="sm:hidden">⬅ Super Admin</span>
         </a>
-        <button onclick="window.print()" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow-md transition flex items-center gap-1">
+        <button onclick="window.print()" class="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-[#d4621a] hover:bg-[#b04913] text-white font-bold text-xs shadow-md transition flex items-center gap-1">
           <span>🖨️</span>
           <span class="hidden sm:inline">Print Table Stands</span>
           <span class="sm:hidden">Print</span>
