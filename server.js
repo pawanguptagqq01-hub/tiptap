@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 
 const DEFAULT_PORT = parseInt(process.env.PORT, 10) || 3030;
 const DB_PATH = path.join(__dirname, 'data', 'tiptap-db.json');
@@ -514,6 +515,216 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
+// ====================================================
+// CRYPTOGRAPHIC CREDENTIAL & SESSION MANAGEMENT
+// ====================================================
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const sessions = new Map(); // sessionId -> session data
+
+function hashPin(pin) {
+  if (!pin) return '';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(pin.toString(), salt, 32).toString('hex');
+  return 'scrypt$' + salt + '$' + hash;
+}
+
+function verifyPin(inputPin, storedValue) {
+  if (!inputPin || !storedValue) return false;
+  const inputStr = inputPin.toString();
+  const storedStr = storedValue.toString();
+
+  if (storedStr.startsWith('scrypt$')) {
+    const parts = storedStr.split('$');
+    if (parts.length !== 3) return false;
+    const salt = parts[1];
+    const originalHash = parts[2];
+    try {
+      const derived = crypto.scryptSync(inputStr, salt, 32).toString('hex');
+      return crypto.timingSafeEqual(Buffer.from(derived, 'hex'), Buffer.from(originalHash, 'hex'));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  const bufA = Buffer.from(inputStr);
+  const bufB = Buffer.from(storedStr);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+function createSession({ role, restaurantId = null, restaurantName = null }) {
+  const sessionId = crypto.randomBytes(32).toString('hex');
+  const csrfToken = crypto.randomBytes(24).toString('hex');
+  const now = Date.now();
+  const session = {
+    id: sessionId,
+    role,
+    restaurantId,
+    restaurantName,
+    csrfToken,
+    createdAt: now,
+    expiresAt: now + SESSION_TTL_MS
+  };
+  sessions.set(sessionId, session);
+  return session;
+}
+
+function getSession(sessionId) {
+  if (!sessionId) return null;
+  const session = sessions.get(sessionId);
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    sessions.delete(sessionId);
+    return null;
+  }
+  return session;
+}
+
+function invalidateSession(sessionId) {
+  if (sessionId) sessions.delete(sessionId);
+}
+
+function invalidateRestaurantSessions(restaurantId) {
+  if (!restaurantId) return;
+  for (const [id, s] of sessions.entries()) {
+    if (s.restaurantId === restaurantId) {
+      sessions.delete(id);
+    }
+  }
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, s] of sessions.entries()) {
+    if (now > s.expiresAt) sessions.delete(id);
+  }
+}, 15 * 60 * 1000);
+
+function parseCookies(req) {
+  const list = {};
+  const rc = req.headers.cookie;
+  if (rc) {
+    rc.split(';').forEach(cookie => {
+      const parts = cookie.split('=');
+      const name = parts.shift().trim();
+      const val = parts.join('=').trim();
+      list[name] = decodeURI(val);
+    });
+  }
+  return list;
+}
+
+function setSessionCookie(res, sessionId, req) {
+  const isHttps = req && (req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted);
+  const secureFlag = (process.env.NODE_ENV === 'production' || isHttps) ? '; Secure' : '';
+  res.setHeader('Set-Cookie', 'tiptap_session=' + sessionId + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400' + secureFlag);
+}
+
+function clearSessionCookie(res, req) {
+  const isHttps = req && (req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted);
+  const secureFlag = (process.env.NODE_ENV === 'production' || isHttps) ? '; Secure' : '';
+  res.setHeader('Set-Cookie', 'tiptap_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' + secureFlag);
+}
+
+function authenticateRequest(req) {
+  const cookies = parseCookies(req);
+  let sessionId = cookies['tiptap_session'];
+
+  if (!sessionId && req.headers.authorization) {
+    const auth = req.headers.authorization.trim();
+    if (auth.toLowerCase().startsWith('bearer ')) {
+      sessionId = auth.substring(7).trim();
+    }
+  }
+
+  if (!sessionId && req.url) {
+    try {
+      const u = new URL(req.url, 'http://localhost');
+      sessionId = u.searchParams.get('auth_token');
+    } catch (e) {}
+  }
+
+  return getSession(sessionId);
+}
+
+function verifyCsrfToken(req, session) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return true;
+  if (!session || !session.csrfToken) return false;
+
+  const token = req.headers['x-csrf-token'] || req.headers['x-xsrf-token'];
+  if (token && token.trim() === session.csrfToken) return true;
+
+  if (req.headers.authorization && req.headers.authorization.toLowerCase().startsWith('bearer ')) {
+    return true;
+  }
+
+  return false;
+}
+
+function isSuperAdminAuthenticated(req, bodyPin) {
+  const session = authenticateRequest(req);
+  if (session && session.role === 'superadmin') {
+    return true;
+  }
+
+  const pin = (bodyPin || (req.headers && req.headers['x-master-pin']) || '').toString().trim();
+  if (pin) {
+    const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').toString().trim();
+    if (envPin && pin === envPin) return true;
+    if (db.superAdmin && db.superAdmin.pin && verifyPin(pin, db.superAdmin.pin)) return true;
+  }
+
+  return false;
+}
+
+function verifyRestaurantAccess(req, targetRestaurantId, allowedRoles = ['restaurant_owner', 'counter_staff', 'kitchen_staff']) {
+  const session = authenticateRequest(req);
+  if (!session) {
+    return { authorized: false, status: 401, error: 'Unauthorized: Authentication session required' };
+  }
+  if (session.role === 'superadmin') {
+    return { authorized: true, session };
+  }
+  if (session.restaurantId !== targetRestaurantId) {
+    return { authorized: false, status: 403, error: "Forbidden: Cannot access another restaurant's data" };
+  }
+  if (allowedRoles && !allowedRoles.includes(session.role)) {
+    return { authorized: false, status: 403, error: "Forbidden: Role '" + session.role + "' is not authorized for this action" };
+  }
+  return { authorized: true, session };
+}
+
+function migrateAndSecureCredentials() {
+  let changed = false;
+
+  if (!db.superAdmin) {
+    db.superAdmin = { name: 'TipTap Platform Super Admin' };
+  }
+  const targetSuperPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || db.superAdmin.pin || '0000').toString().trim();
+  if (!db.superAdmin.pin || !db.superAdmin.pin.startsWith('scrypt$')) {
+    db.superAdmin.pin = hashPin(targetSuperPin);
+    changed = true;
+  }
+
+  if (db.restaurants) {
+    Object.values(db.restaurants).forEach(r => {
+      if (r.pin && !r.pin.startsWith('scrypt$')) {
+        r.pin = hashPin(r.pin);
+        changed = true;
+      }
+      if (r.kitchenPin && !r.kitchenPin.startsWith('scrypt$')) {
+        r.kitchenPin = hashPin(r.kitchenPin);
+        changed = true;
+      }
+    });
+  }
+
+  if (changed) {
+    saveDb(db);
+    console.log('🔒 [TipTap Security] Migrated all credentials to secure salted scrypt hashes.');
+  }
+}
+
 // HTTP Request Handler
 const server = http.createServer((req, res) => {
   // Production Security & CORS Headers
@@ -600,16 +811,14 @@ const server = http.createServer((req, res) => {
 
     // Helper: Verify Platform Super Admin Master PIN
     function verifyMasterPin(bodyPin) {
-      const configuredPin = (process.env.TIPTAP_MASTER_PIN || db.superAdmin?.pin || '0000').toString().trim();
-      const provided = (bodyPin || req.headers['x-master-pin'] || searchParams.get('masterPin') || '').toString().trim();
-      return Boolean(provided && (provided === configuredPin || provided === 'pawan999' || provided === '9999'));
+      return isSuperAdminAuthenticated(req, bodyPin);
     }
 
     // 1. List All Restaurants (Restricted to Super Admin HQ)
     if (pathname === '/api/restaurants' && req.method === 'GET') {
-      if (!verifyMasterPin()) {
+      if (!isSuperAdminAuthenticated(req)) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized: Super Admin Master PIN required to view restaurants list' }));
+        res.end(JSON.stringify({ error: 'Unauthorized: Super Admin session required to view restaurants list' }));
         return;
       }
 
@@ -619,8 +828,6 @@ const server = http.createServer((req, res) => {
         phone: r.phone,
         address: r.address,
         plan: r.plan || 'Pro Plan (Active)',
-        pin: r.pin || '1234',
-        kitchenPin: r.kitchenPin || '5678',
         tableCount: (r.tables || []).length,
         activeOrdersCount: (r.orders || []).length,
         menuItemsCount: (r.menu || []).length,
@@ -864,6 +1071,38 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // 2x. Session Status Check: GET /api/auth/session
+    if (pathname === '/api/auth/session' && req.method === 'GET') {
+      const session = authenticateRequest(req);
+      if (session) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          authenticated: true,
+          role: session.role === 'kitchen_staff' ? 'kitchen' : (session.role === 'counter_staff' ? 'counter' : session.role),
+          restaurantId: session.restaurantId,
+          restaurantName: session.restaurantName,
+          csrfToken: session.csrfToken,
+          expiresAt: session.expiresAt
+        }));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ authenticated: false }));
+      }
+      return;
+    }
+
+    // 2y. Session Logout: POST /api/auth/logout
+    if (pathname === '/api/auth/logout' && req.method === 'POST') {
+      const session = authenticateRequest(req);
+      if (session) {
+        invalidateSession(session.id);
+      }
+      clearSessionCookie(res, req);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Logged out successfully' }));
+      return;
+    }
+
     // 2h. Verify Super Admin Master PIN: POST /api/admin/verify-pin
     if (pathname === '/api/admin/verify-pin' && req.method === 'POST') {
       const clientIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
@@ -874,16 +1113,26 @@ const server = http.createServer((req, res) => {
       }
 
       readJsonBody((err, data) => {
-        const pin = (data.pin || '').trim();
-        const masterPin = db.superAdmin?.pin || '0000';
-        if (pin === masterPin || pin === 'pawan999' || pin === '9999') {
+        const pin = (data?.pin || '').trim();
+        const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
+        const isMasterValid = (envPin && pin === envPin) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+
+        if (isMasterValid) {
           clearAttempts(clientIp);
+          const session = createSession({ role: 'superadmin' });
+          setSessionCookie(res, session.id, req);
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, message: 'Super Admin PIN verified' }));
+          res.end(JSON.stringify({
+            success: true,
+            message: 'Super Admin PIN verified',
+            sessionId: session.id,
+            csrfToken: session.csrfToken,
+            redirectUrl: '/super-admin.html'
+          }));
         } else {
           recordFailedAttempt(clientIp);
           res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Invalid Master PIN' }));
+          res.end(JSON.stringify({ success: false, error: 'Invalid Super Admin Master PIN' }));
         }
       });
       return;
@@ -891,6 +1140,13 @@ const server = http.createServer((req, res) => {
 
     // 2i. Restaurant Partner Login: POST /api/auth/restaurant-login
     if (pathname === '/api/auth/restaurant-login' && req.method === 'POST') {
+      const clientIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+      if (isRateLimited(clientIp)) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Too many failed login attempts. Please wait 5 minutes.' }));
+        return;
+      }
+
       readJsonBody((err, data) => {
         if (err || !data.identifier || !data.pin) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -901,26 +1157,33 @@ const server = http.createServer((req, res) => {
         const rawIdent = data.identifier.toString().trim().toLowerCase();
         const cleanIdentPhone = rawIdent.replace(/[^0-9]/g, '');
         const pin = data.pin.toString().trim();
-        const masterPin = db.superAdmin?.pin || '0000';
 
-        // Check if logging in as Platform Super Admin
-        if (['admin', 'superadmin', 'pawan', 'master', '0000', 'super'].includes(rawIdent)) {
-          if (pin === masterPin || pin === 'pawan999' || pin === '9999') {
+        // 1. Check if logging in as Platform Super Admin
+        if (['admin', 'superadmin', 'master', 'super'].includes(rawIdent)) {
+          const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
+          const isMasterValid = (envPin && pin === envPin) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+          if (isMasterValid) {
+            clearAttempts(clientIp);
+            const session = createSession({ role: 'superadmin' });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: true,
               role: 'superadmin',
+              sessionId: session.id,
+              csrfToken: session.csrfToken,
               redirectUrl: '/super-admin.html'
             }));
             return;
           } else {
+            recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Invalid Super Admin Master PIN' }));
+            res.end(JSON.stringify({ error: 'Invalid Super Admin credentials' }));
             return;
           }
         }
 
-        // Search in db.restaurants
+        // 2. Search in db.restaurants
         const targetRest = Object.values(db.restaurants).find(r => {
           const rPhoneClean = (r.phone || '').replace(/[^0-9]/g, '');
           const phoneMatch = cleanIdentPhone && rPhoneClean && (rPhoneClean.endsWith(cleanIdentPhone) || cleanIdentPhone.endsWith(rPhoneClean));
@@ -930,19 +1193,28 @@ const server = http.createServer((req, res) => {
         });
 
         if (!targetRest) {
+          recordFailedAttempt(clientIp);
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'No restaurant found with this phone number or ID. Please check or register first.' }));
           return;
         }
 
-        const counterPin = targetRest.pin || '1234';
-        const kitchenPin = targetRest.kitchenPin || '5678';
-        const isMaster = pin === masterPin || pin === 'pawan999';
         const station = (data.station || 'counter').toString().trim();
+        const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
+        const isMaster = (envPin && pin === envPin) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+        const isCounterPin = targetRest.pin && verifyPin(pin, targetRest.pin);
+        const isKitchenPin = targetRest.kitchenPin && verifyPin(pin, targetRest.kitchenPin);
 
         if (station === 'kds') {
           // Kitchen KDS login: accepts kitchenPin, counterPin, or masterPin
-          if (pin === kitchenPin || pin === counterPin || isMaster) {
+          if (isKitchenPin || isCounterPin || isMaster) {
+            clearAttempts(clientIp);
+            const session = createSession({
+              role: 'kitchen_staff',
+              restaurantId: targetRest.id,
+              restaurantName: targetRest.name
+            });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: true,
@@ -952,17 +1224,27 @@ const server = http.createServer((req, res) => {
                 name: targetRest.name,
                 phone: targetRest.phone
               },
-              redirectUrl: `/kds.html?restaurant=${targetRest.id}`
+              sessionId: session.id,
+              csrfToken: session.csrfToken,
+              redirectUrl: '/kds.html?restaurant=' + targetRest.id
             }));
             return;
           } else {
+            recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: 'Invalid Kitchen Chef Passkey.' }));
             return;
           }
         } else {
-          // Billing Counter POS login: ONLY accepts counterPin or masterPin!
-          if (pin === counterPin || isMaster) {
+          // Billing Counter login: strictly blocks kitchen passkey!
+          if (isCounterPin || isMaster) {
+            clearAttempts(clientIp);
+            const session = createSession({
+              role: 'counter_staff',
+              restaurantId: targetRest.id,
+              restaurantName: targetRest.name
+            });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: true,
@@ -972,17 +1254,20 @@ const server = http.createServer((req, res) => {
                 name: targetRest.name,
                 phone: targetRest.phone
               },
-              redirectUrl: `/dashboard.html?restaurant=${targetRest.id}`
+              sessionId: session.id,
+              csrfToken: session.csrfToken,
+              redirectUrl: '/dashboard.html?restaurant=' + targetRest.id
             }));
             return;
-          } else if (pin === kitchenPin) {
-            // Kitchen staff tried to login to billing counter!
+          } else if (isKitchenPin) {
+            recordFailedAttempt(clientIp);
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: '🚫 Access Denied: Kitchen staff cannot access the Billing Counter. Please enter Cashier / Owner PIN, or switch destination to Kitchen KDS.' }));
             return;
           } else {
+            recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Invalid Cashier / Staff PIN for Billing Counter.' }));
+            res.end(JSON.stringify({ success: false, error: 'Incorrect Cashier / Manager PIN.' }));
             return;
           }
         }
@@ -1003,7 +1288,6 @@ const server = http.createServer((req, res) => {
         let restId = (data.restaurantId || '').toString().trim();
         const pin = (data.pin || '').toString().trim();
         const station = (data.station || 'counter').toString().trim();
-        const masterPin = db.superAdmin?.pin || '0000';
 
         if (!restId || !db.restaurants[restId]) {
           const firstRest = Object.values(db.restaurants)[0];
@@ -1017,20 +1301,29 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        const counterPin = r.pin || '1234';
-        const kitchenPin = r.kitchenPin || '5678';
-        const isMaster = pin === masterPin || pin === 'pawan999';
+        const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
+        const isMaster = (envPin && pin === envPin) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+        const isCounterPin = r.pin && verifyPin(pin, r.pin);
+        const isKitchenPin = r.kitchenPin && verifyPin(pin, r.kitchenPin);
 
         if (station === 'kds') {
           // Kitchen KDS unlock
-          if (pin === kitchenPin || pin === counterPin || isMaster) {
+          if (isKitchenPin || isCounterPin || isMaster) {
             clearAttempts(clientIp);
+            const session = createSession({
+              role: 'kitchen_staff',
+              restaurantId: r.id,
+              restaurantName: r.name
+            });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ 
               success: true, 
               role: 'kitchen',
               restaurantId: r.id, 
-              restaurantName: r.name 
+              restaurantName: r.name,
+              sessionId: session.id,
+              csrfToken: session.csrfToken
             }));
           } else {
             recordFailedAttempt(clientIp);
@@ -1039,19 +1332,30 @@ const server = http.createServer((req, res) => {
           }
         } else {
           // Billing Counter unlock: strictly blocks kitchen passkey!
-          if (pin === counterPin || isMaster) {
+          if (isCounterPin || isMaster) {
             clearAttempts(clientIp);
+            const session = createSession({
+              role: 'counter_staff',
+              restaurantId: r.id,
+              restaurantName: r.name
+            });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ 
               success: true, 
               role: 'counter',
               restaurantId: r.id, 
-              restaurantName: r.name 
+              restaurantName: r.name,
+              sessionId: session.id,
+              csrfToken: session.csrfToken
             }));
-          } else if (pin === kitchenPin) {
+          } else if (isKitchenPin) {
             recordFailedAttempt(clientIp);
             res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: '🚫 Access Denied: Kitchen Chef passkey cannot access the Billing Counter. Please enter Cashier / Owner PIN.' }));
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: '🚫 Access Denied: Kitchen Chef passkey cannot access the Billing Counter. Please enter Cashier / Owner PIN.' 
+            }));
           } else {
             recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -1082,25 +1386,59 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // Helper: Verify restaurant staff authorization (Counter PIN or Kitchen PIN)
+    // Helper: Verify restaurant staff authorization (Counter PIN or Kitchen PIN or Server Session)
     function verifyStaffAuth(data, roleRequired = 'any') {
+      const session = authenticateRequest(req);
+      if (session) {
+        if (session.role === 'superadmin') return true;
+        if (session.restaurantId !== targetRestId) return false;
+        if (roleRequired === 'counter' && session.role !== 'counter_staff' && session.role !== 'restaurant_owner') {
+          return false;
+        }
+        return true;
+      }
+
       const staffPin = (req.headers['x-staff-pin'] || data?.staffPin || searchParams.get('staffPin') || '').toString().trim();
       const masterPin = (req.headers['x-master-pin'] || data?.masterPin || searchParams.get('masterPin') || '').toString().trim();
       if (verifyMasterPin(masterPin)) return true;
       if (!staffPin || !restaurant) return false;
       if (roleRequired === 'counter') {
-        return staffPin === restaurant.pin;
+        return verifyPin(staffPin, restaurant.pin);
       }
-      return staffPin === restaurant.pin || staffPin === restaurant.kitchenPin;
+      return verifyPin(staffPin, restaurant.pin) || verifyPin(staffPin, restaurant.kitchenPin);
     }
 
     // 4. Restaurant State (Role-Filtered & Tenant Isolated): GET /api/state or GET /api/r/:id/state
     if ((pathname === '/api/state' || pathname === `/api/r/${targetRestId}/state`) && req.method === 'GET') {
-      const staffPin = (req.headers['x-staff-pin'] || searchParams.get('staffPin') || '').toString().trim();
-      const masterPin = (req.headers['x-master-pin'] || searchParams.get('masterPin') || '').toString().trim();
-      const isMaster = verifyMasterPin(masterPin);
-      const isCounterStaff = (staffPin && staffPin === restaurant.pin) || isMaster;
-      const isKitchenStaff = (staffPin && staffPin === restaurant.kitchenPin) || isCounterStaff;
+      const session = authenticateRequest(req);
+      let isMaster = false;
+      let isCounterStaff = false;
+      let isKitchenStaff = false;
+
+      if (session) {
+        if (session.role === 'superadmin') {
+          isMaster = true;
+          isCounterStaff = true;
+          isKitchenStaff = true;
+        } else if (session.restaurantId === targetRestId) {
+          if (session.role === 'counter_staff' || session.role === 'restaurant_owner') {
+            isCounterStaff = true;
+            isKitchenStaff = true;
+          } else if (session.role === 'kitchen_staff') {
+            isKitchenStaff = true;
+          }
+        } else {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: "Forbidden: Cannot access another restaurant's data" }));
+          return;
+        }
+      } else {
+        const staffPin = (req.headers['x-staff-pin'] || searchParams.get('staffPin') || '').toString().trim();
+        const masterPin = (req.headers['x-master-pin'] || searchParams.get('masterPin') || '').toString().trim();
+        isMaster = verifyMasterPin(masterPin);
+        isCounterStaff = (staffPin && verifyPin(staffPin, restaurant.pin)) || isMaster;
+        isKitchenStaff = (staffPin && verifyPin(staffPin, restaurant.kitchenPin)) || isCounterStaff;
+      }
       const isAnyStaff = isCounterStaff || isKitchenStaff;
 
       // Base sanitized restaurant info (Never leak secret credentials)
@@ -2055,18 +2393,43 @@ const server = http.createServer((req, res) => {
     // 12. Update Restaurant Settings: POST /api/settings
     if (pathname.endsWith('/settings') && req.method === 'POST') {
       readJsonBody((err, data) => {
-        if (!verifyStaffAuth(data, 'counter')) {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to update settings' }));
-          return;
+        const session = authenticateRequest(req);
+        if (session) {
+          if (session.role === 'kitchen_staff') {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Forbidden: Kitchen staff cannot modify restaurant settings" }));
+            return;
+          }
+          if (session.role !== 'superadmin' && session.restaurantId !== restaurant.id) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Forbidden: Cannot modify another restaurant's settings" }));
+            return;
+          }
+          if (!verifyCsrfToken(req, session)) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Forbidden: Invalid or missing CSRF token" }));
+            return;
+          }
+        } else {
+          if (!verifyStaffAuth(data, 'counter')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to update settings' }));
+            return;
+          }
         }
 
         if (typeof data.rushMode === 'boolean') restaurant.rushMode = data.rushMode;
         if (data.name) restaurant.name = data.name;
         if (data.phone) restaurant.phone = data.phone;
         if (data.address) restaurant.address = data.address;
-        if (data.pin) restaurant.pin = data.pin.toString().trim();
-        if (data.kitchenPin) restaurant.kitchenPin = data.kitchenPin.toString().trim();
+        if (data.pin) {
+          restaurant.pin = hashPin(data.pin.toString().trim());
+          invalidateRestaurantSessions(restaurant.id);
+        }
+        if (data.kitchenPin) {
+          restaurant.kitchenPin = hashPin(data.kitchenPin.toString().trim());
+          invalidateRestaurantSessions(restaurant.id);
+        }
         if (data.paymentConfig) {
           restaurant.paymentConfig = {
             ...(restaurant.paymentConfig || {}),
@@ -2181,6 +2544,7 @@ process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 async function boot() {
   await initCloudDatabase();
+  migrateAndSecureCredentials();
   startServer();
 }
 

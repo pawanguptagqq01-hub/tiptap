@@ -851,12 +851,26 @@
     // ----------------------------------------------------
     // 9. Passkey Security Gate Check
     // ----------------------------------------------------
-    function checkKdsAuthentication() {
+    async function checkKdsAuthentication() {
+      const modal = document.getElementById('kdsSecurityGateModal');
+      try {
+        const res = await fetch('/api/auth/session');
+        const session = await res.json();
+        if (session && session.authenticated) {
+          if (session.csrfToken) sessionStorage.setItem('tiptap_csrf_token', session.csrfToken);
+          if (session.role === 'superadmin' || session.restaurantId === restaurantId) {
+            sessionStorage.setItem('tiptap_kds_auth_' + restaurantId, 'true');
+            modal.classList.add('hidden');
+            fetchKdsState();
+            return;
+          }
+        }
+      } catch (e) {}
+
       const isAuth = sessionStorage.getItem('tiptap_kds_auth_' + restaurantId) === 'true' ||
                      localStorage.getItem('tiptap_kds_auth_' + restaurantId) === 'true' ||
                      sessionStorage.getItem('tiptap_counter_auth_' + restaurantId) === 'true' ||
                      localStorage.getItem('tiptap_counter_auth_' + restaurantId) === 'true';
-      const modal = document.getElementById('kdsSecurityGateModal');
       if (!isAuth) {
         modal.classList.remove('hidden');
         setTimeout(() => document.getElementById('kdsGatePinInput')?.focus(), 200);
@@ -883,7 +897,8 @@
         const data = await res.json();
         if (res.ok && data.success) {
           sessionStorage.setItem('tiptap_kds_auth_' + restaurantId, 'true');
-          sessionStorage.setItem('tiptap_kds_pin_' + restaurantId, pin);
+          if (data.sessionId) sessionStorage.setItem('tiptap_session_id', data.sessionId);
+          if (data.csrfToken) sessionStorage.setItem('tiptap_csrf_token', data.csrfToken);
           localStorage.setItem('tiptap_kds_auth_' + restaurantId, 'true');
           if (data.role === 'kitchen') {
             sessionStorage.setItem('tiptap_role', 'kitchen');
@@ -914,12 +929,16 @@
       }
     }
 
-    function lockKdsSession() {
-      sessionStorage.removeItem('tiptap_kds_auth_' + restaurantId);
-      sessionStorage.removeItem('tiptap_kds_pin_' + restaurantId);
+    async function lockKdsSession() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) {}
+      sessionStorage.clear();
       localStorage.removeItem('tiptap_kds_auth_' + restaurantId);
-      sessionStorage.removeItem('tiptap_counter_auth_' + restaurantId);
+      localStorage.removeItem('tiptap_session_id');
+      localStorage.removeItem('tiptap_csrf_token');
       localStorage.removeItem('tiptap_counter_auth_' + restaurantId);
+      localStorage.removeItem('tiptap_role');
       checkKdsAuthentication();
     }
 

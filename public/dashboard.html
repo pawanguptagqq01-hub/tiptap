@@ -1341,8 +1341,24 @@
     function getStaffPin() {
       return sessionStorage.getItem('tiptap_staff_pin_' + currentRestaurantId) || 
              localStorage.getItem('tiptap_staff_pin_' + currentRestaurantId) || 
-             sessionStorage.getItem('tiptap_admin_pin') || 
              '';
+    }
+
+    function getCsrfToken() {
+      return sessionStorage.getItem('tiptap_csrf_token') || localStorage.getItem('tiptap_csrf_token') || '';
+    }
+
+    function getSessionToken() {
+      return sessionStorage.getItem('tiptap_session_id') || localStorage.getItem('tiptap_session_id') || '';
+    }
+
+    function getStaffAuthHeaders(extra = {}) {
+      const h = { ...extra };
+      const csrf = getCsrfToken();
+      const sess = getSessionToken();
+      if (csrf) h['X-CSRF-Token'] = csrf;
+      if (sess) h['Authorization'] = 'Bearer ' + sess;
+      return h;
     }
 
     // Web Audio Synthesized Chime (Ding!)
@@ -3166,14 +3182,39 @@
       });
     }
 
-    function checkStaffAuth() {
-      const isCounterAuth = sessionStorage.getItem('tiptap_counter_auth_' + currentRestaurantId) === 'true' || 
-                            localStorage.getItem('tiptap_counter_auth_' + currentRestaurantId) === 'true';
-      const role = sessionStorage.getItem('tiptap_role') || localStorage.getItem('tiptap_role');
+    async function checkStaffAuth() {
       const gateModal = document.getElementById('staffSecurityGateModal');
       const errEl = document.getElementById('staffGateErrorMsg');
       const kdsLink = document.getElementById('linkGoToKds');
       if (kdsLink) kdsLink.href = `/kds.html?restaurant=${currentRestaurantId}`;
+
+      try {
+        const res = await fetch('/api/auth/session');
+        const session = await res.json();
+        if (session && session.authenticated) {
+          if (session.csrfToken) sessionStorage.setItem('tiptap_csrf_token', session.csrfToken);
+          // If logged in as kitchen, strictly block billing counter
+          if (session.role === 'kitchen') {
+            gateModal.classList.remove('hidden');
+            document.getElementById('gateRestTitle').innerText = `🚫 Counter Access Restricted`;
+            errEl.innerText = '👨‍🍳 Kitchen Staff cannot access the Billing Counter. Please enter Cashier / Manager PIN or use Kitchen KDS.';
+            errEl.classList.remove('hidden');
+            return;
+          }
+          if (session.role === 'superadmin' || session.restaurantId === currentRestaurantId) {
+            sessionStorage.setItem('tiptap_counter_auth_' + currentRestaurantId, 'true');
+            sessionStorage.setItem('tiptap_role', 'counter');
+            gateModal.classList.add('hidden');
+            fetchState();
+            setupSSE();
+            return;
+          }
+        }
+      } catch (e) {}
+
+      const isCounterAuth = sessionStorage.getItem('tiptap_counter_auth_' + currentRestaurantId) === 'true' || 
+                            localStorage.getItem('tiptap_counter_auth_' + currentRestaurantId) === 'true';
+      const role = sessionStorage.getItem('tiptap_role') || localStorage.getItem('tiptap_role');
 
       // If user is currently identified only as kitchen staff, actively block billing counter
       if (role === 'kitchen' && !isCounterAuth) {
@@ -3213,7 +3254,8 @@
         const data = await res.json();
         if (res.ok && data.success) {
           sessionStorage.setItem('tiptap_counter_auth_' + currentRestaurantId, 'true');
-          sessionStorage.setItem('tiptap_staff_pin_' + currentRestaurantId, pin);
+          if (data.sessionId) sessionStorage.setItem('tiptap_session_id', data.sessionId);
+          if (data.csrfToken) sessionStorage.setItem('tiptap_csrf_token', data.csrfToken);
           localStorage.setItem('tiptap_counter_auth_' + currentRestaurantId, 'true');
           sessionStorage.setItem('tiptap_role', 'counter');
           localStorage.setItem('tiptap_role', 'counter');
@@ -3235,11 +3277,14 @@
       }
     }
 
-    function lockStaffSession() {
-      sessionStorage.removeItem('tiptap_counter_auth_' + currentRestaurantId);
-      sessionStorage.removeItem('tiptap_staff_pin_' + currentRestaurantId);
+    async function lockStaffSession() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) {}
+      sessionStorage.clear();
       localStorage.removeItem('tiptap_counter_auth_' + currentRestaurantId);
-      sessionStorage.removeItem('tiptap_role');
+      localStorage.removeItem('tiptap_session_id');
+      localStorage.removeItem('tiptap_csrf_token');
       localStorage.removeItem('tiptap_role');
       window.location.href = '/login.html';
     }

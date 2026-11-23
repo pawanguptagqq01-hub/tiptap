@@ -1,7 +1,7 @@
 {
   "superAdmin": {
     "name": "TipTap Platform Admin",
-    "pin": "0000"
+    "pin": "scrypt$5c4ba456ccfb0e1d46b0292b0ed2028b$715e6354843a57f73125e1bc665dfd5e7fba0810cb70d326b67c08717f09f56c"
   },
   "restaurants": {
     "tiptap-bistro": {
@@ -28,9 +28,9 @@
           "id": 2,
           "name": "Table 2",
           "capacity": 4,
-          "status": "free",
-          "currentOrderId": null,
-          "seatingTime": null,
+          "status": "occupied",
+          "currentOrderId": "ORD-3193",
+          "seatingTime": "2026-11-23T20:13:03.193Z",
           "reservedFor": null,
           "reservedTime": null
         },
@@ -274,8 +274,219 @@
           "addons": []
         }
       ],
-      "orders": [],
-      "serviceRequests": [],
+      "orders": [
+        {
+          "id": "ORD-3193",
+          "orderType": "dinein",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "customerName": "Rahul Sharma",
+          "customerPhone": "9876543210",
+          "deliveryAddress": "",
+          "items": [
+            {
+              "id": "tiptap-bistro_m1",
+              "name": "Paneer Butter Masala",
+              "variant": "",
+              "price": 280,
+              "qty": 2,
+              "addons": [],
+              "itemTotal": 560,
+              "kotNumber": 1
+            },
+            {
+              "id": "tiptap-bistro_m5",
+              "name": "Butter Naan",
+              "variant": "",
+              "price": 45,
+              "qty": 3,
+              "addons": [],
+              "itemTotal": 135,
+              "kotNumber": 1
+            },
+            {
+              "id": "tiptap-bistro_m6",
+              "name": "Gulab Jamun (2 Pcs)",
+              "variant": "",
+              "price": 90,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 90,
+              "kotNumber": 2
+            },
+            {
+              "id": "tiptap-bistro_m1",
+              "name": "Paneer Butter Masala",
+              "variant": "",
+              "price": 280,
+              "qty": 2,
+              "addons": [],
+              "itemTotal": 560,
+              "kotNumber": 3
+            },
+            {
+              "id": "tiptap-bistro_m5",
+              "name": "Butter Naan",
+              "variant": "",
+              "price": 45,
+              "qty": 3,
+              "addons": [],
+              "itemTotal": 135,
+              "kotNumber": 3
+            },
+            {
+              "id": "tiptap-bistro_m6",
+              "name": "Gulab Jamun (2 Pcs)",
+              "variant": "",
+              "price": 90,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 90,
+              "kotNumber": 4
+            }
+          ],
+          "kots": [
+            {
+              "kotNumber": 1,
+              "items": [
+                {
+                  "id": "tiptap-bistro_m1",
+                  "name": "Paneer Butter Masala",
+                  "variant": "",
+                  "price": 280,
+                  "qty": 2,
+                  "addons": [],
+                  "itemTotal": 560,
+                  "kotNumber": 1
+                },
+                {
+                  "id": "tiptap-bistro_m5",
+                  "name": "Butter Naan",
+                  "variant": "",
+                  "price": 45,
+                  "qty": 3,
+                  "addons": [],
+                  "itemTotal": 135,
+                  "kotNumber": 1
+                },
+                {
+                  "id": "tiptap-bistro_m6",
+                  "name": "Gulab Jamun (2 Pcs)",
+                  "variant": "",
+                  "price": 90,
+                  "qty": 1,
+                  "addons": [],
+                  "itemTotal": 90,
+                  "kotNumber": 2
+                }
+              ],
+              "orderedAt": "2026-11-23T20:13:03.193Z",
+              "status": "received"
+            },
+            {
+              "kotNumber": 2,
+              "items": [
+                {
+                  "id": "tiptap-bistro_m6",
+                  "name": "Gulab Jamun (2 Pcs)",
+                  "variant": "",
+                  "price": 90,
+                  "qty": 1,
+                  "addons": [],
+                  "itemTotal": 90,
+                  "kotNumber": 2
+                }
+              ],
+              "orderedAt": "2026-11-23T20:13:03.202Z",
+              "status": "received"
+            },
+            {
+              "kotNumber": 3,
+              "items": [
+                {
+                  "id": "tiptap-bistro_m1",
+                  "name": "Paneer Butter Masala",
+                  "variant": "",
+                  "price": 280,
+                  "qty": 2,
+                  "addons": [],
+                  "itemTotal": 560,
+                  "kotNumber": 3
+                },
+                {
+                  "id": "tiptap-bistro_m5",
+                  "name": "Butter Naan",
+                  "variant": "",
+                  "price": 45,
+                  "qty": 3,
+                  "addons": [],
+                  "itemTotal": 135,
+                  "kotNumber": 3
+                }
+              ],
+              "orderedAt": "2026-11-23T20:14:02.594Z",
+              "status": "received"
+            },
+            {
+              "kotNumber": 4,
+              "items": [
+                {
+                  "id": "tiptap-bistro_m6",
+                  "name": "Gulab Jamun (2 Pcs)",
+                  "variant": "",
+                  "price": 90,
+                  "qty": 1,
+                  "addons": [],
+                  "itemTotal": 90,
+                  "kotNumber": 4
+                }
+              ],
+              "orderedAt": "2026-11-23T20:14:02.602Z",
+              "status": "received"
+            }
+          ],
+          "notes": "",
+          "subtotal": 1570,
+          "discount": 0,
+          "promoCode": "",
+          "packagingCharge": 0,
+          "gst": 78.5,
+          "total": 1648.5,
+          "status": "received",
+          "kitchenStatus": "received",
+          "paymentStatus": "unpaid",
+          "isPaid": false,
+          "paymentMethod": null,
+          "createdAt": "2026-11-23T20:13:03.193Z",
+          "updatedAt": "2026-11-23T20:14:02.602Z"
+        }
+      ],
+      "serviceRequests": [
+        {
+          "id": "SR-2599",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "type": "water",
+          "status": "pending",
+          "time": "2026-11-23T20:14:02.599Z"
+        },
+        {
+          "id": "SR-3198",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "type": "water",
+          "status": "pending",
+          "time": "2026-11-23T20:13:03.198Z"
+        },
+        {
+          "id": "SR-6528",
+          "tableId": 2,
+          "tableName": "Table 2",
+          "type": "water",
+          "status": "pending",
+          "time": "2026-11-23T20:12:36.529Z"
+        }
+      ],
       "completedOrders": [],
       "promoCodes": [
         {
@@ -296,11 +507,11 @@
       "customers": [
         {
           "phone": "9876543210",
-          "name": "Pawan Market Guest",
-          "visits": 8,
+          "name": "Rahul Sharma",
+          "visits": 9,
           "totalSpent": 4950,
           "loyaltyPoints": 492,
-          "lastVisit": "2026-11-23T17:23:32.928Z"
+          "lastVisit": "2026-11-23T20:13:03.193Z"
         },
         {
           "phone": "9811122233",
@@ -338,8 +549,8 @@
         }
       ],
       "plan": "Pro Plan (Active)",
-      "pin": "1234",
-      "kitchenPin": "5678"
+      "pin": "scrypt$e78bd5abd4f582dfdcec6f7a79097490$9eb73a897775eba7c7a4419c71c0677b930b935ec28e434b4da4c46ad70233ee",
+      "kitchenPin": "scrypt$8cf140f8094916b737d344c0fe471fca$a3f81b3ca2461b2bcacc6adcbd42ebbdd1bf86a99efe7dcf89ed8cfa4039077a"
     }
   }
 }
