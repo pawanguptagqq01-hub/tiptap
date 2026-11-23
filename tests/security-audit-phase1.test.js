@@ -65,7 +65,7 @@ async function runAudit() {
   // Spawn test server with NODE_ENV=production to test production security controls
   const serverProc = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', NODE_ENV: 'production' },
+    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', NODE_ENV: 'production', TIPTAP_TEST_ALLOW_MUTATIONS: 'true' },
     stdio: 'pipe'
   });
 

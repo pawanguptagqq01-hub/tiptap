@@ -59,7 +59,7 @@ async function runRemediationTests() {
 
   const serverProc = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', NODE_ENV: 'production' },
+    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', NODE_ENV: 'test', TIPTAP_TEST_ALLOW_MUTATIONS: 'true' },
     stdio: 'pipe'
   });
 

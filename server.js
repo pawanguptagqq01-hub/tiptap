@@ -393,6 +393,12 @@ function cleanProductionSeed(sourceDb) {
 
 async function initCloudDatabase() {
   if (!MONGODB_URI) {
+    if (process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS) {
+      console.error('🚨 [TipTap FATAL] MONGODB_URI is missing in production environment!');
+      isMongoConnected = false;
+      mongoDbError = 'CRITICAL: MONGODB_URI is not configured in production environment';
+      return;
+    }
     console.log('ℹ️  [TipTap DB] MONGODB_URI not set. Running in Persistent Local File Mode (data/tiptap-db.json).');
     console.log('💡 [TipTap DB Tip] Set MONGODB_URI in Render Environment Variables for 100% permanent cloud persistence across redeployments!');
     return;
@@ -448,25 +454,91 @@ async function initCloudDatabase() {
   }
 }
 
-function saveDb(data) {
-  // 1. Save to local disk immediately
+async function saveDb(data) {
+  // 1. In production, writes MUST be persisted to MongoDB Atlas cloud cluster
+  if (process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS) {
+    if (!isMongoConnected || !mongoCollection) {
+      const errMsg = 'Database Unavailable: MongoDB Atlas cluster is not connected or MONGODB_URI is missing. Writes are rejected in production.';
+      mongoDbError = errMsg;
+      throw new Error(errMsg);
+    }
+
+    try {
+      const result = await mongoCollection.updateOne(
+        { _id: 'tiptap_main_store' },
+        { $set: data },
+        { upsert: true }
+      );
+      if (!result || result.acknowledged === false) {
+        throw new Error('Database write unacknowledged by MongoDB cluster');
+      }
+    } catch (err) {
+      console.error('⚠️ [TipTap Cloud DB] Cloud write synchronization failed:', err.message);
+      isMongoConnected = false;
+      mongoDbError = err.message;
+      throw err;
+    }
+
+    // Save to local disk as read cache only after cloud acknowledgement
+    try {
+      fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {}
+
+    return true;
+  }
+
+  // 2. Non-production (development or test with optional MongoDB)
+  if (isMongoConnected && mongoCollection) {
+    try {
+      const result = await mongoCollection.updateOne(
+        { _id: 'tiptap_main_store' },
+        { $set: data },
+        { upsert: true }
+      );
+      if (!result || result.acknowledged === false) {
+        throw new Error('Database write unacknowledged by MongoDB cluster');
+      }
+    } catch (err) {
+      console.error('⚠️ [TipTap Cloud DB] Dev cloud write failed:', err.message);
+      isMongoConnected = false;
+      mongoDbError = err.message;
+      throw err;
+    }
+  }
+
+  // Save to local disk immediately for local development/test
   try {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('Error saving local DB:', err.message);
+    throw err;
   }
 
-  // 2. If connected to MongoDB, persist to cloud asynchronously
-  if (isMongoConnected && mongoCollection) {
-    mongoCollection.updateOne(
-      { _id: 'tiptap_main_store' },
-      { $set: data },
-      { upsert: true }
-    ).catch(err => {
-      console.error('⚠️ [TipTap Cloud DB] Cloud write synchronization failed:', err.message);
-      isMongoConnected = false;
-      mongoDbError = err.message;
-    });
+  return true;
+}
+
+// In-Memory Order Deduplication & Idempotency Store (Sliding 15-second window)
+const recentOrderDeduplications = new Map();
+
+// Helper: Safely mutate in-memory state and await acknowledged cloud persistence.
+// If persistence fails, in-memory state is rolled back to prevent state drift.
+async function persistDbChange(res, mutateFn) {
+  const snapshot = JSON.parse(JSON.stringify(db));
+  try {
+    const result = await mutateFn();
+    await saveDb(db);
+    return { success: true, result };
+  } catch (err) {
+    db = snapshot; // Rollback in-memory state on write failure
+    console.error('❌ [TipTap Persistence Error]:', err.message);
+    if (res && !res.headersSent) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        error: 'Database Write Failed: ' + err.message,
+        status: 'service_unavailable'
+      }));
+    }
+    return { success: false, error: err };
   }
 }
 
@@ -810,7 +882,7 @@ function migrateAndSecureCredentials() {
 }
 
 // HTTP Request Handler
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   // Production Security & CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
@@ -834,7 +906,7 @@ const server = http.createServer((req, res) => {
   // HEALTH CHECK & UPTIME KEEP-ALIVE: /healthz or /api/health
   // ----------------------------------------------------
   if (pathname === '/healthz' || pathname === '/api/health') {
-    const isCloudDbExpected = Boolean(process.env.NODE_ENV === 'production' && MONGODB_URI);
+    const isCloudDbExpected = Boolean(process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS);
     const isHealthy = !isCloudDbExpected || isMongoConnected;
     const statusCode = isHealthy ? 200 : 503;
 
@@ -845,9 +917,9 @@ const server = http.createServer((req, res) => {
       version: '2.5.0-production',
       uptimeSeconds: Math.floor(process.uptime()),
       database: {
-        mode: isMongoConnected ? 'mongodb-atlas-cloud' : (MONGODB_URI ? 'cloud-disconnected' : 'local-json-persistent'),
-        connected: isMongoConnected || (!MONGODB_URI && process.env.NODE_ENV !== 'production'),
-        error: isMongoConnected ? null : (mongoDbError || (MONGODB_URI ? 'Database disconnected' : null)),
+        mode: isMongoConnected ? 'mongodb-atlas-cloud' : (MONGODB_URI ? 'cloud-disconnected' : (process.env.NODE_ENV === 'production' ? 'cloud-missing' : 'local-json-persistent')),
+        connected: isMongoConnected,
+        error: isMongoConnected ? null : (mongoDbError || (process.env.NODE_ENV === 'production' && !MONGODB_URI ? 'MONGODB_URI is not configured in production' : 'Database disconnected')),
         restaurantsCount: db.restaurants ? Object.keys(db.restaurants).length : 0
       },
       realtime: {
@@ -861,15 +933,15 @@ const server = http.createServer((req, res) => {
 
   // ----------------------------------------------------
   // FAIL-CLOSED PRODUCTION WRITE GUARD
-  // If running in production with MONGODB_URI configured but disconnected,
+  // If running in production and MongoDB is NOT connected,
   // reject state-modifying requests with HTTP 503 to prevent data loss on ephemeral disk.
   // ----------------------------------------------------
   const isMutatingMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
-  if (process.env.NODE_ENV === 'production' && MONGODB_URI && !isMongoConnected && isMutatingMethod) {
+  if (process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS && !isMongoConnected && isMutatingMethod) {
     if (!pathname.startsWith('/api/auth/') && pathname !== '/api/admin/verify-pin') {
       res.writeHead(503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        error: 'Database Unavailable: MongoDB Atlas cluster is disconnected. State modifications are paused in production to prevent data loss.',
+        error: 'Database Unavailable: Production mode requires a connected MongoDB Atlas cluster. State modifications are paused in production to prevent data loss.',
         status: 'service_unavailable'
       }));
       return;
@@ -908,7 +980,13 @@ const server = http.createServer((req, res) => {
       req.on('end', () => {
         try {
           const json = body ? JSON.parse(body) : {};
-          callback(null, json);
+          Promise.resolve(callback(null, json)).catch(err => {
+            console.error('Unhandled route handler error:', err);
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Internal Server Error' }));
+            }
+          });
         } catch (e) {
           callback(e);
         }
@@ -962,7 +1040,7 @@ const server = http.createServer((req, res) => {
 
     // 2. Onboard New Restaurant (Super Admin): POST /api/restaurants
     if (pathname === '/api/restaurants' && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyMasterPin(data?.masterPin)) {
           if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -1002,8 +1080,11 @@ const server = http.createServer((req, res) => {
             mode: 'upi_dynamic'
           };
         }
-        db.restaurants[slug] = newRestaurant;
-        saveDb(db);
+
+        const saved = await persistDbChange(res, async () => {
+          db.restaurants[slug] = newRestaurant;
+        });
+        if (!saved.success) return;
 
         broadcastEvent(slug, 'restaurant:new', { id: slug, name: newRestaurant.name });
 
@@ -1029,12 +1110,16 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: 'Restaurant not found' }));
         return;
       }
-      if (Object.keys(db.restaurants).length <= 1) {
-        const fallbackSlug = delId === 'tiptap-bistro' ? 'new-restaurant' : 'tiptap-bistro';
-        db.restaurants[fallbackSlug] = createDefaultRestaurant(fallbackSlug, 'TipTap Smart Dining', '+91 98000 00000', 'India', '', 8, false);
-      }
-      delete db.restaurants[delId];
-      saveDb(db);
+
+      const saved = await persistDbChange(res, async () => {
+        if (Object.keys(db.restaurants).length <= 1) {
+          const fallbackSlug = delId === 'tiptap-bistro' ? 'new-restaurant' : 'tiptap-bistro';
+          db.restaurants[fallbackSlug] = createDefaultRestaurant(fallbackSlug, 'TipTap Smart Dining', '+91 98000 00000', 'India', '', 8, false);
+        }
+        delete db.restaurants[delId];
+      });
+      if (!saved.success) return;
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, deletedId: delId }));
       return;
@@ -1042,7 +1127,7 @@ const server = http.createServer((req, res) => {
 
     // 2c. Reset Data / Orders (Super Admin): POST /api/admin/reset
     if (pathname === '/api/admin/reset' && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyMasterPin(data?.pin)) {
           if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -1057,22 +1142,29 @@ const server = http.createServer((req, res) => {
           return;
         }
         const targets = restId ? [db.restaurants[restId]] : Object.values(db.restaurants);
-        targets.forEach(r => {
-          r.orders = [];
-          r.completedOrders = [];
-          r.serviceRequests = [];
-          (r.tables || []).forEach(t => {
-            t.status = 'free';
-            t.currentOrderId = null;
-            t.seatingTime = null;
-            t.reservedFor = null;
-            t.reservedTime = null;
+
+        const saved = await persistDbChange(res, async () => {
+          targets.forEach(r => {
+            r.orders = [];
+            r.completedOrders = [];
+            r.serviceRequests = [];
+            (r.tables || []).forEach(t => {
+              t.status = 'free';
+              t.currentOrderId = null;
+              t.seatingTime = null;
+              t.reservedFor = null;
+              t.reservedTime = null;
+            });
           });
+        });
+        if (!saved.success) return;
+
+        targets.forEach(r => {
           broadcastEvent(r.id, 'order:update', {});
           broadcastEvent(r.id, 'service:resolved', { all: true });
           broadcastEvent(r.id, 'table:update', r.tables);
         });
-        saveDb(db);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Data reset successfully! All tables are free.' }));
       });
@@ -1081,7 +1173,7 @@ const server = http.createServer((req, res) => {
 
     // 2d. Lead / Partner Onboarding Request: POST /api/leads
     if (pathname === '/api/leads' && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (err || !data.name || !data.phone) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Restaurant Name and Owner Phone are required' }));
@@ -1101,9 +1193,11 @@ const server = http.createServer((req, res) => {
           createdAt: new Date().toISOString()
         };
 
-        db.leads = db.leads || [];
-        db.leads.unshift(lead);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          db.leads = db.leads || [];
+          db.leads.unshift(lead);
+        });
+        if (!saved.success) return;
 
         broadcastEvent('super-admin', 'lead:new', lead);
 
@@ -1171,12 +1265,14 @@ const server = http.createServer((req, res) => {
         };
       }
 
-      db.restaurants[slug] = newRestaurant;
-      lead.status = 'approved';
-      lead.restaurantId = slug;
-      lead.approvedAt = new Date().toISOString();
+      const saved = await persistDbChange(res, async () => {
+        db.restaurants[slug] = newRestaurant;
+        lead.status = 'approved';
+        lead.restaurantId = slug;
+        lead.approvedAt = new Date().toISOString();
+      });
+      if (!saved.success) return;
 
-      saveDb(db);
       broadcastEvent(slug, 'restaurant:new', { id: slug, name: newRestaurant.name });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1195,9 +1291,12 @@ const server = http.createServer((req, res) => {
       }
 
       const leadId = deleteLeadMatch[1];
-      db.leads = db.leads || [];
-      db.leads = db.leads.filter(l => l.id !== leadId);
-      saveDb(db);
+      const saved = await persistDbChange(res, async () => {
+        db.leads = db.leads || [];
+        db.leads = db.leads.filter(l => l.id !== leadId);
+      });
+      if (!saved.success) return;
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, deletedId: leadId }));
       return;
@@ -1741,7 +1840,7 @@ const server = http.createServer((req, res) => {
 
     // 6. Submit Review: POST /api/reviews
     if (pathname.includes('/reviews') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (err || !data.rating) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Rating is required' }));
@@ -1757,9 +1856,12 @@ const server = http.createServer((req, res) => {
           time: new Date().toISOString()
         };
 
-        if (!restaurant.reviews) restaurant.reviews = [];
-        restaurant.reviews.unshift(newReview);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          if (!restaurant.reviews) restaurant.reviews = [];
+          restaurant.reviews.unshift(newReview);
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'review:new', newReview);
 
         res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -1817,7 +1919,7 @@ const server = http.createServer((req, res) => {
 
     // 6b. Verify Automatic Payment: POST /api/verify-payment
     if (pathname.includes('/verify-payment') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         const orderId = data.orderId;
         const txnId = data.txnId || `TXN_${Date.now()}`;
         const paymentMethod = data.paymentMethod || 'online_upi';
@@ -1864,57 +1966,59 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        order.isPaid = true;
-        order.paymentStatus = 'paid';
-        order.paymentMethod = paymentMethod;
-        order.txnId = txnId;
-        order.paidAt = new Date().toISOString();
-        order.paymentDetails = {
-          provider: hasGatewayTxn ? 'Razorpay Gateway' : (hasValidUtr ? 'UPI App (UTR Verified)' : 'POS Counter Settle'),
-          txnId,
-          gatewayTxnId,
-          utr: hasValidUtr ? utr : null,
-          verified: true,
-          verifiedAt: new Date().toISOString()
-        };
+        const saved = await persistDbChange(res, async () => {
+          order.isPaid = true;
+          order.paymentStatus = 'paid';
+          order.paymentMethod = paymentMethod;
+          order.txnId = txnId;
+          order.paidAt = new Date().toISOString();
+          order.paymentDetails = {
+            provider: hasGatewayTxn ? 'Razorpay Gateway' : (hasValidUtr ? 'UPI App (UTR Verified)' : 'POS Counter Settle'),
+            txnId,
+            gatewayTxnId,
+            utr: hasValidUtr ? utr : null,
+            verified: true,
+            verifiedAt: new Date().toISOString()
+          };
 
-        // Update customer lifetime spend & loyalty coins immediately
-        if (order.customerPhone && restaurant.customers) {
-          const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
-          if (cust) {
-            cust.totalSpent = (cust.totalSpent || 0) + order.total;
-            cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(order.total / 10);
+          // Update customer lifetime spend & loyalty coins immediately
+          if (order.customerPhone && restaurant.customers) {
+            const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
+            if (cust) {
+              cust.totalSpent = (cust.totalSpent || 0) + order.total;
+              cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(order.total / 10);
+            }
           }
-        }
 
-        // Check if food was already served to table by kitchen
-        const isFoodServed = order.kitchenStatus === 'served' || order.status === 'served';
+          // Check if food was already served to table by kitchen
+          const isFoodServed = order.kitchenStatus === 'served' || order.status === 'served';
 
-        if (isFoodServed) {
-          // Food was already served AND now paid! Settle and archive to completedOrders
-          order.status = 'completed';
-          restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
-          restaurant.orders = restaurant.orders.filter(o => o.id !== order.id);
+          if (isFoodServed) {
+            // Food was already served AND now paid! Settle and archive to completedOrders
+            order.status = 'completed';
+            restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+            restaurant.orders = restaurant.orders.filter(o => o.id !== order.id);
 
-          // Table is done, set to cleaning
-          const table = restaurant.tables.find(t => t.id === order.tableId);
-          if (table) {
-            table.status = 'cleaning';
-            table.currentOrderId = null;
-            table.seatingTime = null;
+            // Table is done, set to cleaning
+            const table = restaurant.tables.find(t => t.id === order.tableId);
+            if (table) {
+              table.status = 'cleaning';
+              table.currentOrderId = null;
+              table.seatingTime = null;
+            }
+          } else {
+            // Food is STILL in kitchen queue or cooking!
+            // DO NOT delete order from active orders or KDS! Keep order active with isPaid = true.
+            // Table remains occupied so staff and chefs know which table this paid food belongs to!
+            const table = restaurant.tables.find(t => t.id === order.tableId);
+            if (table) {
+              table.status = 'occupied';
+              table.currentOrderId = order.id;
+            }
           }
-        } else {
-          // Food is STILL in kitchen queue or cooking!
-          // DO NOT delete order from active orders or KDS! Keep order active with isPaid = true.
-          // Table remains occupied so staff and chefs know which table this paid food belongs to!
-          const table = restaurant.tables.find(t => t.id === order.tableId);
-          if (table) {
-            table.status = 'occupied';
-            table.currentOrderId = order.id;
-          }
-        }
+        });
 
-        saveDb(db);
+        if (!saved.success) return;
 
         // Broadcast instant SSE real-time notifications to POS Counter & Kitchen
         broadcastEvent(restaurant.id, 'payment:success', {
@@ -1970,10 +2074,33 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (err || !data.items || !data.items.length) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid order data' }));
+          return;
+        }
+
+        // Idempotency & rapid duplicate request detection
+        const idempotencyKey = (req.headers && req.headers['idempotency-key']) || data.idempotencyKey || data.clientOrderId;
+        let dedupKey = null;
+        if (idempotencyKey) {
+          dedupKey = `idemp:${restaurant.id}:${idempotencyKey}`;
+        } else {
+          const itemsSig = (data.items || []).map(i => `${i.id}x${i.qty}@${i.variant || ''}`).sort().join(';');
+          dedupKey = `sig:${restaurant.id}:${data.tableId || 1}:${data.orderType || 'dinein'}:${itemsSig}:${data.notes || ''}`;
+        }
+
+        const now = Date.now();
+        for (const [k, v] of recentOrderDeduplications.entries()) {
+          if (now - v.timestamp > 15000) recentOrderDeduplications.delete(k);
+        }
+
+        const existingEntry = recentOrderDeduplications.get(dedupKey);
+        if (existingEntry && (now - existingEntry.timestamp < 10000)) {
+          console.log(`ℹ️ [TipTap Deduplication] Duplicate order submission detected (${dedupKey}). Returning existing order.`);
+          res.writeHead(existingEntry.statusCode, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(existingEntry.body));
           return;
         }
 
@@ -2024,153 +2151,173 @@ const server = http.createServer((req, res) => {
         const gst = Math.round((taxableSubtotal * (restaurant.gstPercent / 100)) * 100) / 100;
         const total = taxableSubtotal + gst + packagingCharge;
 
-        // Check if Table already has an active, unpaid dining session (Round 2+ Multi-Round KOT)
-        if (orderType === 'dinein') {
-          const activeOrder = restaurant.orders.find(o => 
-            o.tableId === tableId && 
-            !o.isPaid && 
-            o.paymentStatus !== 'paid' && 
-            o.status !== 'cancelled' && 
-            o.status !== 'settled'
-          );
+        let responsePayload = null;
+        let statusCode = 201;
+        const sseEvents = [];
 
-          if (activeOrder) {
-            // MULTI-ROUND TABLE RUNNING TAB
-            if (!activeOrder.kots || !Array.isArray(activeOrder.kots)) {
-              activeOrder.kots = [
-                {
-                  kotNumber: 1,
-                  items: (activeOrder.items || []).map(it => ({ ...it, kotNumber: 1 })),
-                  orderedAt: activeOrder.createdAt,
-                  status: activeOrder.kitchenStatus || 'served'
+        const persisted = await persistDbChange(res, async () => {
+          // Check if Table already has an active, unpaid dining session (Round 2+ Multi-Round KOT)
+          if (orderType === 'dinein') {
+            const activeOrder = restaurant.orders.find(o => 
+              o.tableId === tableId && 
+              !o.isPaid && 
+              o.paymentStatus !== 'paid' && 
+              o.status !== 'cancelled' && 
+              o.status !== 'settled'
+            );
+
+            if (activeOrder) {
+              // MULTI-ROUND TABLE RUNNING TAB
+              if (!activeOrder.kots || !Array.isArray(activeOrder.kots)) {
+                activeOrder.kots = [
+                  {
+                    kotNumber: 1,
+                    items: (activeOrder.items || []).map(it => ({ ...it, kotNumber: 1 })),
+                    orderedAt: activeOrder.createdAt,
+                    status: activeOrder.kitchenStatus || 'served'
+                  }
+                ];
+              }
+
+              const kotNumber = activeOrder.kots.length + 1;
+              const kotItems = items.map(it => ({ ...it, kotNumber }));
+
+              const newKot = {
+                kotNumber,
+                items: kotItems,
+                orderedAt: new Date().toISOString(),
+                status: 'received'
+              };
+              activeOrder.kots.push(newKot);
+
+              // Append items to consolidated items list
+              kotItems.forEach(it => activeOrder.items.push(it));
+
+              // Recalculate financial totals
+              activeOrder.subtotal = (activeOrder.subtotal || 0) + subtotal;
+              const curDiscount = Number(activeOrder.discount) || 0;
+              const newTaxable = Math.max(0, activeOrder.subtotal - curDiscount);
+              activeOrder.gst = Math.round((newTaxable * (restaurant.gstPercent / 100)) * 100) / 100;
+              activeOrder.total = newTaxable + activeOrder.gst;
+              activeOrder.kitchenStatus = 'received';
+              activeOrder.status = 'received';
+              activeOrder.updatedAt = new Date().toISOString();
+              if (data.notes) {
+                activeOrder.notes = activeOrder.notes 
+                  ? `${activeOrder.notes} | R${kotNumber}: ${data.notes}` 
+                  : `R${kotNumber}: ${data.notes}`;
+              }
+
+              responsePayload = {
+                ...activeOrder,
+                isMultiRound: true,
+                currentKotNumber: kotNumber,
+                newKot
+              };
+              statusCode = 200;
+
+              sseEvents.push({
+                event: 'order:kot',
+                data: {
+                  orderId: activeOrder.id,
+                  tableId,
+                  tableName: targetTable.name,
+                  kot: newKot,
+                  order: activeOrder
                 }
-              ];
+              });
+              sseEvents.push({ event: 'order:update', data: activeOrder });
+              sseEvents.push({ event: 'table:update', data: restaurant.tables });
+              return;
             }
+          }
 
-            const kotNumber = activeOrder.kots.length + 1;
-            const kotItems = items.map(it => ({ ...it, kotNumber }));
+          // New Session (Round 1 KOT)
+          const initialKot = {
+            kotNumber: 1,
+            items: items.map(it => ({ ...it, kotNumber: 1 })),
+            orderedAt: new Date().toISOString(),
+            status: 'received'
+          };
 
-            const newKot = {
-              kotNumber,
-              items: kotItems,
-              orderedAt: new Date().toISOString(),
-              status: 'received'
-            };
-            activeOrder.kots.push(newKot);
+          const newOrder = {
+            id: newId,
+            orderType,
+            tableId: orderType === 'dinein' ? tableId : null,
+            tableName: orderType === 'dinein' ? targetTable.name : (orderType === 'takeaway' ? '🥡 Takeaway Pickup' : '🛵 Doorstep Delivery'),
+            customerName: data.customerName || '',
+            customerPhone: data.customerPhone || '',
+            deliveryAddress: data.deliveryAddress || '',
+            items: initialKot.items,
+            kots: [initialKot],
+            notes: data.notes || '',
+            subtotal,
+            discount,
+            promoCode: data.promoCode || '',
+            packagingCharge,
+            gst,
+            total,
+            status: 'received',
+            kitchenStatus: 'received',
+            paymentStatus: 'unpaid',
+            isPaid: false,
+            paymentMethod: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
 
-            // Append items to consolidated items list
-            kotItems.forEach(it => activeOrder.items.push(it));
+          restaurant.orders.push(newOrder);
 
-            // Recalculate financial totals
-            activeOrder.subtotal = (activeOrder.subtotal || 0) + subtotal;
-            const curDiscount = Number(activeOrder.discount) || 0;
-            const newTaxable = Math.max(0, activeOrder.subtotal - curDiscount);
-            activeOrder.gst = Math.round((newTaxable * (restaurant.gstPercent / 100)) * 100) / 100;
-            activeOrder.total = newTaxable + activeOrder.gst;
-            activeOrder.kitchenStatus = 'received'; // chef has new items to cook
-            activeOrder.status = 'received';
-            activeOrder.updatedAt = new Date().toISOString();
-            if (data.notes) {
-              activeOrder.notes = activeOrder.notes 
-                ? `${activeOrder.notes} | R${kotNumber}: ${data.notes}` 
-                : `R${kotNumber}: ${data.notes}`;
+          // Track / update customer CRM
+          if (data.customerPhone) {
+            if (!restaurant.customers) restaurant.customers = [];
+            const existingCust = restaurant.customers.find(c => c.phone === data.customerPhone);
+            if (existingCust) {
+              existingCust.visits += 1;
+              existingCust.name = data.customerName || existingCust.name;
+              existingCust.lastVisit = new Date().toISOString();
+            } else {
+              restaurant.customers.push({
+                phone: data.customerPhone,
+                name: data.customerName || 'Customer',
+                visits: 1,
+                totalSpent: 0,
+                loyaltyPoints: 0,
+                lastVisit: new Date().toISOString()
+              });
             }
-
-            saveDb(db);
-
-            // Broadcast real-time notifications
-            broadcastEvent(restaurant.id, 'order:kot', {
-              orderId: activeOrder.id,
-              tableId,
-              tableName: targetTable.name,
-              kot: newKot,
-              order: activeOrder
-            });
-            broadcastEvent(restaurant.id, 'order:update', activeOrder);
-            broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
-
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              ...activeOrder,
-              isMultiRound: true,
-              currentKotNumber: kotNumber,
-              newKot
-            }));
-            return;
           }
-        }
 
-        // New Session (Round 1 KOT)
-        const initialKot = {
-          kotNumber: 1,
-          items: items.map(it => ({ ...it, kotNumber: 1 })),
-          orderedAt: new Date().toISOString(),
-          status: 'received'
-        };
-
-        const newOrder = {
-          id: newId,
-          orderType, // 'dinein' | 'takeaway' | 'delivery'
-          tableId: orderType === 'dinein' ? tableId : null,
-          tableName: orderType === 'dinein' ? targetTable.name : (orderType === 'takeaway' ? '🥡 Takeaway Pickup' : '🛵 Doorstep Delivery'),
-          customerName: data.customerName || '',
-          customerPhone: data.customerPhone || '',
-          deliveryAddress: data.deliveryAddress || '',
-          items: initialKot.items,
-          kots: [initialKot],
-          notes: data.notes || '',
-          subtotal,
-          discount,
-          promoCode: data.promoCode || '',
-          packagingCharge,
-          gst,
-          total,
-          status: 'received',
-          kitchenStatus: 'received',
-          paymentStatus: 'unpaid',
-          isPaid: false,
-          paymentMethod: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        restaurant.orders.push(newOrder);
-
-        // Track / update customer CRM
-        if (data.customerPhone) {
-          if (!restaurant.customers) restaurant.customers = [];
-          const existingCust = restaurant.customers.find(c => c.phone === data.customerPhone);
-          if (existingCust) {
-            existingCust.visits += 1;
-            existingCust.name = data.customerName || existingCust.name;
-            existingCust.lastVisit = new Date().toISOString();
-          } else {
-            restaurant.customers.push({
-              phone: data.customerPhone,
-              name: data.customerName || 'Customer',
-              visits: 1,
-              totalSpent: 0,
-              loyaltyPoints: 0,
-              lastVisit: new Date().toISOString()
-            });
+          if (orderType === 'dinein') {
+            const tableObj = restaurant.tables.find(t => t.id === tableId);
+            if (tableObj) {
+              tableObj.status = 'occupied';
+              tableObj.currentOrderId = newId;
+              if (!tableObj.seatingTime) tableObj.seatingTime = new Date().toISOString();
+            }
           }
-        }
 
-        if (orderType === 'dinein') {
-          const tableObj = restaurant.tables.find(t => t.id === tableId);
-          if (tableObj) {
-            tableObj.status = 'occupied';
-            tableObj.currentOrderId = newId;
-            if (!tableObj.seatingTime) tableObj.seatingTime = new Date().toISOString();
-          }
-        }
+          responsePayload = newOrder;
+          statusCode = 201;
 
-        saveDb(db);
-        broadcastEvent(restaurant.id, 'order:new', newOrder);
-        broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
+          sseEvents.push({ event: 'order:new', data: newOrder });
+          sseEvents.push({ event: 'table:update', data: restaurant.tables });
+        });
 
-        res.writeHead(201, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(newOrder));
+        if (!persisted.success) return;
+
+        // Cache in deduplication map upon acknowledged write
+        recentOrderDeduplications.set(dedupKey, {
+          timestamp: Date.now(),
+          statusCode,
+          body: responsePayload
+        });
+
+        // Broadcast real-time SSE events after persistence
+        sseEvents.forEach(evt => broadcastEvent(restaurant.id, evt.event, evt.data));
+
+        res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(responsePayload));
       });
       return;
     }
@@ -2195,15 +2342,17 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
-        const table = (restaurant.tables || []).find(t => t.id === order.tableId);
-        if (table) {
-          table.status = 'free';
-          table.currentOrderId = null;
-          table.seatingTime = null;
-        }
+        const deleted = await persistDbChange(res, async () => {
+          restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
+          const table = (restaurant.tables || []).find(t => t.id === order.tableId);
+          if (table) {
+            table.status = 'free';
+            table.currentOrderId = null;
+            table.seatingTime = null;
+          }
+        });
+        if (!deleted.success) return;
 
-        saveDb(db);
         broadcastEvent(restaurant.id, 'order:update', { id: orderId, status: 'cancelled' });
         broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
 
@@ -2212,7 +2361,7 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         // Enforce Role-Based Authorization on Order Updates:
         const isFinancialAction = Boolean(data.status === 'paid' || data.isPaid !== undefined || data.paymentStatus === 'paid' || data.closeTable === true);
         const isKitchenAction = Boolean(data.kitchenStatus || data.status === 'preparing' || data.status === 'ready' || data.status === 'served');
@@ -2250,98 +2399,101 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        if (data.status) {
-          order.status = data.status;
-          order.updatedAt = new Date().toISOString();
-        }
-        if (data.kitchenStatus) {
-          order.kitchenStatus = data.kitchenStatus;
-        }
-        if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
-        if (data.isPaid !== undefined) order.isPaid = data.isPaid;
-        if (data.paymentStatus) order.paymentStatus = data.paymentStatus;
-
-        if (order.status === 'cancelled') {
-          restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
-          const table = (restaurant.tables || []).find(t => t.id === order.tableId);
-          if (table) {
-            table.status = 'free';
-            table.currentOrderId = null;
-            table.seatingTime = null;
+        const patched = await persistDbChange(res, async () => {
+          if (data.status) {
+            order.status = data.status;
+            order.updatedAt = new Date().toISOString();
           }
-        } else if (order.status === 'served' || data.kitchenStatus === 'served') {
-          order.kitchenStatus = 'served';
-          order.status = 'served';
+          if (data.kitchenStatus) {
+            order.kitchenStatus = data.kitchenStatus;
+          }
+          if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
+          if (data.isPaid !== undefined) order.isPaid = data.isPaid;
+          if (data.paymentStatus) order.paymentStatus = data.paymentStatus;
 
-          // If the order was already paid online by customer
-          if (order.isPaid || order.paymentStatus === 'paid') {
-            // Food served AND bill is already paid! Complete and archive
-            order.status = 'completed';
-            restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+          if (order.status === 'cancelled') {
             restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
-
-            const table = restaurant.tables.find(t => t.id === order.tableId);
+            const table = (restaurant.tables || []).find(t => t.id === order.tableId);
             if (table) {
-              table.status = 'cleaning';
+              table.status = 'free';
               table.currentOrderId = null;
               table.seatingTime = null;
             }
-          } else {
-            // Food served, but customer hasn't paid bill yet
-            const table = restaurant.tables.find(t => t.id === order.tableId);
-            if (table) {
-              table.status = 'occupied';
-              table.currentOrderId = order.id;
-            }
-          }
-        } else if (order.status === 'paid' || data.status === 'paid') {
-          order.isPaid = true;
-          order.paymentStatus = 'paid';
-          if (!order.paidAt) order.paidAt = new Date().toISOString();
-          if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
+          } else if (order.status === 'served' || data.kitchenStatus === 'served') {
+            order.kitchenStatus = 'served';
+            order.status = 'served';
 
-          // Check if food was already served OR if cashier explicitly closes table
-          const isFoodServed = order.kitchenStatus === 'served';
-          const shouldClose = data.closeTable === true || isFoodServed;
+            // If the order was already paid online by customer
+            if (order.isPaid || order.paymentStatus === 'paid') {
+              // Food served AND bill is already paid! Complete and archive
+              order.status = 'completed';
+              restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+              restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
 
-          if (shouldClose) {
-            order.status = 'completed';
-            restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
-            restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
-
-            // Update customer lifetime spend & loyalty coins
-            if (order.customerPhone && restaurant.customers) {
-              const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
-              if (cust) {
-                cust.totalSpent = (cust.totalSpent || 0) + order.total;
-                cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(order.total / 10);
+              const table = restaurant.tables.find(t => t.id === order.tableId);
+              if (table) {
+                table.status = 'cleaning';
+                table.currentOrderId = null;
+                table.seatingTime = null;
+              }
+            } else {
+              // Food served, but customer hasn't paid bill yet
+              const table = restaurant.tables.find(t => t.id === order.tableId);
+              if (table) {
+                table.status = 'occupied';
+                table.currentOrderId = order.id;
               }
             }
+          } else if (order.status === 'paid' || data.status === 'paid') {
+            order.isPaid = true;
+            order.paymentStatus = 'paid';
+            if (!order.paidAt) order.paidAt = new Date().toISOString();
+            if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
 
-            const table = restaurant.tables.find(t => t.id === order.tableId);
-            if (table) {
-              table.status = 'cleaning';
-              table.currentOrderId = null;
-              table.seatingTime = null;
+            // Check if food was already served OR if cashier explicitly closes table
+            const isFoodServed = order.kitchenStatus === 'served';
+            const shouldClose = data.closeTable === true || isFoodServed;
+
+            if (shouldClose) {
+              order.status = 'completed';
+              restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+              restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
+
+              // Update customer lifetime spend & loyalty coins
+              if (order.customerPhone && restaurant.customers) {
+                const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
+                if (cust) {
+                  cust.totalSpent = (cust.totalSpent || 0) + order.total;
+                  cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(order.total / 10);
+                }
+              }
+
+              const table = restaurant.tables.find(t => t.id === order.tableId);
+              if (table) {
+                table.status = 'cleaning';
+                table.currentOrderId = null;
+                table.seatingTime = null;
+              }
+            } else {
+              // Cashier marked paid, but kitchen is still cooking! Keep active with isPaid = true.
+              const table = restaurant.tables.find(t => t.id === order.tableId);
+              if (table) {
+                table.status = 'occupied';
+                table.currentOrderId = order.id;
+              }
             }
-          } else {
-            // Cashier marked paid, but kitchen is still cooking! Keep active with isPaid = true.
+          } else if (order.status === 'preparing') {
+            order.kitchenStatus = 'preparing';
             const table = restaurant.tables.find(t => t.id === order.tableId);
             if (table) {
               table.status = 'occupied';
               table.currentOrderId = order.id;
             }
           }
-        } else if (order.status === 'preparing') {
-          order.kitchenStatus = 'preparing';
-          const table = restaurant.tables.find(t => t.id === order.tableId);
-          if (table) {
-            table.status = 'occupied';
-            table.currentOrderId = order.id;
-          }
-        }
+        });
 
-        saveDb(db);
+        if (!patched.success) return;
+
         broadcastEvent(restaurant.id, 'order:update', order);
         broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
 
@@ -2353,7 +2505,7 @@ const server = http.createServer((req, res) => {
 
     // 7. Service Request (Call Waiter / Water): POST /api/service-request
     if (pathname.includes('/service-request') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (err || !data.tableId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid data' }));
@@ -2371,8 +2523,11 @@ const server = http.createServer((req, res) => {
           time: new Date().toISOString()
         };
 
-        restaurant.serviceRequests.unshift(reqObj);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          restaurant.serviceRequests.unshift(reqObj);
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'service:call', reqObj);
 
         res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -2392,8 +2547,11 @@ const server = http.createServer((req, res) => {
       }
 
       const srId = srMatch[1];
-      restaurant.serviceRequests = (restaurant.serviceRequests || []).filter(s => s.id !== srId);
-      saveDb(db);
+      const saved = await persistDbChange(res, async () => {
+        restaurant.serviceRequests = (restaurant.serviceRequests || []).filter(s => s.id !== srId);
+      });
+      if (!saved.success) return;
+
       broadcastEvent(restaurant.id, 'service:resolved', { id: srId });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, id: srId }));
@@ -2404,7 +2562,7 @@ const server = http.createServer((req, res) => {
     const tableMatch = pathname.match(/tables\/([0-9]+)$/);
     if (tableMatch && req.method === 'PATCH') {
       const tableId = parseInt(tableMatch[1], 10);
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyStaffAuth(data, 'counter')) {
           if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -2419,10 +2577,13 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        if (data.status) table.status = data.status;
-        if (data.reservedFor !== undefined) table.reservedFor = data.reservedFor;
-        if (data.reservedTime !== undefined) table.reservedTime = data.reservedTime;
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          if (data.status) table.status = data.status;
+          if (data.reservedFor !== undefined) table.reservedFor = data.reservedFor;
+          if (data.reservedTime !== undefined) table.reservedTime = data.reservedTime;
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2433,7 +2594,7 @@ const server = http.createServer((req, res) => {
 
     // 9b. Transfer / Shift Table: POST /api/tables/transfer
     if (pathname.includes('/tables/transfer') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyStaffAuth(data, 'counter')) {
           if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -2459,22 +2620,25 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        // Find active order of fromTable
-        const activeOrder = restaurant.orders.find(o => o.tableId === fromTableId && o.status !== 'paid');
-        if (activeOrder) {
-          activeOrder.tableId = toTableId;
-          activeOrder.tableName = toTable.name;
-          toTable.currentOrderId = activeOrder.id;
-        }
+        let activeOrder = null;
+        const saved = await persistDbChange(res, async () => {
+          // Find active order of fromTable
+          activeOrder = restaurant.orders.find(o => o.tableId === fromTableId && o.status !== 'paid');
+          if (activeOrder) {
+            activeOrder.tableId = toTableId;
+            activeOrder.tableName = toTable.name;
+            toTable.currentOrderId = activeOrder.id;
+          }
 
-        toTable.status = 'occupied';
-        toTable.seatingTime = fromTable.seatingTime || new Date().toISOString();
+          toTable.status = 'occupied';
+          toTable.seatingTime = fromTable.seatingTime || new Date().toISOString();
 
-        fromTable.status = 'cleaning';
-        fromTable.currentOrderId = null;
-        fromTable.seatingTime = null;
+          fromTable.status = 'cleaning';
+          fromTable.currentOrderId = null;
+          fromTable.seatingTime = null;
+        });
+        if (!saved.success) return;
 
-        saveDb(db);
         broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
         if (activeOrder) broadcastEvent(restaurant.id, 'order:update', activeOrder);
 
@@ -2486,7 +2650,7 @@ const server = http.createServer((req, res) => {
 
     // 10. Add New Dish: POST /api/menu
     if (pathname.endsWith('/menu') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyStaffAuth(data, 'counter')) {
           if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -2513,8 +2677,11 @@ const server = http.createServer((req, res) => {
           addons: data.addons || []
         };
 
-        restaurant.menu.push(newDish);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          restaurant.menu.push(newDish);
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'menu:update', restaurant.menu);
 
         res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -2527,7 +2694,7 @@ const server = http.createServer((req, res) => {
     const menuMatch = pathname.match(/menu\/([A-Za-z0-9_-]+)$/);
     if (menuMatch && req.method === 'PATCH') {
       const dishId = menuMatch[1];
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyStaffAuth(data, 'any')) {
           if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -2542,9 +2709,12 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        if (typeof data.inStock === 'boolean') dish.inStock = data.inStock;
-        if (data.price) dish.price = Number(data.price);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          if (typeof data.inStock === 'boolean') dish.inStock = data.inStock;
+          if (data.price) dish.price = Number(data.price);
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'menu:update', restaurant.menu);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2555,7 +2725,7 @@ const server = http.createServer((req, res) => {
 
     // 12. Update Restaurant Settings: POST /api/settings
     if (pathname.endsWith('/settings') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         const session = authenticateRequest(req);
         if (session) {
           if (!checkCsrfForCookieAuth(req, res, session)) {
@@ -2580,25 +2750,29 @@ const server = http.createServer((req, res) => {
           }
         }
 
-        if (typeof data.rushMode === 'boolean') restaurant.rushMode = data.rushMode;
-        if (data.name) restaurant.name = data.name;
-        if (data.phone) restaurant.phone = data.phone;
-        if (data.address) restaurant.address = data.address;
-        if (data.pin) {
-          restaurant.pin = hashPin(data.pin.toString().trim());
-          invalidateRestaurantSessions(restaurant.id);
-        }
-        if (data.kitchenPin) {
-          restaurant.kitchenPin = hashPin(data.kitchenPin.toString().trim());
-          invalidateRestaurantSessions(restaurant.id);
-        }
-        if (data.paymentConfig) {
-          restaurant.paymentConfig = {
-            ...(restaurant.paymentConfig || {}),
-            ...data.paymentConfig
-          };
-        }
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          if (typeof data.rushMode === 'boolean') restaurant.rushMode = data.rushMode;
+          if (data.name) restaurant.name = data.name;
+          if (data.phone) restaurant.phone = data.phone;
+          if (data.address) restaurant.address = data.address;
+          if (data.pin) {
+            restaurant.pin = hashPin(data.pin.toString().trim());
+            invalidateRestaurantSessions(restaurant.id);
+          }
+          if (data.kitchenPin) {
+            restaurant.kitchenPin = hashPin(data.kitchenPin.toString().trim());
+            invalidateRestaurantSessions(restaurant.id);
+          }
+          if (data.paymentConfig) {
+            restaurant.paymentConfig = {
+              ...(restaurant.paymentConfig || {}),
+              ...data.paymentConfig
+            };
+          }
+        });
+
+        if (!saved.success) return;
+
         const safeRestaurant = safeRestaurantForClient(restaurant);
         broadcastEvent(restaurant.id, 'settings:update', safeRestaurant);
 
