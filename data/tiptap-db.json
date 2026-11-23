@@ -296,11 +296,11 @@
       "customers": [
         {
           "phone": "9876543210",
-          "name": "Aman Verma",
-          "visits": 5,
-          "totalSpent": 3186,
-          "loyaltyPoints": 318,
-          "lastVisit": "2026-11-19T23:17:15.727Z"
+          "name": "Pawan Market Guest",
+          "visits": 7,
+          "totalSpent": 4362,
+          "loyaltyPoints": 434,
+          "lastVisit": "2026-11-23T16:51:40.314Z"
         },
         {
           "phone": "9811122233",

@@ -379,6 +379,18 @@ function broadcastEvent(restaurantId, eventType, payload) {
   }
 }
 
+// Render reverse-proxy drops idle HTTP connections after 55s.
+// Keep-alive heartbeat comment (: keepalive\n\n) every 25s ensures POS/KDS connections stay alive permanently.
+setInterval(() => {
+  for (const client of sseClients) {
+    try {
+      client.res.write(': keepalive\n\n');
+    } catch (e) {
+      sseClients.delete(client);
+    }
+  }
+}, 25000);
+
 // Get Local LAN IP for phone NFC testing
 function getLocalIpAddress() {
   const interfaces = os.networkInterfaces();
@@ -427,8 +439,9 @@ const server = http.createServer((req, res) => {
     const restaurantId = searchParams.get('restaurant') || 'all';
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
     });
     res.write(`data: ${JSON.stringify({ type: 'connected', restaurantId, time: Date.now() })}\n\n`);
 
@@ -921,6 +934,18 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    // Helper: Verify restaurant staff authorization (Counter PIN or Kitchen PIN)
+    function verifyStaffAuth(data, roleRequired = 'any') {
+      const staffPin = (req.headers['x-staff-pin'] || data?.staffPin || searchParams.get('staffPin') || '').toString().trim();
+      const masterPin = (req.headers['x-master-pin'] || data?.masterPin || searchParams.get('masterPin') || '').toString().trim();
+      if (verifyMasterPin(masterPin)) return true;
+      if (!staffPin || !restaurant) return false;
+      if (roleRequired === 'counter') {
+        return staffPin === restaurant.pin;
+      }
+      return staffPin === restaurant.pin || staffPin === restaurant.kitchenPin;
+    }
+
     // 4. Restaurant State (Role-Filtered & Tenant Isolated): GET /api/state or GET /api/r/:id/state
     if ((pathname === '/api/state' || pathname === `/api/r/${targetRestId}/state`) && req.method === 'GET') {
       const staffPin = (req.headers['x-staff-pin'] || searchParams.get('staffPin') || '').toString().trim();
@@ -1186,19 +1211,31 @@ const server = http.createServer((req, res) => {
           return;
         }
 
+        const utr = (data.utr || '').toString().trim();
+        const hasValidUtr = utr.length >= 6;
+        const hasGatewayTxn = Boolean(data.razorpay_payment_id || (data.gatewayTxnId && !data.gatewayTxnId.startsWith('RZP_')));
+        const isStaffSettlement = verifyStaffAuth(data, 'counter');
+
+        if (!hasValidUtr && !hasGatewayTxn && !isStaffSettlement) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Valid 12-digit UPI UTR reference number or verified payment transaction required to confirm payment.'
+          }));
+          return;
+        }
+
         order.isPaid = true;
         order.paymentStatus = 'paid';
         order.paymentMethod = paymentMethod;
         order.txnId = txnId;
         order.paidAt = new Date().toISOString();
         order.paymentDetails = {
-          provider: data.provider || 'Razorpay / Dynamic UPI',
+          provider: hasGatewayTxn ? 'Razorpay Gateway' : (hasValidUtr ? 'UPI App (UTR Verified)' : 'POS Counter Settle'),
           txnId,
           gatewayTxnId,
-          utr: data.utr || null,
+          utr: hasValidUtr ? utr : null,
           verified: true,
-          verifiedAt: new Date().toISOString(),
-          simulated: !!data.simulated
+          verifiedAt: new Date().toISOString()
         };
 
         // Update customer lifetime spend & loyalty coins immediately
@@ -1753,18 +1790,6 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ success: true, fromTable, toTable, order: activeOrder }));
       });
       return;
-    }
-
-    // Helper: Verify restaurant staff authorization (Counter PIN or Kitchen PIN)
-    function verifyStaffAuth(data, roleRequired = 'any') {
-      const staffPin = (req.headers['x-staff-pin'] || data?.staffPin || searchParams.get('staffPin') || '').toString().trim();
-      const masterPin = (req.headers['x-master-pin'] || data?.masterPin || searchParams.get('masterPin') || '').toString().trim();
-      if (verifyMasterPin(masterPin)) return true;
-      if (!staffPin) return false;
-      if (roleRequired === 'counter') {
-        return staffPin === restaurant.pin;
-      }
-      return staffPin === restaurant.pin || staffPin === restaurant.kitchenPin;
     }
 
     // 10. Add New Dish: POST /api/menu

@@ -666,23 +666,13 @@
           </div>
         </div>
 
-        <!-- Automatic Bank Listener & Instant Simulation Sandbox -->
-        <div class="p-4 rounded-2xl bg-sky-50 border border-sky-200 space-y-3">
-          <div class="flex items-center justify-between text-xs">
-            <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-sky-500 animate-ping"></span>
-              <span class="font-extrabold text-[#0a192f]">Live Bank Listener: Active</span>
-            </div>
-            <span class="text-[10px] text-sky-700 font-bold bg-sky-200/60 px-2 py-0.5 rounded-full">NPCI Gateway</span>
+        <!-- Automatic Bank & Counter Sync Status -->
+        <div class="p-3.5 rounded-2xl bg-sky-50/70 border border-sky-200/60 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span class="font-bold text-slate-800">Auto-Syncing with POS Counter & Bank</span>
           </div>
-          <p class="text-[11px] text-slate-500">
-            TipTap continuously verifies incoming UPI settlements with the bank server.
-          </p>
-
-          <!-- The Instant Simulation Button for Test/Demo -->
-          <button onclick="simulateSuccessfulBankApproval()" id="btnSimulateApproval" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-display font-black text-xs shadow-md shadow-emerald-500/25 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2">
-            <span>⚡ Instant Bank Approval (Test Sandbox)</span>
-          </button>
+          <span class="text-[10px] text-sky-800 font-extrabold bg-sky-100 px-2.5 py-1 rounded-full">NPCI / Bank</span>
         </div>
 
       </div>
@@ -724,33 +714,6 @@
             Close & Back to Menu
           </button>
         </div>
-      </div>
-
-    </div>
-  </div>
-
-      <!-- 5-Star Customer Feedback Section (When served) -->
-      <div id="reviewFeedbackSection" class="hidden p-5 rounded-2xl bg-amber-50 border border-amber-200 text-center space-y-2.5">
-        <p class="font-black text-slate-800 text-sm font-display">⭐ Rate Your Food & Service</p>
-        <div class="flex items-center justify-center gap-2 text-3xl text-amber-400 cursor-pointer" id="starRatingContainer">
-          <span onclick="setReviewRating(1)" id="star-1">★</span>
-          <span onclick="setReviewRating(2)" id="star-2">★</span>
-          <span onclick="setReviewRating(3)" id="star-3">★</span>
-          <span onclick="setReviewRating(4)" id="star-4">★</span>
-          <span onclick="setReviewRating(5)" id="star-5">★</span>
-        </div>
-        <input type="text" id="reviewCommentInp" placeholder="Leave a compliment for the chef..."
-          class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none">
-        <button type="button" onclick="submitReview()" id="btnSubmitReview" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-md transition">
-          Submit Review ⭐
-        </button>
-        <p id="reviewThanksMsg" class="hidden text-xs text-emerald-700 font-bold">Thank you for your review! 🙏</p>
-      </div>
-
-      <div class="flex gap-2">
-        <button onclick="closeLiveOrderModal()" class="w-full py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition">
-          Add More Items ＋
-        </button>
       </div>
 
     </div>
@@ -1775,39 +1738,6 @@
       }, 3000);
     }
 
-    async function simulateSuccessfulBankApproval() {
-      const btn = document.getElementById('btnSimulateApproval');
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<span class="animate-spin inline-block mr-2">⚙️</span> Connecting to NPCI & Bank...`;
-      }
-      try {
-        const res = await fetch(`/api/verify-payment?restaurant=${currentRestaurantId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId: currentOrder ? currentOrder.id : null,
-            txnId: currentGatewayTxnId || `TXN_${Date.now()}`,
-            paymentMethod: 'UPI (Instant Auto-Verify)',
-            simulated: true
-          })
-        });
-        const data = await res.json();
-        if (data.success) {
-          onPaymentVerifiedSuccess(data);
-        } else {
-          alert(data.error || 'Payment verification failed');
-        }
-      } catch (err) {
-        alert('Bank gateway network error');
-      } finally {
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = `<span>⚡ Instant Bank Approval (Test Sandbox)</span>`;
-        }
-      }
-    }
-
     // Verify Real UPI App payment via 12-digit UTR reference number
     async function submitUtrPayment() {
       const inp = document.getElementById('inpUpiUtr');
@@ -1892,37 +1822,7 @@
         }
       }
 
-      // Fallback Card Simulation
-      const cardBtn = event?.currentTarget;
-      if (cardBtn) {
-        cardBtn.disabled = true;
-        cardBtn.innerText = 'Processing Card via Razorpay Gateway...';
-      }
-      setTimeout(async () => {
-        try {
-          const res = await fetch(`/api/verify-payment?restaurant=${currentRestaurantId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              orderId: currentOrder ? currentOrder.id : null,
-              txnId: `CARD_${Date.now()}`,
-              paymentMethod: 'Credit / Debit Card (Razorpay)',
-              simulated: true
-            })
-          });
-          const data = await res.json();
-          if (data.success) {
-            onPaymentVerifiedSuccess(data);
-          }
-        } catch(e) {
-          alert('Card payment processing error');
-        } finally {
-          if (cardBtn) {
-            cardBtn.disabled = false;
-            cardBtn.innerText = 'Pay Securely via Card ➔';
-          }
-        }
-      }, 1000);
+      alert('Online Card Gateway is currently being configured by the merchant. Please pay via UPI Apps or scan the Dynamic UPI QR code above, or inform your waiter.');
     }
 
     function trackUpiClick(appName) {

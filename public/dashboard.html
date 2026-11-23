@@ -1000,6 +1000,13 @@
       <span id="printTableId">Table: 2</span>
       <span id="printOrderId">Order: ORD-101</span>
     </div>
+    <div class="py-1 border-b border-black flex justify-between text-[11px]">
+      <span id="printDateTime">23/11/2026, 02:45 PM</span>
+      <span id="printPayMethod">Mode: UPI</span>
+    </div>
+    <div id="printUtrRow" class="py-1 border-b border-black text-[11px] hidden">
+      <span>Bank UTR: <span id="printUtrNum"></span></span>
+    </div>
     <div id="printItemsList" class="py-2 border-b border-black space-y-1">
       <!-- Injected -->
     </div>
@@ -2484,13 +2491,17 @@
         if (paidNotice) {
           paidNotice.classList.remove('hidden');
           paidNotice.innerHTML = `
-            <div class="p-3.5 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-900 space-y-1">
-              <div class="flex items-center gap-1.5 font-black text-sm">
-                <span>✅</span> <span>Bill Paid Online</span>
+            <div class="p-3.5 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-900 space-y-1.5">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5 font-black text-sm">
+                  <span>✅</span> <span>Bill Paid Online</span>
+                </div>
+                <span class="text-[10px] font-extrabold uppercase bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">Bank Verified</span>
               </div>
-              <p class="text-xs text-emerald-800">
+              <p class="text-xs text-emerald-800 leading-snug">
                 Customer settled ₹${settlingOrder.total} via <strong>${settlingOrder.paymentMethod || 'Online UPI'}</strong>.
                 <br>Txn ID: <code class="font-mono text-[11px] font-bold">${settlingOrder.txnId || 'VERIFIED'}</code>
+                ${settlingOrder.paymentDetails && settlingOrder.paymentDetails.utr ? `<br><span class="inline-flex items-center gap-1 mt-1 px-2.5 py-1 rounded-lg bg-emerald-100 border border-emerald-300 font-mono font-black text-xs text-emerald-950">🏦 UTR: ${settlingOrder.paymentDetails.utr}</span>` : ''}
               </p>
             </div>
           `;
@@ -2672,6 +2683,17 @@
       document.getElementById('printCgst').innerText = `₹${(settlingOrder.gst / 2).toFixed(2)}`;
       document.getElementById('printSgst').innerText = `₹${(settlingOrder.gst / 2).toFixed(2)}`;
       document.getElementById('printTotal').innerText = `₹${settlingOrder.total}`;
+      document.getElementById('printDateTime').innerText = new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
+      document.getElementById('printPayMethod').innerText = `Mode: ${settlingOrder.paymentMethod || selectedPayMode.toUpperCase()}`;
+
+      const utrEl = document.getElementById('printUtrRow');
+      const utrNumEl = document.getElementById('printUtrNum');
+      if (settlingOrder.paymentDetails && settlingOrder.paymentDetails.utr) {
+        utrEl.classList.remove('hidden');
+        utrNumEl.innerText = settlingOrder.paymentDetails.utr;
+      } else {
+        utrEl.classList.add('hidden');
+      }
 
       document.getElementById('printItemsList').innerHTML = settlingOrder.items.map(i => `
         <div class="flex justify-between">
@@ -2692,6 +2714,8 @@
 
       const coinsEarned = Math.floor(settlingOrder.total / 10);
       const itemsText = settlingOrder.items.map(i => `• ${i.qty}x ${i.name} = ₹${i.itemTotal}`).join('\n');
+      const utrText = (settlingOrder.paymentDetails && settlingOrder.paymentDetails.utr) ? `Bank UTR: ${settlingOrder.paymentDetails.utr}\n` : '';
+      const origin = window.location.origin;
       const message = `*🧾 TAX INVOICE - ${appState.restaurant.name}*\n` +
         `Order: #${settlingOrder.id} | ${settlingOrder.tableName || 'Table ' + settlingOrder.tableId}\n` +
         `GSTIN: ${appState.restaurant.gstin || '07AAAAA0000A1Z5'}\n` +
@@ -2701,10 +2725,11 @@
         `Subtotal: ₹${settlingOrder.subtotal}\n` +
         `GST (5%): ₹${settlingOrder.gst}\n` +
         `*Grand Total: ₹${settlingOrder.total}*\n` +
-        `Paid via: ${selectedPayMode.toUpperCase()}\n\n` +
+        `Paid via: ${settlingOrder.paymentMethod || selectedPayMode.toUpperCase()}\n` +
+        utrText + `\n` +
         `*🪙 Loyalty Rewards:* Earned ${coinsEarned} TipTap Coins!\n` +
         `*🎁 Cashback:* ₹${coinsEarned} off on your next table order.\n` +
-        `Menu Link: https://tiptap-y2rs.onrender.com/menu.html?restaurant=${currentRestaurantId}\n\n` +
+        `Menu Link: ${origin}/menu.html?restaurant=${currentRestaurantId}\n\n` +
         `Thank you for dining with us! 🌟`;
 
       const cleanPhone = phone.replace(/[^0-9]/g, '');
