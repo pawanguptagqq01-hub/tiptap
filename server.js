@@ -363,8 +363,33 @@ let mongoClient = null;
 let mongoDb = null;
 let isMongoConnected = false;
 let mongoCollection = null;
+let mongoDbError = null;
 
 const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_URL || process.env.DATABASE_URL;
+
+// Helper: Strip test orders, test customers, and test service calls when initializing fresh database
+function cleanProductionSeed(sourceDb) {
+  const clean = JSON.parse(JSON.stringify(sourceDb || {}));
+  clean.leads = [];
+  if (clean.restaurants) {
+    Object.values(clean.restaurants).forEach(r => {
+      r.orders = [];
+      r.completedOrders = [];
+      r.serviceRequests = [];
+      r.customers = [];
+      if (r.tables) {
+        r.tables.forEach(t => {
+          t.status = 'free';
+          t.currentOrderId = null;
+          t.seatingTime = null;
+          t.reservedFor = null;
+          t.reservedTime = null;
+        });
+      }
+    });
+  }
+  return clean;
+}
 
 async function initCloudDatabase() {
   if (!MONGODB_URI) {
@@ -375,14 +400,16 @@ async function initCloudDatabase() {
 
   try {
     const { MongoClient } = require('mongodb');
+    const timeoutMs = parseInt(process.env.MONGODB_TIMEOUT_MS, 10) || 3000;
     mongoClient = new MongoClient(MONGODB_URI, {
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 8000,
-      connectTimeoutMS: 10000
+      serverSelectionTimeoutMS: timeoutMs,
+      connectTimeoutMS: timeoutMs
     });
 
     await mongoClient.connect();
     isMongoConnected = true;
+    mongoDbError = null;
     mongoDb = mongoClient.db('tiptap');
     mongoCollection = mongoDb.collection('system_store');
 
@@ -399,18 +426,25 @@ async function initCloudDatabase() {
         fs.writeFileSync(DB_PATH, JSON.stringify(cleanData, null, 2), 'utf8');
       } catch (e) {}
     } else {
-      console.log('📤 [TipTap Cloud DB] Initializing fresh MongoDB collection with local database seed...');
+      console.log('📤 [TipTap Cloud DB] Initializing fresh MongoDB collection with clean seed (zero test data)...');
+      const seedData = cleanProductionSeed(db);
+      db = seedData;
       await mongoCollection.updateOne(
         { _id: 'tiptap_main_store' },
-        { $set: db },
+        { $set: seedData },
         { upsert: true }
       );
-      console.log('✅ [TipTap Cloud DB] Local restaurants and menu uploaded to MongoDB Atlas successfully.');
+      console.log('✅ [TipTap Cloud DB] Clean restaurant catalogs and floor layouts uploaded to MongoDB Atlas.');
     }
   } catch (err) {
     console.error('⚠️ [TipTap Cloud DB] MongoDB connection failed:', err.message);
-    console.log('ℹ️  [TipTap DB] Falling back safely to Local File Mode.');
     isMongoConnected = false;
+    mongoDbError = err.message;
+    if (process.env.NODE_ENV === 'production' && MONGODB_URI) {
+      console.error('🚨 [TipTap FATAL] Running in production with unreachable MongoDB Atlas! Fail-closed protection active: mutating writes will be blocked to prevent ephemeral data loss.');
+    } else {
+      console.log('ℹ️  [TipTap DB] Falling back safely to Local File Mode for development.');
+    }
   }
 }
 
@@ -422,14 +456,16 @@ function saveDb(data) {
     console.error('Error saving local DB:', err.message);
   }
 
-  // 2. If connected to MongoDB, persist to cloud asynchronously (zero latency to client response)
+  // 2. If connected to MongoDB, persist to cloud asynchronously
   if (isMongoConnected && mongoCollection) {
     mongoCollection.updateOne(
       { _id: 'tiptap_main_store' },
       { $set: data },
       { upsert: true }
     ).catch(err => {
-      console.error('⚠️ [TipTap Cloud DB] Background sync error:', err.message);
+      console.error('⚠️ [TipTap Cloud DB] Cloud write synchronization failed:', err.message);
+      isMongoConnected = false;
+      mongoDbError = err.message;
     });
   }
 }
@@ -718,7 +754,7 @@ function isSuperAdminAuthenticated(req, bodyPin) {
   const pin = (bodyPin || (req.headers && req.headers['x-master-pin']) || '').toString().trim();
   if (pin) {
     const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').toString().trim();
-    if (envPin && pin === envPin) return true;
+    if (envPin && verifyPin(pin, envPin)) return true;
     if (db.superAdmin && db.superAdmin.pin && verifyPin(pin, db.superAdmin.pin)) return true;
   }
 
@@ -798,15 +834,20 @@ const server = http.createServer((req, res) => {
   // HEALTH CHECK & UPTIME KEEP-ALIVE: /healthz or /api/health
   // ----------------------------------------------------
   if (pathname === '/healthz' || pathname === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    const isCloudDbExpected = Boolean(process.env.NODE_ENV === 'production' && MONGODB_URI);
+    const isHealthy = !isCloudDbExpected || isMongoConnected;
+    const statusCode = isHealthy ? 200 : 503;
+
+    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      status: 'healthy',
+      status: isHealthy ? 'healthy' : 'unhealthy',
       platform: 'TipTap Smart Dining POS',
       version: '2.5.0-production',
       uptimeSeconds: Math.floor(process.uptime()),
       database: {
-        mode: isMongoConnected ? 'mongodb-atlas-cloud' : 'local-json-persistent',
-        connected: true,
+        mode: isMongoConnected ? 'mongodb-atlas-cloud' : (MONGODB_URI ? 'cloud-disconnected' : 'local-json-persistent'),
+        connected: isMongoConnected || (!MONGODB_URI && process.env.NODE_ENV !== 'production'),
+        error: isMongoConnected ? null : (mongoDbError || (MONGODB_URI ? 'Database disconnected' : null)),
         restaurantsCount: db.restaurants ? Object.keys(db.restaurants).length : 0
       },
       realtime: {
@@ -816,6 +857,23 @@ const server = http.createServer((req, res) => {
       timestamp: new Date().toISOString()
     }));
     return;
+  }
+
+  // ----------------------------------------------------
+  // FAIL-CLOSED PRODUCTION WRITE GUARD
+  // If running in production with MONGODB_URI configured but disconnected,
+  // reject state-modifying requests with HTTP 503 to prevent data loss on ephemeral disk.
+  // ----------------------------------------------------
+  const isMutatingMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (process.env.NODE_ENV === 'production' && MONGODB_URI && !isMongoConnected && isMutatingMethod) {
+    if (!pathname.startsWith('/api/auth/') && pathname !== '/api/admin/verify-pin') {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        error: 'Database Unavailable: MongoDB Atlas cluster is disconnected. State modifications are paused in production to prevent data loss.',
+        status: 'service_unavailable'
+      }));
+      return;
+    }
   }
 
   // ----------------------------------------------------
@@ -870,7 +928,7 @@ const server = http.createServer((req, res) => {
       const pin = (bodyPin || (req.headers && req.headers['x-master-pin']) || '').toString().trim();
       if (pin) {
         const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').toString().trim();
-        if (envPin && pin === envPin) return true;
+        if (envPin && verifyPin(pin, envPin)) return true;
         if (db.superAdmin && db.superAdmin.pin && verifyPin(pin, db.superAdmin.pin)) return true;
       }
 
@@ -1189,7 +1247,7 @@ const server = http.createServer((req, res) => {
       readJsonBody((err, data) => {
         const pin = (data?.pin || '').trim();
         const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
-        const isMasterValid = (envPin && pin === envPin) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+        const isMasterValid = (envPin && verifyPin(pin, envPin)) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
 
         if (isMasterValid) {
           clearAttempts(clientIp);
@@ -1235,7 +1293,7 @@ const server = http.createServer((req, res) => {
         // 1. Check if logging in as Platform Super Admin
         if (['admin', 'superadmin', 'master', 'super'].includes(rawIdent)) {
           const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
-          const isMasterValid = (envPin && pin === envPin) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+          const isMasterValid = (envPin && verifyPin(pin, envPin)) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
           if (isMasterValid) {
             clearAttempts(clientIp);
             const session = createSession({ role: 'superadmin' });
@@ -1275,7 +1333,7 @@ const server = http.createServer((req, res) => {
 
         const station = (data.station || 'counter').toString().trim();
         const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
-        const isMaster = (envPin && pin === envPin) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+        const isMaster = (envPin && verifyPin(pin, envPin)) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
         const isCounterPin = targetRest.pin && verifyPin(pin, targetRest.pin);
         const isKitchenPin = targetRest.kitchenPin && verifyPin(pin, targetRest.kitchenPin);
 
@@ -1382,7 +1440,7 @@ const server = http.createServer((req, res) => {
         }
 
         const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
-        const isMaster = (envPin && pin === envPin) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+        const isMaster = (envPin && verifyPin(pin, envPin)) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
         const isCounterPin = r.pin && verifyPin(pin, r.pin);
         const isKitchenPin = r.kitchenPin && verifyPin(pin, r.kitchenPin);
 

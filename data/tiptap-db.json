@@ -19,8 +19,8 @@
           "name": "Table 1",
           "capacity": 2,
           "status": "occupied",
-          "currentOrderId": "ORD-9352",
-          "seatingTime": "2026-11-23T20:54:49.352Z",
+          "currentOrderId": "ORD-8454",
+          "seatingTime": "2026-11-23T21:30:08.454Z",
           "reservedFor": null,
           "reservedTime": null
         },
@@ -29,8 +29,8 @@
           "name": "Table 2",
           "capacity": 4,
           "status": "occupied",
-          "currentOrderId": "ORD-3193",
-          "seatingTime": "2026-11-23T20:13:03.193Z",
+          "currentOrderId": "ORD-5872",
+          "seatingTime": "2026-11-23T21:30:25.873Z",
           "reservedFor": null,
           "reservedTime": null
         },
@@ -41,7 +41,7 @@
           "status": "free",
           "currentOrderId": null,
           "seatingTime": null,
-          "reservedFor": "",
+          "reservedFor": null,
           "reservedTime": null
         },
         {
@@ -276,7 +276,61 @@
       ],
       "orders": [
         {
-          "id": "ORD-3193",
+          "id": "ORD-8454",
+          "orderType": "dinein",
+          "tableId": 1,
+          "tableName": "Table 1",
+          "customerName": "",
+          "customerPhone": "",
+          "deliveryAddress": "",
+          "items": [
+            {
+              "id": "m1",
+              "name": "Paneer Butter Masala",
+              "variant": "",
+              "price": 280,
+              "qty": 1,
+              "addons": [],
+              "itemTotal": 280,
+              "kotNumber": 1
+            }
+          ],
+          "kots": [
+            {
+              "kotNumber": 1,
+              "items": [
+                {
+                  "id": "m1",
+                  "name": "Paneer Butter Masala",
+                  "variant": "",
+                  "price": 280,
+                  "qty": 1,
+                  "addons": [],
+                  "itemTotal": 280,
+                  "kotNumber": 1
+                }
+              ],
+              "orderedAt": "2026-11-23T21:30:08.454Z",
+              "status": "received"
+            }
+          ],
+          "notes": "",
+          "subtotal": 280,
+          "discount": 0,
+          "promoCode": "",
+          "packagingCharge": 0,
+          "gst": 14,
+          "total": 294,
+          "status": "ready",
+          "kitchenStatus": "preparing",
+          "paymentStatus": "unpaid",
+          "isPaid": false,
+          "paymentMethod": null,
+          "createdAt": "2026-11-23T21:30:08.454Z",
+          "updatedAt": "2026-11-23T21:30:08.485Z"
+        },
+        {
+          "id": "ORD-5872",
           "orderType": "dinein",
           "tableId": 2,
           "tableName": "Table 2",
@@ -313,96 +367,6 @@
               "addons": [],
               "itemTotal": 90,
               "kotNumber": 2
-            },
-            {
-              "id": "tiptap-bistro_m1",
-              "name": "Paneer Butter Masala",
-              "variant": "",
-              "price": 280,
-              "qty": 2,
-              "addons": [],
-              "itemTotal": 560,
-              "kotNumber": 3
-            },
-            {
-              "id": "tiptap-bistro_m5",
-              "name": "Butter Naan",
-              "variant": "",
-              "price": 45,
-              "qty": 3,
-              "addons": [],
-              "itemTotal": 135,
-              "kotNumber": 3
-            },
-            {
-              "id": "tiptap-bistro_m6",
-              "name": "Gulab Jamun (2 Pcs)",
-              "variant": "",
-              "price": 90,
-              "qty": 1,
-              "addons": [],
-              "itemTotal": 90,
-              "kotNumber": 4
-            },
-            {
-              "id": "tiptap-bistro_m1",
-              "name": "Paneer Butter Masala",
-              "variant": "",
-              "price": 280,
-              "qty": 2,
-              "addons": [],
-              "itemTotal": 560,
-              "kotNumber": 5
-            },
-            {
-              "id": "tiptap-bistro_m5",
-              "name": "Butter Naan",
-              "variant": "",
-              "price": 45,
-              "qty": 3,
-              "addons": [],
-              "itemTotal": 135,
-              "kotNumber": 5
-            },
-            {
-              "id": "tiptap-bistro_m6",
-              "name": "Gulab Jamun (2 Pcs)",
-              "variant": "",
-              "price": 90,
-              "qty": 1,
-              "addons": [],
-              "itemTotal": 90,
-              "kotNumber": 6
-            },
-            {
-              "id": "tiptap-bistro_m1",
-              "name": "Paneer Butter Masala",
-              "variant": "",
-              "price": 280,
-              "qty": 2,
-              "addons": [],
-              "itemTotal": 560,
-              "kotNumber": 7
-            },
-            {
-              "id": "tiptap-bistro_m5",
-              "name": "Butter Naan",
-              "variant": "",
-              "price": 45,
-              "qty": 3,
-              "addons": [],
-              "itemTotal": 135,
-              "kotNumber": 7
-            },
-            {
-              "id": "tiptap-bistro_m6",
-              "name": "Gulab Jamun (2 Pcs)",
-              "variant": "",
-              "price": 90,
-              "qty": 1,
-              "addons": [],
-              "itemTotal": 90,
-              "kotNumber": 8
             }
           ],
           "kots": [
@@ -440,7 +404,7 @@
                   "kotNumber": 2
                 }
               ],
-              "orderedAt": "2026-11-23T20:13:03.193Z",
+              "orderedAt": "2026-11-23T21:30:25.873Z",
               "status": "received"
             },
             {
@@ -457,306 +421,34 @@
                   "kotNumber": 2
                 }
               ],
-              "orderedAt": "2026-11-23T20:13:03.202Z",
-              "status": "received"
-            },
-            {
-              "kotNumber": 3,
-              "items": [
-                {
-                  "id": "tiptap-bistro_m1",
-                  "name": "Paneer Butter Masala",
-                  "variant": "",
-                  "price": 280,
-                  "qty": 2,
-                  "addons": [],
-                  "itemTotal": 560,
-                  "kotNumber": 3
-                },
-                {
-                  "id": "tiptap-bistro_m5",
-                  "name": "Butter Naan",
-                  "variant": "",
-                  "price": 45,
-                  "qty": 3,
-                  "addons": [],
-                  "itemTotal": 135,
-                  "kotNumber": 3
-                }
-              ],
-              "orderedAt": "2026-11-23T20:14:02.594Z",
-              "status": "received"
-            },
-            {
-              "kotNumber": 4,
-              "items": [
-                {
-                  "id": "tiptap-bistro_m6",
-                  "name": "Gulab Jamun (2 Pcs)",
-                  "variant": "",
-                  "price": 90,
-                  "qty": 1,
-                  "addons": [],
-                  "itemTotal": 90,
-                  "kotNumber": 4
-                }
-              ],
-              "orderedAt": "2026-11-23T20:14:02.602Z",
-              "status": "received"
-            },
-            {
-              "kotNumber": 5,
-              "items": [
-                {
-                  "id": "tiptap-bistro_m1",
-                  "name": "Paneer Butter Masala",
-                  "variant": "",
-                  "price": 280,
-                  "qty": 2,
-                  "addons": [],
-                  "itemTotal": 560,
-                  "kotNumber": 5
-                },
-                {
-                  "id": "tiptap-bistro_m5",
-                  "name": "Butter Naan",
-                  "variant": "",
-                  "price": 45,
-                  "qty": 3,
-                  "addons": [],
-                  "itemTotal": 135,
-                  "kotNumber": 5
-                }
-              ],
-              "orderedAt": "2026-11-23T20:53:44.338Z",
-              "status": "received"
-            },
-            {
-              "kotNumber": 6,
-              "items": [
-                {
-                  "id": "tiptap-bistro_m6",
-                  "name": "Gulab Jamun (2 Pcs)",
-                  "variant": "",
-                  "price": 90,
-                  "qty": 1,
-                  "addons": [],
-                  "itemTotal": 90,
-                  "kotNumber": 6
-                }
-              ],
-              "orderedAt": "2026-11-23T20:53:44.343Z",
-              "status": "received"
-            },
-            {
-              "kotNumber": 7,
-              "items": [
-                {
-                  "id": "tiptap-bistro_m1",
-                  "name": "Paneer Butter Masala",
-                  "variant": "",
-                  "price": 280,
-                  "qty": 2,
-                  "addons": [],
-                  "itemTotal": 560,
-                  "kotNumber": 7
-                },
-                {
-                  "id": "tiptap-bistro_m5",
-                  "name": "Butter Naan",
-                  "variant": "",
-                  "price": 45,
-                  "qty": 3,
-                  "addons": [],
-                  "itemTotal": 135,
-                  "kotNumber": 7
-                }
-              ],
-              "orderedAt": "2026-11-23T20:58:14.020Z",
-              "status": "received"
-            },
-            {
-              "kotNumber": 8,
-              "items": [
-                {
-                  "id": "tiptap-bistro_m6",
-                  "name": "Gulab Jamun (2 Pcs)",
-                  "variant": "",
-                  "price": 90,
-                  "qty": 1,
-                  "addons": [],
-                  "itemTotal": 90,
-                  "kotNumber": 8
-                }
-              ],
-              "orderedAt": "2026-11-23T20:58:14.025Z",
+              "orderedAt": "2026-11-23T21:30:25.879Z",
               "status": "received"
             }
           ],
           "notes": "",
-          "subtotal": 3140,
+          "subtotal": 785,
           "discount": 0,
           "promoCode": "",
           "packagingCharge": 0,
-          "gst": 157,
-          "total": 3297,
+          "gst": 39.25,
+          "total": 824.25,
           "status": "received",
           "kitchenStatus": "received",
           "paymentStatus": "unpaid",
           "isPaid": false,
           "paymentMethod": null,
-          "createdAt": "2026-11-23T20:13:03.193Z",
-          "updatedAt": "2026-11-23T20:58:14.025Z"
-        },
-        {
-          "id": "ORD-9352",
-          "orderType": "dinein",
-          "tableId": 1,
-          "tableName": "Table 1",
-          "customerName": "",
-          "customerPhone": "",
-          "deliveryAddress": "",
-          "items": [
-            {
-              "id": "m1",
-              "name": "Paneer Butter Masala",
-              "variant": "",
-              "price": 280,
-              "qty": 1,
-              "addons": [],
-              "itemTotal": 280,
-              "kotNumber": 1
-            },
-            {
-              "id": "m1",
-              "name": "Paneer Butter Masala",
-              "variant": "",
-              "price": 280,
-              "qty": 1,
-              "addons": [],
-              "itemTotal": 280,
-              "kotNumber": 2
-            },
-            {
-              "id": "m1",
-              "name": "Paneer Butter Masala",
-              "variant": "",
-              "price": 280,
-              "qty": 1,
-              "addons": [],
-              "itemTotal": 280,
-              "kotNumber": 3
-            }
-          ],
-          "kots": [
-            {
-              "kotNumber": 1,
-              "items": [
-                {
-                  "id": "m1",
-                  "name": "Paneer Butter Masala",
-                  "variant": "",
-                  "price": 280,
-                  "qty": 1,
-                  "addons": [],
-                  "itemTotal": 280,
-                  "kotNumber": 1
-                }
-              ],
-              "orderedAt": "2026-11-23T20:54:49.352Z",
-              "status": "received"
-            },
-            {
-              "kotNumber": 2,
-              "items": [
-                {
-                  "id": "m1",
-                  "name": "Paneer Butter Masala",
-                  "variant": "",
-                  "price": 280,
-                  "qty": 1,
-                  "addons": [],
-                  "itemTotal": 280,
-                  "kotNumber": 2
-                }
-              ],
-              "orderedAt": "2026-11-23T20:56:45.703Z",
-              "status": "received"
-            },
-            {
-              "kotNumber": 3,
-              "items": [
-                {
-                  "id": "m1",
-                  "name": "Paneer Butter Masala",
-                  "variant": "",
-                  "price": 280,
-                  "qty": 1,
-                  "addons": [],
-                  "itemTotal": 280,
-                  "kotNumber": 3
-                }
-              ],
-              "orderedAt": "2026-11-23T20:57:57.666Z",
-              "status": "received"
-            }
-          ],
-          "notes": "",
-          "subtotal": 840,
-          "discount": 0,
-          "promoCode": "",
-          "packagingCharge": 0,
-          "gst": 42,
-          "total": 882,
-          "status": "ready",
-          "kitchenStatus": "preparing",
-          "paymentStatus": "unpaid",
-          "isPaid": false,
-          "paymentMethod": null,
-          "createdAt": "2026-11-23T20:54:49.352Z",
-          "updatedAt": "2026-11-23T20:57:57.685Z"
+          "createdAt": "2026-11-23T21:30:25.873Z",
+          "updatedAt": "2026-11-23T21:30:25.879Z"
         }
       ],
       "serviceRequests": [
         {
-          "id": "SR-4023",
+          "id": "SR-5876",
           "tableId": 2,
           "tableName": "Table 2",
           "type": "water",
           "status": "pending",
-          "time": "2026-11-23T20:58:14.023Z"
-        },
-        {
-          "id": "SR-4340",
-          "tableId": 2,
-          "tableName": "Table 2",
-          "type": "water",
-          "status": "pending",
-          "time": "2026-11-23T20:53:44.340Z"
-        },
-        {
-          "id": "SR-2599",
-          "tableId": 2,
-          "tableName": "Table 2",
-          "type": "water",
-          "status": "pending",
-          "time": "2026-11-23T20:14:02.599Z"
-        },
-        {
-          "id": "SR-3198",
-          "tableId": 2,
-          "tableName": "Table 2",
-          "type": "water",
-          "status": "pending",
-          "time": "2026-11-23T20:13:03.198Z"
-        },
-        {
-          "id": "SR-6528",
-          "tableId": 2,
-          "tableName": "Table 2",
-          "type": "water",
-          "status": "pending",
-          "time": "2026-11-23T20:12:36.529Z"
+          "time": "2026-11-23T21:30:25.876Z"
         }
       ],
       "completedOrders": [],
@@ -780,34 +472,10 @@
         {
           "phone": "9876543210",
           "name": "Rahul Sharma",
-          "visits": 9,
-          "totalSpent": 4950,
-          "loyaltyPoints": 492,
-          "lastVisit": "2026-11-23T20:13:03.193Z"
-        },
-        {
-          "phone": "9811122233",
-          "name": "Priya Verma",
-          "visits": 2,
-          "totalSpent": 1420,
-          "loyaltyPoints": 142,
-          "lastVisit": "2026-11-19T22:12:19.588Z"
-        },
-        {
-          "phone": "9536956255",
-          "name": "yera4",
           "visits": 1,
-          "totalSpent": 357,
-          "loyaltyPoints": 35,
-          "lastVisit": "2026-11-19T23:22:47.076Z"
-        },
-        {
-          "phone": "9811223344",
-          "name": "Aman Diner",
-          "visits": 2,
-          "totalSpent": 588,
-          "loyaltyPoints": 58,
-          "lastVisit": "2026-11-23T17:26:42.157Z"
+          "totalSpent": 0,
+          "loyaltyPoints": 0,
+          "lastVisit": "2026-11-23T21:30:25.873Z"
         }
       ],
       "reviews": [
@@ -821,7 +489,7 @@
         }
       ],
       "plan": "Pro Plan (Active)",
-      "pin": "scrypt$e4c008fb09c0b892db332ae9c04ae41d$ab977c23b460b82e95a93579e5dfe400d79e2077ac05088ddaab86de68a0ec4f",
+      "pin": "scrypt$d0c321a43253df13bbd0ba348b0a7f69$a394c2767dcb28bcf9867542dd3166fe1b262b9ca8608c27557f2bff569e54af",
       "kitchenPin": "scrypt$8cf140f8094916b737d344c0fe471fca$a3f81b3ca2461b2bcacc6adcbd42ebbdd1bf86a99efe7dcf89ed8cfa4039077a"
     },
     "sharma-dhaba": {
@@ -844,7 +512,9 @@
           "capacity": 2,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         },
         {
           "id": 2,
@@ -852,7 +522,9 @@
           "capacity": 2,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         },
         {
           "id": 3,
@@ -860,7 +532,9 @@
           "capacity": 4,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         },
         {
           "id": 4,
@@ -868,7 +542,9 @@
           "capacity": 4,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         },
         {
           "id": 5,
@@ -876,7 +552,9 @@
           "capacity": 4,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         },
         {
           "id": 6,
@@ -884,7 +562,9 @@
           "capacity": 4,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         },
         {
           "id": 7,
@@ -892,7 +572,9 @@
           "capacity": 6,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         },
         {
           "id": 8,
@@ -900,7 +582,9 @@
           "capacity": 6,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         },
         {
           "id": 9,
@@ -908,7 +592,9 @@
           "capacity": 6,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         },
         {
           "id": 10,
@@ -916,7 +602,9 @@
           "capacity": 6,
           "status": "free",
           "currentOrderId": null,
-          "seatingTime": null
+          "seatingTime": null,
+          "reservedFor": null,
+          "reservedTime": null
         }
       ],
       "menu": [
@@ -1133,5 +821,6 @@
       "customers": [],
       "reviews": []
     }
-  }
+  },
+  "leads": []
 }
