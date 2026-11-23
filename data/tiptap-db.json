@@ -12,7 +12,7 @@
       "gstin": "07AAAAA0000A1Z5",
       "address": "Shop 12, Galleria Market, Cyber City",
       "gstPercent": 5,
-      "rushMode": true,
+      "rushMode": false,
       "tables": [
         {
           "id": 1,
@@ -41,7 +41,7 @@
           "status": "free",
           "currentOrderId": null,
           "seatingTime": null,
-          "reservedFor": null,
+          "reservedFor": "",
           "reservedTime": null
         },
         {
@@ -297,10 +297,10 @@
         {
           "phone": "9876543210",
           "name": "Pawan Market Guest",
-          "visits": 7,
-          "totalSpent": 4362,
-          "loyaltyPoints": 434,
-          "lastVisit": "2026-11-23T16:51:40.314Z"
+          "visits": 8,
+          "totalSpent": 4950,
+          "loyaltyPoints": 492,
+          "lastVisit": "2026-11-23T17:23:32.928Z"
         },
         {
           "phone": "9811122233",
@@ -317,6 +317,14 @@
           "totalSpent": 357,
           "loyaltyPoints": 35,
           "lastVisit": "2026-11-19T23:22:47.076Z"
+        },
+        {
+          "phone": "9811223344",
+          "name": "Aman Diner",
+          "visits": 2,
+          "totalSpent": 588,
+          "loyaltyPoints": 58,
+          "lastVisit": "2026-11-23T17:26:42.157Z"
         }
       ],
       "reviews": [

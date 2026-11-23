@@ -185,7 +185,7 @@
         btn.className = 'w-full py-3.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-extrabold text-sm shadow-xl shadow-brand-500/25 transition flex items-center justify-center gap-2 active:scale-98';
         if (lblPinTitle) lblPinTitle.innerText = 'Cashier 4-Digit Login PIN *';
         if (lblPinHint) {
-          lblPinHint.innerText = 'Default: 1234';
+          lblPinHint.innerText = 'Authorized Staff PIN';
           lblPinHint.className = 'text-[10px] text-brand-400 font-mono';
         }
       } else {
@@ -195,7 +195,7 @@
         btn.className = 'w-full py-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-sm shadow-xl shadow-amber-500/25 transition flex items-center justify-center gap-2 active:scale-98';
         if (lblPinTitle) lblPinTitle.innerText = 'Chef 4-Digit Passkey *';
         if (lblPinHint) {
-          lblPinHint.innerText = 'Default: 5678';
+          lblPinHint.innerText = 'Kitchen Station Passkey';
           lblPinHint.className = 'text-[10px] text-amber-400 font-mono';
         }
       }
@@ -243,17 +243,25 @@
 
           if (station === 'kds') {
             sessionStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
+            sessionStorage.setItem('tiptap_kds_pin_' + data.restaurant.id, pin);
             localStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
+            localStorage.setItem('tiptap_kds_pin_' + data.restaurant.id, pin);
             sessionStorage.setItem('tiptap_role', 'kitchen');
             localStorage.setItem('tiptap_role', 'kitchen');
             // Remove counter access so kitchen tablet can NEVER open counter
             sessionStorage.removeItem('tiptap_counter_auth_' + data.restaurant.id);
+            sessionStorage.removeItem('tiptap_staff_pin_' + data.restaurant.id);
             localStorage.removeItem('tiptap_counter_auth_' + data.restaurant.id);
+            localStorage.removeItem('tiptap_staff_pin_' + data.restaurant.id);
           } else {
             sessionStorage.setItem('tiptap_counter_auth_' + data.restaurant.id, 'true');
+            sessionStorage.setItem('tiptap_staff_pin_' + data.restaurant.id, pin);
             localStorage.setItem('tiptap_counter_auth_' + data.restaurant.id, 'true');
+            localStorage.setItem('tiptap_staff_pin_' + data.restaurant.id, pin);
             sessionStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
+            sessionStorage.setItem('tiptap_kds_pin_' + data.restaurant.id, pin);
             localStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
+            localStorage.setItem('tiptap_kds_pin_' + data.restaurant.id, pin);
             sessionStorage.setItem('tiptap_role', 'counter');
             localStorage.setItem('tiptap_role', 'counter');
           }

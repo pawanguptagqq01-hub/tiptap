@@ -383,7 +383,11 @@
 
     // ----------------------------------------------------
     function getKdsPin() {
-      return sessionStorage.getItem('tiptap_kds_pin_' + restaurantId) || '';
+      return sessionStorage.getItem('tiptap_kds_pin_' + restaurantId) || 
+             localStorage.getItem('tiptap_kds_pin_' + restaurantId) || 
+             sessionStorage.getItem('tiptap_staff_pin_' + restaurantId) || 
+             sessionStorage.getItem('tiptap_admin_pin') || 
+             '';
     }
 
     // 2. Data Fetching & Sync
@@ -668,7 +672,10 @@
       try {
         const res = await fetch(`/api/orders/${orderId}?restaurant=${restaurantId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-staff-pin': getKdsPin()
+          },
           body: JSON.stringify({ status, kitchenStatus: status })
         });
         if (res.ok) {
@@ -710,7 +717,10 @@
 
     async function resolveServiceCall(id) {
       try {
-        await fetch(`/api/service-request/${id}?restaurant=${restaurantId}`, { method: 'DELETE' });
+        await fetch(`/api/service-request/${id}?restaurant=${restaurantId}`, { 
+          method: 'DELETE',
+          headers: { 'x-staff-pin': getKdsPin() }
+        });
         fetchKdsState();
       } catch (e) {}
     }

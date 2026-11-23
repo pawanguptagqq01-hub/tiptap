@@ -821,7 +821,7 @@ const server = http.createServer((req, res) => {
             return;
           } else {
             res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Invalid Kitchen Chef Passkey. (Default: 5678)' }));
+            res.end(JSON.stringify({ success: false, error: 'Invalid Kitchen Chef Passkey.' }));
             return;
           }
         } else {
@@ -890,7 +890,7 @@ const server = http.createServer((req, res) => {
             }));
           } else {
             res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Incorrect Kitchen Chef Passkey. (Default: 5678)' }));
+            res.end(JSON.stringify({ success: false, error: 'Incorrect Kitchen Chef Passkey.' }));
           }
         } else {
           // Billing Counter unlock: strictly blocks kitchen passkey!
@@ -907,7 +907,7 @@ const server = http.createServer((req, res) => {
             res.end(JSON.stringify({ success: false, error: '🚫 Access Denied: Kitchen Chef passkey cannot access the Billing Counter. Please enter Cashier / Owner PIN.' }));
           } else {
             res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Incorrect Cashier / Manager PIN. (Default: 1234)' }));
+            res.end(JSON.stringify({ success: false, error: 'Incorrect Cashier / Manager PIN.' }));
           }
         }
       });
@@ -1572,6 +1572,33 @@ const server = http.createServer((req, res) => {
       }
 
       readJsonBody((err, data) => {
+        // Enforce Role-Based Authorization on Order Updates:
+        const isFinancialAction = Boolean(data.status === 'paid' || data.isPaid !== undefined || data.paymentStatus === 'paid' || data.closeTable === true);
+        const isKitchenAction = Boolean(data.kitchenStatus || data.status === 'preparing' || data.status === 'ready' || data.status === 'served');
+
+        if (isFinancialAction) {
+          // Marking an order as paid or settling requires Counter PIN (or Master PIN)
+          if (!verifyStaffAuth(data, 'counter')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to settle bill or mark order paid' }));
+            return;
+          }
+        } else if (isKitchenAction) {
+          // Updating kitchen cooking status requires at least Kitchen Passkey
+          if (!verifyStaffAuth(data, 'any')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized: Staff Passkey required to update cooking status' }));
+            return;
+          }
+        } else {
+          // Any other order modification requires staff authentication
+          if (!verifyStaffAuth(data, 'any')) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized: Staff Passkey required to update order' }));
+            return;
+          }
+        }
+
         const order = restaurant.orders.find(o => o.id === orderId);
         if (!order) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -1713,6 +1740,12 @@ const server = http.createServer((req, res) => {
     // 8. Resolve Service Request: PATCH or DELETE /api/service-request/:id
     const srMatch = pathname.match(/service-request\/([A-Za-z0-9-]+)$/);
     if (srMatch && (req.method === 'PATCH' || req.method === 'DELETE')) {
+      if (!verifyStaffAuth(null, 'any')) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized: Staff Passkey required to resolve service call' }));
+        return;
+      }
+
       const srId = srMatch[1];
       restaurant.serviceRequests = (restaurant.serviceRequests || []).filter(s => s.id !== srId);
       saveDb(db);
@@ -1727,6 +1760,12 @@ const server = http.createServer((req, res) => {
     if (tableMatch && req.method === 'PATCH') {
       const tableId = parseInt(tableMatch[1], 10);
       readJsonBody((err, data) => {
+        if (!verifyStaffAuth(data, 'counter')) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to update floor tables' }));
+          return;
+        }
+
         const table = restaurant.tables.find(t => t.id === tableId);
         if (!table) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -1749,6 +1788,12 @@ const server = http.createServer((req, res) => {
     // 9b. Transfer / Shift Table: POST /api/tables/transfer
     if (pathname.includes('/tables/transfer') && req.method === 'POST') {
       readJsonBody((err, data) => {
+        if (!verifyStaffAuth(data, 'counter')) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to transfer tables' }));
+          return;
+        }
+
         const fromTableId = parseInt(data.fromTableId, 10);
         const toTableId = parseInt(data.toTableId, 10);
 
