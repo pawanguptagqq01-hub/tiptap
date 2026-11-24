@@ -4,9 +4,10 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 
 const DEFAULT_PORT = parseInt(process.env.PORT, 10) || 3030;
-const DB_PATH = path.join(__dirname, 'data', 'tiptap-db.json');
+const DB_PATH = process.env.TIPTAP_DB_FILE ? path.resolve(process.env.TIPTAP_DB_FILE) : path.join(__dirname, 'data', 'tiptap-db.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 // Ensure data folder exists
@@ -221,6 +222,7 @@ function createInitialMultiDb() {
       name: 'TipTap HQ Platform Admin',
       pin: '0000'
     },
+    idempotencyKeys: {},
     restaurants: {
       'tiptap-bistro': createDefaultRestaurant(
         'tiptap-bistro',
@@ -267,6 +269,16 @@ function loadDb() {
         return upgraded;
       }
       if (data.restaurants) {
+        if (!data.restaurants['sharma-dhaba']) {
+          data.restaurants['sharma-dhaba'] = createDefaultRestaurant(
+            'sharma-dhaba',
+            'Sharma Ji Shuddh Shakahari Dhaba',
+            '+91 98111 22233',
+            'Highway 44, Near Toll Plaza',
+            '07BBBBB1111B2Z6',
+            10
+          );
+        }
         Object.values(data.restaurants).forEach(r => {
           if (!r.plan) r.plan = 'Pro Plan (Active)';
           if (!r.pin) r.pin = '1234';
@@ -332,6 +344,9 @@ function loadDb() {
           }
         });
       }
+      if (!data.idempotencyKeys) {
+        data.idempotencyKeys = {};
+      }
       return data;
     }
   } catch (err) {
@@ -352,11 +367,50 @@ let mongoClient = null;
 let mongoDb = null;
 let isMongoConnected = false;
 let mongoCollection = null;
+let mongoDbError = null;
 
 const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_URL || process.env.DATABASE_URL;
 
+// Helper: Strip test orders, test customers, and test service calls when initializing fresh database
+function cleanProductionSeed(sourceDb) {
+  const clean = JSON.parse(JSON.stringify(sourceDb || {}));
+  clean.leads = [];
+  clean.idempotencyKeys = {};
+  const isProduction = process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS;
+
+  if (clean.restaurants) {
+    Object.values(clean.restaurants).forEach(r => {
+      r.orders = [];
+      r.completedOrders = [];
+      r.serviceRequests = [];
+      r.customers = [];
+      if (isProduction) {
+        // Never preserve known default demo PINs in fresh production cloud seed
+        r.pin = null;
+        r.kitchenPin = null;
+      }
+      if (r.tables) {
+        r.tables.forEach(t => {
+          t.status = 'free';
+          t.currentOrderId = null;
+          t.seatingTime = null;
+          t.reservedFor = null;
+          t.reservedTime = null;
+        });
+      }
+    });
+  }
+  return clean;
+}
+
 async function initCloudDatabase() {
   if (!MONGODB_URI) {
+    if (process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS) {
+      console.error('🚨 [TipTap FATAL] MONGODB_URI is missing in production environment!');
+      isMongoConnected = false;
+      mongoDbError = 'CRITICAL: MONGODB_URI is not configured in production environment';
+      return;
+    }
     console.log('ℹ️  [TipTap DB] MONGODB_URI not set. Running in Persistent Local File Mode (data/tiptap-db.json).');
     console.log('💡 [TipTap DB Tip] Set MONGODB_URI in Render Environment Variables for 100% permanent cloud persistence across redeployments!');
     return;
@@ -364,18 +418,30 @@ async function initCloudDatabase() {
 
   try {
     const { MongoClient } = require('mongodb');
+    const timeoutMs = parseInt(process.env.MONGODB_TIMEOUT_MS, 10) || 3000;
+    const writeConcernW = process.env.MONGODB_WRITE_CONCERN || (process.env.NODE_ENV === 'production' ? 'majority' : 1);
+    const writeConcernJ = process.env.MONGODB_JOURNAL !== undefined 
+      ? process.env.MONGODB_JOURNAL === 'true' 
+      : (process.env.NODE_ENV === 'production');
+
     mongoClient = new MongoClient(MONGODB_URI, {
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 8000,
-      connectTimeoutMS: 10000
+      serverSelectionTimeoutMS: timeoutMs,
+      connectTimeoutMS: timeoutMs,
+      writeConcern: {
+        w: writeConcernW,
+        j: writeConcernJ,
+        wtimeoutMS: timeoutMs
+      }
     });
 
     await mongoClient.connect();
     isMongoConnected = true;
+    mongoDbError = null;
     mongoDb = mongoClient.db('tiptap');
     mongoCollection = mongoDb.collection('system_store');
 
-    console.log('✅ [TipTap Cloud DB] Successfully connected to MongoDB Atlas Cloud Cluster!');
+    console.log('✅ [TipTap Cloud DB] Successfully connected to MongoDB Atlas Cloud Cluster with majority durability!');
 
     // Check if cloud database already has saved state
     const cloudRecord = await mongoCollection.findOne({ _id: 'tiptap_main_store' });
@@ -388,39 +454,185 @@ async function initCloudDatabase() {
         fs.writeFileSync(DB_PATH, JSON.stringify(cleanData, null, 2), 'utf8');
       } catch (e) {}
     } else {
-      console.log('📤 [TipTap Cloud DB] Initializing fresh MongoDB collection with local database seed...');
+      console.log('📤 [TipTap Cloud DB] Initializing fresh MongoDB collection with clean seed (zero test data)...');
+      const seedData = cleanProductionSeed(db);
+      db = seedData;
       await mongoCollection.updateOne(
         { _id: 'tiptap_main_store' },
-        { $set: db },
-        { upsert: true }
+        { $set: seedData },
+        {
+          upsert: true,
+          writeConcern: {
+            w: writeConcernW,
+            j: writeConcernJ,
+            wtimeoutMS: timeoutMs
+          }
+        }
       );
-      console.log('✅ [TipTap Cloud DB] Local restaurants and menu uploaded to MongoDB Atlas successfully.');
+      console.log('✅ [TipTap Cloud DB] Clean restaurant catalogs and floor layouts uploaded to MongoDB Atlas.');
     }
   } catch (err) {
     console.error('⚠️ [TipTap Cloud DB] MongoDB connection failed:', err.message);
-    console.log('ℹ️  [TipTap DB] Falling back safely to Local File Mode.');
     isMongoConnected = false;
+    mongoDbError = err.message;
+    if (process.env.NODE_ENV === 'production' && MONGODB_URI) {
+      console.error('🚨 [TipTap FATAL] Running in production with unreachable MongoDB Atlas! Fail-closed protection active: mutating writes will be blocked to prevent ephemeral data loss.');
+    } else {
+      console.log('ℹ️  [TipTap DB] Falling back safely to Local File Mode for development.');
+    }
   }
 }
 
-function saveDb(data) {
-  // 1. Save to local disk immediately
+async function saveDb(data) {
+  const timeoutMs = parseInt(process.env.MONGODB_TIMEOUT_MS, 10) || 3000;
+  const writeConcernW = process.env.MONGODB_WRITE_CONCERN || (process.env.NODE_ENV === 'production' ? 'majority' : 1);
+  const writeConcernJ = process.env.MONGODB_JOURNAL !== undefined 
+    ? process.env.MONGODB_JOURNAL === 'true' 
+    : (process.env.NODE_ENV === 'production');
+  const writeConcern = {
+    w: writeConcernW,
+    j: writeConcernJ,
+    wtimeoutMS: timeoutMs
+  };
+
+  // 1. In production, writes MUST be persisted to MongoDB Atlas cloud cluster with acknowledged durability
+  if (process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS) {
+    if (!isMongoConnected || !mongoCollection) {
+      const errMsg = 'Database Unavailable: MongoDB Atlas cluster is not connected or MONGODB_URI is missing. Writes are rejected in production.';
+      mongoDbError = errMsg;
+      throw new Error(errMsg);
+    }
+
+    try {
+      const result = await mongoCollection.updateOne(
+        { _id: 'tiptap_main_store' },
+        { $set: data },
+        { upsert: true, writeConcern }
+      );
+      if (!result || result.acknowledged === false) {
+        throw new Error('Database write unacknowledged by MongoDB cluster');
+      }
+    } catch (err) {
+      console.error('⚠️ [TipTap Cloud DB] Cloud write synchronization failed:', err.message);
+      isMongoConnected = false;
+      mongoDbError = err.message;
+      throw err;
+    }
+
+    // Save to local disk as read cache only after cloud acknowledgement
+    try {
+      fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+    } catch (e) {}
+
+    return true;
+  }
+
+  // 2. Non-production (development or test with optional MongoDB)
+  if (isMongoConnected && mongoCollection) {
+    try {
+      const result = await mongoCollection.updateOne(
+        { _id: 'tiptap_main_store' },
+        { $set: data },
+        { upsert: true, writeConcern }
+      );
+      if (!result || result.acknowledged === false) {
+        throw new Error('Database write unacknowledged by MongoDB cluster');
+      }
+    } catch (err) {
+      console.error('⚠️ [TipTap Cloud DB] Dev cloud write failed:', err.message);
+      isMongoConnected = false;
+      mongoDbError = err.message;
+      throw err;
+    }
+  }
+
+  // Save to local disk immediately for local development/test
   try {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('Error saving local DB:', err.message);
+    throw err;
   }
 
-  // 2. If connected to MongoDB, persist to cloud asynchronously (zero latency to client response)
-  if (isMongoConnected && mongoCollection) {
-    mongoCollection.updateOne(
-      { _id: 'tiptap_main_store' },
-      { $set: data },
-      { upsert: true }
-    ).catch(err => {
-      console.error('⚠️ [TipTap Cloud DB] Background sync error:', err.message);
-    });
+  return true;
+}
+
+// In-Memory Order Deduplication Store for UI button double-clicks (Sliding 5-second window)
+const recentOrderDeduplications = new Map();
+
+// Durable Idempotency Key TTL & Eviction Management
+const IDEMPOTENCY_TTL_MS = parseInt(process.env.IDEMPOTENCY_TTL_MS, 10) || (24 * 60 * 60 * 1000); // 24 Hours
+const MAX_IDEMPOTENCY_KEYS = 5000;
+
+function cleanupExpiredIdempotencyKeys(targetDb) {
+  if (!targetDb || !targetDb.idempotencyKeys) return;
+  const now = Date.now();
+  const keys = Object.keys(targetDb.idempotencyKeys);
+
+  // 1. Remove expired keys older than TTL
+  for (const k of keys) {
+    const entry = targetDb.idempotencyKeys[k];
+    if (entry && entry.createdAt) {
+      const createdTime = new Date(entry.createdAt).getTime();
+      if (!isNaN(createdTime) && (now - createdTime > IDEMPOTENCY_TTL_MS)) {
+        delete targetDb.idempotencyKeys[k];
+      }
+    }
   }
+
+  // 2. Cap max size to prevent unbounded document growth
+  const remainingKeys = Object.keys(targetDb.idempotencyKeys);
+  if (remainingKeys.length > MAX_IDEMPOTENCY_KEYS) {
+    const sorted = remainingKeys.sort((a, b) => {
+      const tA = new Date(targetDb.idempotencyKeys[a]?.createdAt || 0).getTime();
+      const tB = new Date(targetDb.idempotencyKeys[b]?.createdAt || 0).getTime();
+      return tA - tB;
+    });
+    const toRemove = sorted.slice(0, remainingKeys.length - MAX_IDEMPOTENCY_KEYS);
+    toRemove.forEach(k => delete targetDb.idempotencyKeys[k]);
+  }
+}
+
+// Serialized Mutation & Persistence Queue (Mutex)
+// Enforces strict FIFO serialization of state mutations and MongoDB writes,
+// preventing concurrent write interleaving, lost updates, and rollback cross-contamination.
+let mutationQueue = Promise.resolve();
+
+function persistDbChange(res, mutateFn) {
+  const previousOp = mutationQueue;
+
+  const currentOp = (async () => {
+    // Wait for the prior queued operation to settle (even if it rejected/failed)
+    try {
+      await previousOp;
+    } catch (_) {}
+
+    // Take snapshot of database state immediately prior to applying this mutation
+    const snapshot = JSON.parse(JSON.stringify(db));
+    try {
+      cleanupExpiredIdempotencyKeys(db);
+      const result = await mutateFn(db);
+      if (!result || !result.skipSave) {
+        await saveDb(db);
+      }
+      return { success: true, result };
+    } catch (err) {
+      // Rollback database state to pre-mutation snapshot without affecting previous committed mutations
+      db = snapshot;
+      console.error('❌ [TipTap Persistence Error]:', err.message);
+      if (res && !res.headersSent) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: 'Database Write Failed: ' + err.message,
+          status: 'service_unavailable'
+        }));
+      }
+      return { success: false, error: err };
+    }
+  })();
+
+  mutationQueue = currentOp;
+  return currentOp;
 }
 
 // In-Memory Rate Limiting for Security
@@ -451,24 +663,184 @@ function clearAttempts(ip) {
   authAttempts.delete(ip);
 }
 
-// Helper: Get restaurant or default
-function getRestaurant(restId) {
-  if (!restId || !db.restaurants[restId]) {
-    const firstKey = Object.keys(db.restaurants)[0];
-    return db.restaurants[firstKey];
+// Trusted Client IP Resolution (SEC-01 Hardening)
+function normalizeIp(ip) {
+  if (!ip || typeof ip !== 'string') return '';
+  let s = ip.trim();
+  if (s.startsWith('::ffff:')) s = s.substring(7);
+  return s;
+}
+
+function isValidIp(ip) {
+  const s = normalizeIp(ip);
+  if (!s) return false;
+  // IPv4 check: 4 octets 0-255, no leading zeroes unless '0'
+  const ipv4 = s.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    return ipv4.slice(1).every(octet => {
+      const num = parseInt(octet, 10);
+      return num >= 0 && num <= 255 && (octet === '0' || !octet.startsWith('0'));
+    });
   }
-  return db.restaurants[restId];
+  // IPv6 check: colons, hex digits, valid structure
+  return s.includes(':') && /^[0-9a-fA-F:]+$/.test(s);
+}
+
+function isLoopbackIp(ip) {
+  const s = normalizeIp(ip);
+  return s === '127.0.0.1' || s === '::1' || s === 'localhost';
+}
+
+function isPrivateIp(ip) {
+  const s = normalizeIp(ip);
+  if (isLoopbackIp(s)) return true;
+  const parts = s.split('.').map(Number);
+  if (parts.length === 4 && parts.every(n => !isNaN(n) && n >= 0 && n <= 255)) {
+    if (parts[0] === 10) return true;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+  }
+  if (s.toLowerCase().startsWith('fc') || s.toLowerCase().startsWith('fd')) return true;
+  return false;
+}
+
+function isTrustedProxySocket(socketIp, trustSetting) {
+  if (!trustSetting || typeof trustSetting !== 'string') return false;
+  const setting = trustSetting.trim().toLowerCase();
+  if (!setting || setting === 'false' || setting === '0' || setting === 'none') return false;
+
+  const norm = normalizeIp(socketIp);
+
+  if (setting === 'true' || setting === '1' || setting === 'loopback') {
+    return isLoopbackIp(norm);
+  }
+  if (setting === 'private') {
+    return isPrivateIp(norm);
+  }
+  if (setting === 'any' || setting === '*') {
+    return true;
+  }
+
+  // Comma-separated list of trusted IPs or keywords
+  const trustedList = setting.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  for (const item of trustedList) {
+    if (item === 'loopback' && isLoopbackIp(norm)) return true;
+    if (item === 'private' && isPrivateIp(norm)) return true;
+    if (normalizeIp(item) === norm) return true;
+  }
+
+  return false;
+}
+
+function getClientIp(req) {
+  const remoteSocket = (req.socket && req.socket.remoteAddress) ? req.socket.remoteAddress : 'unknown';
+  const normSocket = normalizeIp(remoteSocket);
+
+  // SEC-01 Fix: Explicit trusted proxy configuration required.
+  // Never automatically trust X-Forwarded-For based solely on NODE_ENV=production.
+  const trustConfig = (process.env.TRUST_PROXY || '').trim();
+  if (!trustConfig || !isTrustedProxySocket(normSocket, trustConfig)) {
+    return normSocket;
+  }
+
+  const forwarded = req.headers && req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    const parts = forwarded.split(',').map(s => normalizeIp(s.trim())).filter(Boolean);
+    if (parts.length > 0) {
+      // Proxies append the client IP to the right end of the X-Forwarded-For chain.
+      // Walk backwards from right to left to find the first untrusted client IP.
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const candidate = parts[i];
+        if (isValidIp(candidate)) {
+          // If candidate is a trusted proxy in the chain and there are further hops to the left, continue
+          if (i > 0 && isTrustedProxySocket(candidate, trustConfig)) {
+            continue;
+          }
+          return candidate;
+        }
+      }
+    }
+  }
+
+  return normSocket;
+}
+
+// Helper: Get restaurant by exact ID (never silently selects another restaurant)
+function getRestaurant(restId) {
+  if (!restId || !db.restaurants) return null;
+  return db.restaurants[restId] || null;
+}
+
+// Reusable sanitizer: Strips PINs, credentials, and hashes from client-facing responses
+function safeRestaurantForClient(r) {
+  if (!r) return null;
+  const {
+    pin: _pin,
+    kitchenPin: _kitchenPin,
+    pinHash: _pinHash,
+    kitchenPinHash: _kitchenPinHash,
+    password: _pass,
+    secret: _sec,
+    masterPin: _master,
+    ...safe
+  } = r;
+
+  const safePaymentConfig = {
+    upiVpa: r.paymentConfig?.upiVpa || 'tiptap.merchant@icici',
+    merchantName: r.paymentConfig?.merchantName || r.name,
+    mode: r.paymentConfig?.mode || 'upi_dynamic'
+  };
+
+  return {
+    ...safe,
+    paymentConfig: safePaymentConfig
+  };
 }
 
 // Active Server-Sent Event (SSE) client connections
 const sseClients = new Set();
 
+function sanitizeEventPayload(eventType, payload) {
+  if (!payload || typeof payload !== 'object') return payload;
+  const copy = JSON.parse(JSON.stringify(payload));
+
+  const sanitizeOrder = (ord) => {
+    if (!ord || typeof ord !== 'object') return ord;
+    if (ord.customerPhone) {
+      const p = ord.customerPhone.toString();
+      ord.customerPhone = p.length >= 6 ? `${p.slice(0, 2)}****${p.slice(-4)}` : '****';
+    }
+    delete ord.deliveryAddress;
+    return ord;
+  };
+
+  if (eventType.startsWith('order:') || eventType === 'payment:success') {
+    if (Array.isArray(copy)) {
+      copy.forEach(sanitizeOrder);
+    } else {
+      sanitizeOrder(copy);
+      if (copy.order) sanitizeOrder(copy.order);
+    }
+  }
+
+  // Never leak credentials or internal secrets
+  delete copy.pin;
+  delete copy.kitchenPin;
+  return copy;
+}
+
 function broadcastEvent(restaurantId, eventType, payload) {
-  const message = `event: ${eventType}\ndata: ${JSON.stringify({ restaurantId, payload })}\n\n`;
+  const sanitized = sanitizeEventPayload(eventType, payload);
+  const message = `event: ${eventType}\ndata: ${JSON.stringify({ restaurantId, payload: sanitized })}\n\n`;
   for (const client of sseClients) {
     try {
-      // If client subscribed to specific restaurant, super-admin, or all
-      if (!client.restaurantId || client.restaurantId === 'all' || client.restaurantId === 'super-admin' || client.restaurantId === restaurantId) {
+      // Super admin can receive global or all restaurant events
+      if (client.isSuperAdmin) {
+        if (!client.restaurantId || client.restaurantId === 'all' || client.restaurantId === 'super-admin' || client.restaurantId === restaurantId) {
+          client.res.write(message);
+        }
+      } else if (client.restaurantId && client.restaurantId === restaurantId) {
+        // Restaurant clients receive strictly their own authorized restaurant's events
         client.res.write(message);
       }
     } catch (e) {
@@ -514,16 +886,289 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon'
 };
 
+// ====================================================
+// CRYPTOGRAPHIC CREDENTIAL & SESSION MANAGEMENT
+// ====================================================
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const sessions = new Map(); // sessionId -> session data
+
+function hashPin(pin) {
+  if (!pin) return '';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(pin.toString(), salt, 32).toString('hex');
+  return 'scrypt$' + salt + '$' + hash;
+}
+
+function verifyPin(inputPin, storedValue) {
+  if (!inputPin || !storedValue) return false;
+  const inputStr = inputPin.toString();
+  const storedStr = storedValue.toString();
+
+  if (storedStr.startsWith('scrypt$')) {
+    const parts = storedStr.split('$');
+    if (parts.length !== 3) return false;
+    const salt = parts[1];
+    const originalHash = parts[2];
+    try {
+      const derived = crypto.scryptSync(inputStr, salt, 32).toString('hex');
+      return crypto.timingSafeEqual(Buffer.from(derived, 'hex'), Buffer.from(originalHash, 'hex'));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  const bufA = Buffer.from(inputStr);
+  const bufB = Buffer.from(storedStr);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+function createSession({ role, restaurantId = null, restaurantName = null }) {
+  const sessionId = crypto.randomBytes(32).toString('hex');
+  const csrfToken = crypto.randomBytes(24).toString('hex');
+  const now = Date.now();
+  const session = {
+    id: sessionId,
+    role,
+    restaurantId,
+    restaurantName,
+    csrfToken,
+    createdAt: now,
+    expiresAt: now + SESSION_TTL_MS
+  };
+  sessions.set(sessionId, session);
+  return session;
+}
+
+function getSession(sessionId) {
+  if (!sessionId) return null;
+  const session = sessions.get(sessionId);
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    sessions.delete(sessionId);
+    return null;
+  }
+  return session;
+}
+
+function invalidateSession(sessionId) {
+  if (sessionId) sessions.delete(sessionId);
+}
+
+function invalidateRestaurantSessions(restaurantId) {
+  if (!restaurantId) return;
+  for (const [id, s] of sessions.entries()) {
+    if (s.restaurantId === restaurantId) {
+      sessions.delete(id);
+    }
+  }
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, s] of sessions.entries()) {
+    if (now > s.expiresAt) sessions.delete(id);
+  }
+}, 15 * 60 * 1000);
+
+function parseCookies(req) {
+  const list = {};
+  const rc = req.headers.cookie;
+  if (rc) {
+    rc.split(';').forEach(cookie => {
+      const parts = cookie.split('=');
+      const name = parts.shift().trim();
+      const val = parts.join('=').trim();
+      list[name] = decodeURI(val);
+    });
+  }
+  return list;
+}
+
+function setSessionCookie(res, sessionId, req) {
+  const isHttps = req && (req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted);
+  const secureFlag = (process.env.NODE_ENV === 'production' || isHttps) ? '; Secure' : '';
+  res.setHeader('Set-Cookie', 'tiptap_session=' + sessionId + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400' + secureFlag);
+}
+
+function clearSessionCookie(res, req) {
+  const isHttps = req && (req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted);
+  const secureFlag = (process.env.NODE_ENV === 'production' || isHttps) ? '; Secure' : '';
+  res.setHeader('Set-Cookie', 'tiptap_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' + secureFlag);
+}
+
+function authenticateRequest(req) {
+  const cookies = parseCookies(req);
+  let sessionId = null;
+  let isCookieAuth = false;
+
+  if (cookies['tiptap_session']) {
+    sessionId = cookies['tiptap_session'];
+    isCookieAuth = true;
+  } else if (req.headers && req.headers.authorization) {
+    const auth = req.headers.authorization.trim();
+    if (auth.toLowerCase().startsWith('bearer ')) {
+      sessionId = auth.substring(7).trim();
+      isCookieAuth = false;
+    }
+  }
+  // URL query parameter session authentication (?auth_token=...) is strictly disabled
+  // to prevent session token leakage in browser history/logs/Referer and CSRF bypass attempts.
+
+  const session = getSession(sessionId);
+  if (!session) return null;
+  return { ...session, isCookieAuth };
+}
+
+function verifyCsrfToken(req, session) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return true;
+  if (!session) return true;
+  if (!session.isCookieAuth) return true;
+  if (!session.csrfToken) return false;
+
+  const token = req.headers && (req.headers['x-csrf-token'] || req.headers['x-xsrf-token']);
+  if (token && token.trim() === session.csrfToken) return true;
+
+  return false;
+}
+
+function checkCsrfForCookieAuth(req, res, session) {
+  if (session && session.isCookieAuth && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    if (!verifyCsrfToken(req, session)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden: Invalid or missing CSRF token' }));
+      return false;
+    }
+  }
+  return true;
+}
+
+function isSuperAdminAuthenticated(req, bodyPin) {
+  const session = authenticateRequest(req);
+  if (session && session.role === 'superadmin') {
+    return true;
+  }
+
+  const pin = (bodyPin || (req.headers && req.headers['x-master-pin']) || '').toString().trim();
+  if (pin) {
+    const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').toString().trim();
+    if (envPin && verifyPin(pin, envPin)) return true;
+    if (db.superAdmin && db.superAdmin.pin && verifyPin(pin, db.superAdmin.pin)) return true;
+  }
+
+  return false;
+}
+
+function verifyRestaurantAccess(req, targetRestaurantId, allowedRoles = ['restaurant_owner', 'counter_staff', 'kitchen_staff']) {
+  const session = authenticateRequest(req);
+  if (!session) {
+    return { authorized: false, status: 401, error: 'Unauthorized: Authentication session required' };
+  }
+  if (session.role === 'superadmin') {
+    return { authorized: true, session };
+  }
+  if (session.restaurantId !== targetRestaurantId) {
+    return { authorized: false, status: 403, error: "Forbidden: Cannot access another restaurant's data" };
+  }
+  if (allowedRoles && !allowedRoles.includes(session.role)) {
+    return { authorized: false, status: 403, error: "Forbidden: Role '" + session.role + "' is not authorized for this action" };
+  }
+  return { authorized: true, session };
+}
+
+function migrateAndSecureCredentials() {
+  let changed = false;
+
+  if (!db.superAdmin) {
+    db.superAdmin = { name: 'TipTap Platform Super Admin' };
+  }
+
+  const isProduction = process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS;
+  const envSuperPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').toString().trim();
+
+  if (isProduction) {
+    if (!envSuperPin || envSuperPin === '0000' || envSuperPin === '1234' || envSuperPin === 'pawan999') {
+      console.error('🚨 [TipTap FATAL] SUPER_ADMIN_PIN is missing or using known default in production mode!');
+      throw new Error('FATAL: SUPER_ADMIN_PIN must be explicitly configured with a secure non-default secret in production.');
+    }
+  }
+
+  const targetSuperPin = envSuperPin || db.superAdmin.pin || '0000';
+  if (!db.superAdmin.pin || !db.superAdmin.pin.startsWith('scrypt$')) {
+    db.superAdmin.pin = hashPin(targetSuperPin);
+    changed = true;
+  }
+
+  if (db.restaurants) {
+    Object.values(db.restaurants).forEach(r => {
+      if (r.pin && !r.pin.startsWith('scrypt$')) {
+        r.pin = hashPin(r.pin);
+        changed = true;
+      }
+      if (r.kitchenPin && !r.kitchenPin.startsWith('scrypt$')) {
+        r.kitchenPin = hashPin(r.kitchenPin);
+        changed = true;
+      }
+    });
+  }
+
+  if (changed) {
+    saveDb(db);
+    console.log('🔒 [TipTap Security] Migrated all credentials to secure salted scrypt hashes.');
+  }
+}
+
 // HTTP Request Handler
-const server = http.createServer((req, res) => {
-  // Production Security & CORS Headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+const server = http.createServer(async (req, res) => {
+  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = parsedUrl.pathname;
+  const searchParams = parsedUrl.searchParams;
+
+  // 1. Content Security Policy & Security Hardening Headers
+  const cspDirectives = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://checkout.razorpay.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: https://images.unsplash.com https://api.qrserver.com",
+    "connect-src 'self' https://checkout.razorpay.com https://api.razorpay.com",
+    "frame-src 'self' https://checkout.razorpay.com",
+    "frame-ancestors 'self'"
+  ].join('; ');
+
+  res.setHeader('Content-Security-Policy', cspDirectives);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  // HSTS: Only enforce over HTTPS connections
+  const isHttps = req.socket && (req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https');
+  if (isHttps) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+
+  // 2. Controlled CORS Configuration
+  const requestOrigin = req.headers.origin;
+  const isPublicApi = pathname.startsWith('/api/state') || pathname.startsWith('/api/r/') || pathname.startsWith('/api/orders') || pathname === '/api/reviews' || pathname === '/api/leads' || pathname === '/api/service-request' || pathname === '/healthz' || pathname === '/api/health';
+
+  if (requestOrigin) {
+    const allowedEnvOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : null;
+    const isLocalhostOrigin = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(requestOrigin);
+    const isExplicitlyAllowed = allowedEnvOrigins ? allowedEnvOrigins.includes(requestOrigin) : isLocalhostOrigin;
+
+    if (isExplicitlyAllowed) {
+      res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else if (isPublicApi) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+  } else if (isPublicApi) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, X-XSRF-Token, X-Staff-Pin, X-Master-Pin, Idempotency-Key');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -531,23 +1176,24 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const pathname = parsedUrl.pathname;
-  const searchParams = parsedUrl.searchParams;
-
   // ----------------------------------------------------
   // HEALTH CHECK & UPTIME KEEP-ALIVE: /healthz or /api/health
   // ----------------------------------------------------
   if (pathname === '/healthz' || pathname === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
+    const isCloudDbExpected = Boolean(process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS);
+    const isHealthy = !isCloudDbExpected || isMongoConnected;
+    const statusCode = isHealthy ? 200 : 503;
+
+    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      status: 'healthy',
+      status: isHealthy ? 'healthy' : 'unhealthy',
       platform: 'TipTap Smart Dining POS',
       version: '2.5.0-production',
       uptimeSeconds: Math.floor(process.uptime()),
       database: {
-        mode: isMongoConnected ? 'mongodb-atlas-cloud' : 'local-json-persistent',
-        connected: true,
+        mode: isMongoConnected ? 'mongodb-atlas-cloud' : (MONGODB_URI ? 'cloud-disconnected' : (process.env.NODE_ENV === 'production' ? 'cloud-missing' : 'local-json-persistent')),
+        connected: isMongoConnected,
+        error: isMongoConnected ? null : (mongoDbError || (process.env.NODE_ENV === 'production' && !MONGODB_URI ? 'MONGODB_URI is not configured in production' : 'Database disconnected')),
         restaurantsCount: db.restaurants ? Object.keys(db.restaurants).length : 0
       },
       realtime: {
@@ -560,24 +1206,92 @@ const server = http.createServer((req, res) => {
   }
 
   // ----------------------------------------------------
+  // FAIL-CLOSED PRODUCTION WRITE GUARD
+  // If running in production and MongoDB is NOT connected,
+  // reject state-modifying requests with HTTP 503 to prevent data loss on ephemeral disk.
+  // ----------------------------------------------------
+  const isMutatingMethod = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS && !isMongoConnected && isMutatingMethod) {
+    if (!pathname.startsWith('/api/auth/') && pathname !== '/api/admin/verify-pin') {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        error: 'Database Unavailable: Production mode requires a connected MongoDB Atlas cluster. State modifications are paused in production to prevent data loss.',
+        status: 'service_unavailable'
+      }));
+      return;
+    }
+  }
+
+  // ----------------------------------------------------
   // SSE REAL-TIME ENDPOINT: /api/events or /events
   // ----------------------------------------------------
   if (pathname === '/api/events' || pathname === '/events') {
-    const restaurantId = searchParams.get('restaurant') || 'all';
+    const targetRest = searchParams.get('restaurant');
+    const session = authenticateRequest(req);
+    const staffPin = (req.headers['x-staff-pin'] || '').toString().trim();
+    const masterPin = (req.headers['x-master-pin'] || '').toString().trim();
+
+    let isAuthorized = false;
+    let isSuperAdmin = false;
+    let authorizedRestId = null;
+
+    if (session) {
+      if (session.role === 'superadmin') {
+        isAuthorized = true;
+        isSuperAdmin = true;
+        authorizedRestId = targetRest || 'super-admin';
+      } else if (session.restaurantId) {
+        if (!targetRest || targetRest === session.restaurantId) {
+          isAuthorized = true;
+          authorizedRestId = session.restaurantId;
+        } else {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: "Forbidden: Cannot access another restaurant's event stream" }));
+          return;
+        }
+      }
+    } else if (masterPin && verifyMasterPin(masterPin)) {
+      isAuthorized = true;
+      isSuperAdmin = true;
+      authorizedRestId = targetRest || 'super-admin';
+    } else if (targetRest && staffPin) {
+      const rest = db.restaurants && db.restaurants[targetRest];
+      if (rest && (verifyPin(staffPin, rest.pin) || verifyPin(staffPin, rest.kitchenPin))) {
+        isAuthorized = true;
+        authorizedRestId = targetRest;
+      }
+    }
+
+    if (!isAuthorized) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized: Authentication required to subscribe to restaurant events' }));
+      return;
+    }
+
+    // Only superadmin can subscribe to 'all' or 'super-admin'
+    if ((targetRest === 'all' || targetRest === 'super-admin' || !targetRest) && !isSuperAdmin) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden: Super-admin privilege required for global event stream' }));
+      return;
+    }
+
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no'
     });
-    res.write(`data: ${JSON.stringify({ type: 'connected', restaurantId, time: Date.now() })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'connected', restaurantId: authorizedRestId, time: Date.now() })}\n\n`);
 
-    const client = { res, restaurantId };
+    const client = { res, restaurantId: authorizedRestId, isSuperAdmin };
     sseClients.add(client);
 
-    req.on('close', () => {
+    const cleanup = () => {
       sseClients.delete(client);
-    });
+    };
+    req.on('close', cleanup);
+    req.on('error', cleanup);
+    res.on('error', cleanup);
     return;
   }
 
@@ -585,31 +1299,99 @@ const server = http.createServer((req, res) => {
   // REST API ENDPOINTS
   // ----------------------------------------------------
   if (pathname.startsWith('/api/')) {
+    const MAX_BODY_SIZE = 1 * 1024 * 1024; // 1 MB strict ceiling
+
     function readJsonBody(callback) {
+      const contentLength = parseInt(req.headers['content-length'], 10);
+      if (!isNaN(contentLength) && contentLength > MAX_BODY_SIZE) {
+        if (!res.headersSent) {
+          res.writeHead(413, { 'Content-Type': 'application/json', 'Connection': 'close' });
+          res.end(JSON.stringify({
+            error: 'Payload Too Large: Request body exceeds the 1 MB limit.',
+            status: 'payload_too_large'
+          }));
+        }
+        res.on('finish', () => {
+          try { req.destroy(); } catch (e) {}
+        });
+        return;
+      }
+
       let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      let receivedBytes = 0;
+      let isTooLarge = false;
+
+      const onData = (chunk) => {
+        if (isTooLarge) return;
+        receivedBytes += chunk.length;
+        if (receivedBytes > MAX_BODY_SIZE) {
+          isTooLarge = true;
+          req.removeListener('data', onData);
+          req.removeListener('end', onEnd);
+          if (!res.headersSent) {
+            res.writeHead(413, { 'Content-Type': 'application/json', 'Connection': 'close' });
+            res.end(JSON.stringify({
+              error: 'Payload Too Large: Request body exceeds the 1 MB limit.',
+              status: 'payload_too_large'
+            }));
+          }
+          res.on('finish', () => {
+            try { req.destroy(); } catch (e) {}
+          });
+          req.resume();
+          return;
+        }
+        body += chunk;
+      };
+
+      const onEnd = () => {
+        if (isTooLarge) return;
         try {
           const json = body ? JSON.parse(body) : {};
-          callback(null, json);
+          Promise.resolve(callback(null, json)).catch(err => {
+            console.error('Unhandled route handler error:', err);
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Internal Server Error' }));
+            }
+          });
         } catch (e) {
-          callback(e);
+          if (!res.headersSent) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Malformed JSON payload: ' + e.message }));
+          }
         }
-      });
+      };
+
+      req.on('data', onData);
+      req.on('end', onEnd);
     }
 
     // Helper: Verify Platform Super Admin Master PIN
     function verifyMasterPin(bodyPin) {
-      const configuredPin = (process.env.TIPTAP_MASTER_PIN || db.superAdmin?.pin || '0000').toString().trim();
-      const provided = (bodyPin || req.headers['x-master-pin'] || searchParams.get('masterPin') || '').toString().trim();
-      return Boolean(provided && (provided === configuredPin || provided === 'pawan999' || provided === '9999'));
+      const session = authenticateRequest(req);
+      if (session && session.role === 'superadmin') {
+        if (!checkCsrfForCookieAuth(req, res, session)) {
+          return false;
+        }
+        return true;
+      }
+
+      const pin = (bodyPin || (req.headers && req.headers['x-master-pin']) || '').toString().trim();
+      if (pin) {
+        const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').toString().trim();
+        if (envPin && verifyPin(pin, envPin)) return true;
+        if (db.superAdmin && db.superAdmin.pin && verifyPin(pin, db.superAdmin.pin)) return true;
+      }
+
+      return false;
     }
 
     // 1. List All Restaurants (Restricted to Super Admin HQ)
     if (pathname === '/api/restaurants' && req.method === 'GET') {
-      if (!verifyMasterPin()) {
+      if (!isSuperAdminAuthenticated(req)) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized: Super Admin Master PIN required to view restaurants list' }));
+        res.end(JSON.stringify({ error: 'Unauthorized: Super Admin session required to view restaurants list' }));
         return;
       }
 
@@ -619,8 +1401,6 @@ const server = http.createServer((req, res) => {
         phone: r.phone,
         address: r.address,
         plan: r.plan || 'Pro Plan (Active)',
-        pin: r.pin || '1234',
-        kitchenPin: r.kitchenPin || '5678',
         tableCount: (r.tables || []).length,
         activeOrdersCount: (r.orders || []).length,
         menuItemsCount: (r.menu || []).length,
@@ -634,8 +1414,9 @@ const server = http.createServer((req, res) => {
 
     // 2. Onboard New Restaurant (Super Admin): POST /api/restaurants
     if (pathname === '/api/restaurants' && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyMasterPin(data?.masterPin)) {
+          if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized: Valid Super Admin Master PIN required' }));
           return;
@@ -673,13 +1454,16 @@ const server = http.createServer((req, res) => {
             mode: 'upi_dynamic'
           };
         }
-        db.restaurants[slug] = newRestaurant;
-        saveDb(db);
+
+        const saved = await persistDbChange(res, async () => {
+          db.restaurants[slug] = newRestaurant;
+        });
+        if (!saved.success) return;
 
         broadcastEvent(slug, 'restaurant:new', { id: slug, name: newRestaurant.name });
 
         res.writeHead(201, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, restaurant: newRestaurant }));
+        res.end(JSON.stringify({ success: true, restaurant: safeRestaurantForClient(newRestaurant) }));
       });
       return;
     }
@@ -688,6 +1472,7 @@ const server = http.createServer((req, res) => {
     const deleteRestMatch = pathname.match(/^\/api\/restaurants\/([A-Za-z0-9_-]+)$/);
     if (deleteRestMatch && req.method === 'DELETE') {
       if (!verifyMasterPin()) {
+        if (res.headersSent) return;
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Unauthorized: Master PIN required to delete restaurant' }));
         return;
@@ -699,12 +1484,16 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: 'Restaurant not found' }));
         return;
       }
-      if (Object.keys(db.restaurants).length <= 1) {
-        const fallbackSlug = delId === 'tiptap-bistro' ? 'new-restaurant' : 'tiptap-bistro';
-        db.restaurants[fallbackSlug] = createDefaultRestaurant(fallbackSlug, 'TipTap Smart Dining', '+91 98000 00000', 'India', '', 8, false);
-      }
-      delete db.restaurants[delId];
-      saveDb(db);
+
+      const saved = await persistDbChange(res, async () => {
+        if (Object.keys(db.restaurants).length <= 1) {
+          const fallbackSlug = delId === 'tiptap-bistro' ? 'new-restaurant' : 'tiptap-bistro';
+          db.restaurants[fallbackSlug] = createDefaultRestaurant(fallbackSlug, 'TipTap Smart Dining', '+91 98000 00000', 'India', '', 8, false);
+        }
+        delete db.restaurants[delId];
+      });
+      if (!saved.success) return;
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, deletedId: delId }));
       return;
@@ -712,31 +1501,44 @@ const server = http.createServer((req, res) => {
 
     // 2c. Reset Data / Orders (Super Admin): POST /api/admin/reset
     if (pathname === '/api/admin/reset' && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyMasterPin(data?.pin)) {
+          if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized: Valid Super Admin Master PIN required to reset order data' }));
           return;
         }
 
         const restId = searchParams.get('restaurant') || data?.restaurant;
-        const targets = restId && db.restaurants[restId] ? [db.restaurants[restId]] : Object.values(db.restaurants);
-        targets.forEach(r => {
-          r.orders = [];
-          r.completedOrders = [];
-          r.serviceRequests = [];
-          (r.tables || []).forEach(t => {
-            t.status = 'free';
-            t.currentOrderId = null;
-            t.seatingTime = null;
-            t.reservedFor = null;
-            t.reservedTime = null;
+        if (restId && !db.restaurants[restId]) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Restaurant not found' }));
+          return;
+        }
+        const targets = restId ? [db.restaurants[restId]] : Object.values(db.restaurants);
+
+        const saved = await persistDbChange(res, async () => {
+          targets.forEach(r => {
+            r.orders = [];
+            r.completedOrders = [];
+            r.serviceRequests = [];
+            (r.tables || []).forEach(t => {
+              t.status = 'free';
+              t.currentOrderId = null;
+              t.seatingTime = null;
+              t.reservedFor = null;
+              t.reservedTime = null;
+            });
           });
+        });
+        if (!saved.success) return;
+
+        targets.forEach(r => {
           broadcastEvent(r.id, 'order:update', {});
           broadcastEvent(r.id, 'service:resolved', { all: true });
           broadcastEvent(r.id, 'table:update', r.tables);
         });
-        saveDb(db);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Data reset successfully! All tables are free.' }));
       });
@@ -745,7 +1547,7 @@ const server = http.createServer((req, res) => {
 
     // 2d. Lead / Partner Onboarding Request: POST /api/leads
     if (pathname === '/api/leads' && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (err || !data.name || !data.phone) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Restaurant Name and Owner Phone are required' }));
@@ -765,9 +1567,11 @@ const server = http.createServer((req, res) => {
           createdAt: new Date().toISOString()
         };
 
-        db.leads = db.leads || [];
-        db.leads.unshift(lead);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          db.leads = db.leads || [];
+          db.leads.unshift(lead);
+        });
+        if (!saved.success) return;
 
         broadcastEvent('super-admin', 'lead:new', lead);
 
@@ -780,6 +1584,7 @@ const server = http.createServer((req, res) => {
     // 2e. List All Leads (Restricted to Super Admin HQ)
     if (pathname === '/api/leads' && req.method === 'GET') {
       if (!verifyMasterPin()) {
+        if (res.headersSent) return;
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Unauthorized: Super Admin Master PIN required to view onboarding leads' }));
         return;
@@ -794,6 +1599,7 @@ const server = http.createServer((req, res) => {
     const approveLeadMatch = pathname.match(/^\/api\/leads\/([A-Za-z0-9_-]+)\/approve$/);
     if (approveLeadMatch && req.method === 'POST') {
       if (!verifyMasterPin()) {
+        if (res.headersSent) return;
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Unauthorized: Master PIN required to approve applications' }));
         return;
@@ -833,16 +1639,18 @@ const server = http.createServer((req, res) => {
         };
       }
 
-      db.restaurants[slug] = newRestaurant;
-      lead.status = 'approved';
-      lead.restaurantId = slug;
-      lead.approvedAt = new Date().toISOString();
+      const saved = await persistDbChange(res, async () => {
+        db.restaurants[slug] = newRestaurant;
+        lead.status = 'approved';
+        lead.restaurantId = slug;
+        lead.approvedAt = new Date().toISOString();
+      });
+      if (!saved.success) return;
 
-      saveDb(db);
       broadcastEvent(slug, 'restaurant:new', { id: slug, name: newRestaurant.name });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, restaurant: newRestaurant, lead }));
+      res.end(JSON.stringify({ success: true, restaurant: safeRestaurantForClient(newRestaurant), lead }));
       return;
     }
 
@@ -850,23 +1658,59 @@ const server = http.createServer((req, res) => {
     const deleteLeadMatch = pathname.match(/^\/api\/leads\/([A-Za-z0-9_-]+)$/);
     if (deleteLeadMatch && req.method === 'DELETE') {
       if (!verifyMasterPin()) {
+        if (res.headersSent) return;
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Unauthorized: Master PIN required to delete application' }));
         return;
       }
 
       const leadId = deleteLeadMatch[1];
-      db.leads = db.leads || [];
-      db.leads = db.leads.filter(l => l.id !== leadId);
-      saveDb(db);
+      const saved = await persistDbChange(res, async () => {
+        db.leads = db.leads || [];
+        db.leads = db.leads.filter(l => l.id !== leadId);
+      });
+      if (!saved.success) return;
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, deletedId: leadId }));
       return;
     }
 
+    // 2x. Session Status Check: GET /api/auth/session
+    if (pathname === '/api/auth/session' && req.method === 'GET') {
+      const session = authenticateRequest(req);
+      if (session) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          authenticated: true,
+          role: session.role === 'kitchen_staff' ? 'kitchen' : (session.role === 'counter_staff' ? 'counter' : session.role),
+          restaurantId: session.restaurantId,
+          restaurantName: session.restaurantName,
+          csrfToken: session.csrfToken,
+          expiresAt: session.expiresAt
+        }));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ authenticated: false }));
+      }
+      return;
+    }
+
+    // 2y. Session Logout: POST /api/auth/logout
+    if (pathname === '/api/auth/logout' && req.method === 'POST') {
+      const session = authenticateRequest(req);
+      if (session) {
+        invalidateSession(session.id);
+      }
+      clearSessionCookie(res, req);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Logged out successfully' }));
+      return;
+    }
+
     // 2h. Verify Super Admin Master PIN: POST /api/admin/verify-pin
     if (pathname === '/api/admin/verify-pin' && req.method === 'POST') {
-      const clientIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+      const clientIp = getClientIp(req);
       if (isRateLimited(clientIp)) {
         res.writeHead(429, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'Too many failed login attempts. Please wait 5 minutes.' }));
@@ -874,16 +1718,26 @@ const server = http.createServer((req, res) => {
       }
 
       readJsonBody((err, data) => {
-        const pin = (data.pin || '').trim();
-        const masterPin = db.superAdmin?.pin || '0000';
-        if (pin === masterPin || pin === 'pawan999' || pin === '9999') {
+        const pin = (data?.pin || '').trim();
+        const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
+        const isMasterValid = (envPin && verifyPin(pin, envPin)) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+
+        if (isMasterValid) {
           clearAttempts(clientIp);
+          const session = createSession({ role: 'superadmin' });
+          setSessionCookie(res, session.id, req);
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, message: 'Super Admin PIN verified' }));
+          res.end(JSON.stringify({
+            success: true,
+            message: 'Super Admin PIN verified',
+            sessionId: session.id,
+            csrfToken: session.csrfToken,
+            redirectUrl: '/super-admin.html'
+          }));
         } else {
           recordFailedAttempt(clientIp);
           res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Invalid Master PIN' }));
+          res.end(JSON.stringify({ success: false, error: 'Invalid Super Admin Master PIN' }));
         }
       });
       return;
@@ -891,6 +1745,13 @@ const server = http.createServer((req, res) => {
 
     // 2i. Restaurant Partner Login: POST /api/auth/restaurant-login
     if (pathname === '/api/auth/restaurant-login' && req.method === 'POST') {
+      const clientIp = getClientIp(req);
+      if (isRateLimited(clientIp)) {
+        res.writeHead(429, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Too many failed login attempts. Please wait 5 minutes.' }));
+        return;
+      }
+
       readJsonBody((err, data) => {
         if (err || !data.identifier || !data.pin) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -901,48 +1762,64 @@ const server = http.createServer((req, res) => {
         const rawIdent = data.identifier.toString().trim().toLowerCase();
         const cleanIdentPhone = rawIdent.replace(/[^0-9]/g, '');
         const pin = data.pin.toString().trim();
-        const masterPin = db.superAdmin?.pin || '0000';
 
-        // Check if logging in as Platform Super Admin
-        if (['admin', 'superadmin', 'pawan', 'master', '0000', 'super'].includes(rawIdent)) {
-          if (pin === masterPin || pin === 'pawan999' || pin === '9999') {
+        // 1. Check if logging in as Platform Super Admin
+        if (['admin', 'superadmin', 'master', 'super'].includes(rawIdent)) {
+          const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
+          const isMasterValid = (envPin && verifyPin(pin, envPin)) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+          if (isMasterValid) {
+            clearAttempts(clientIp);
+            const session = createSession({ role: 'superadmin' });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: true,
               role: 'superadmin',
+              sessionId: session.id,
+              csrfToken: session.csrfToken,
               redirectUrl: '/super-admin.html'
             }));
             return;
           } else {
+            recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Invalid Super Admin Master PIN' }));
+            res.end(JSON.stringify({ error: 'Invalid Super Admin credentials' }));
             return;
           }
         }
 
-        // Search in db.restaurants
+        // 2. Search in db.restaurants (Exact ID, registered phone, or exact name)
         const targetRest = Object.values(db.restaurants).find(r => {
           const rPhoneClean = (r.phone || '').replace(/[^0-9]/g, '');
           const phoneMatch = cleanIdentPhone && rPhoneClean && (rPhoneClean.endsWith(cleanIdentPhone) || cleanIdentPhone.endsWith(rPhoneClean));
-          const idMatch = r.id.toLowerCase() === rawIdent || rawIdent.includes(r.id.toLowerCase());
-          const nameMatch = r.name.toLowerCase() === rawIdent || r.name.toLowerCase().includes(rawIdent) || rawIdent.includes(r.name.toLowerCase());
+          const idMatch = r.id.toLowerCase() === rawIdent;
+          const nameMatch = r.name.toLowerCase() === rawIdent;
           return phoneMatch || idMatch || nameMatch;
         });
 
         if (!targetRest) {
+          recordFailedAttempt(clientIp);
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'No restaurant found with this phone number or ID. Please check or register first.' }));
           return;
         }
 
-        const counterPin = targetRest.pin || '1234';
-        const kitchenPin = targetRest.kitchenPin || '5678';
-        const isMaster = pin === masterPin || pin === 'pawan999';
         const station = (data.station || 'counter').toString().trim();
+        const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
+        const isMaster = (envPin && verifyPin(pin, envPin)) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+        const isCounterPin = targetRest.pin && verifyPin(pin, targetRest.pin);
+        const isKitchenPin = targetRest.kitchenPin && verifyPin(pin, targetRest.kitchenPin);
 
         if (station === 'kds') {
           // Kitchen KDS login: accepts kitchenPin, counterPin, or masterPin
-          if (pin === kitchenPin || pin === counterPin || isMaster) {
+          if (isKitchenPin || isCounterPin || isMaster) {
+            clearAttempts(clientIp);
+            const session = createSession({
+              role: 'kitchen_staff',
+              restaurantId: targetRest.id,
+              restaurantName: targetRest.name
+            });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: true,
@@ -952,17 +1829,27 @@ const server = http.createServer((req, res) => {
                 name: targetRest.name,
                 phone: targetRest.phone
               },
-              redirectUrl: `/kds.html?restaurant=${targetRest.id}`
+              sessionId: session.id,
+              csrfToken: session.csrfToken,
+              redirectUrl: '/kds.html?restaurant=' + targetRest.id
             }));
             return;
           } else {
+            recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: 'Invalid Kitchen Chef Passkey.' }));
             return;
           }
         } else {
-          // Billing Counter POS login: ONLY accepts counterPin or masterPin!
-          if (pin === counterPin || isMaster) {
+          // Billing Counter login: strictly blocks kitchen passkey!
+          if (isCounterPin || isMaster) {
+            clearAttempts(clientIp);
+            const session = createSession({
+              role: 'counter_staff',
+              restaurantId: targetRest.id,
+              restaurantName: targetRest.name
+            });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
               success: true,
@@ -972,17 +1859,20 @@ const server = http.createServer((req, res) => {
                 name: targetRest.name,
                 phone: targetRest.phone
               },
-              redirectUrl: `/dashboard.html?restaurant=${targetRest.id}`
+              sessionId: session.id,
+              csrfToken: session.csrfToken,
+              redirectUrl: '/dashboard.html?restaurant=' + targetRest.id
             }));
             return;
-          } else if (pin === kitchenPin) {
-            // Kitchen staff tried to login to billing counter!
+          } else if (isKitchenPin) {
+            recordFailedAttempt(clientIp);
             res.writeHead(403, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, error: '🚫 Access Denied: Kitchen staff cannot access the Billing Counter. Please enter Cashier / Owner PIN, or switch destination to Kitchen KDS.' }));
             return;
           } else {
+            recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Invalid Cashier / Staff PIN for Billing Counter.' }));
+            res.end(JSON.stringify({ success: false, error: 'Incorrect Cashier / Manager PIN.' }));
             return;
           }
         }
@@ -992,7 +1882,7 @@ const server = http.createServer((req, res) => {
 
     // 2j. Verify Restaurant Staff PIN: POST /api/auth/verify-restaurant-pin
     if (pathname === '/api/auth/verify-restaurant-pin' && req.method === 'POST') {
-      const clientIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
+      const clientIp = getClientIp(req);
       if (isRateLimited(clientIp)) {
         res.writeHead(429, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'Too many failed login attempts. Please wait 5 minutes.' }));
@@ -1003,9 +1893,14 @@ const server = http.createServer((req, res) => {
         let restId = (data.restaurantId || '').toString().trim();
         const pin = (data.pin || '').toString().trim();
         const station = (data.station || 'counter').toString().trim();
-        const masterPin = db.superAdmin?.pin || '0000';
 
-        if (!restId || !db.restaurants[restId]) {
+        if (data.restaurantId && !db.restaurants[restId]) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Restaurant not found' }));
+          return;
+        }
+
+        if (!restId) {
           const firstRest = Object.values(db.restaurants)[0];
           restId = firstRest ? firstRest.id : 'tiptap-bistro';
         }
@@ -1017,20 +1912,29 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        const counterPin = r.pin || '1234';
-        const kitchenPin = r.kitchenPin || '5678';
-        const isMaster = pin === masterPin || pin === 'pawan999';
+        const envPin = (process.env.SUPER_ADMIN_PIN || process.env.TIPTAP_MASTER_PIN || '').trim();
+        const isMaster = (envPin && verifyPin(pin, envPin)) || (db.superAdmin?.pin && verifyPin(pin, db.superAdmin.pin));
+        const isCounterPin = r.pin && verifyPin(pin, r.pin);
+        const isKitchenPin = r.kitchenPin && verifyPin(pin, r.kitchenPin);
 
         if (station === 'kds') {
           // Kitchen KDS unlock
-          if (pin === kitchenPin || pin === counterPin || isMaster) {
+          if (isKitchenPin || isCounterPin || isMaster) {
             clearAttempts(clientIp);
+            const session = createSession({
+              role: 'kitchen_staff',
+              restaurantId: r.id,
+              restaurantName: r.name
+            });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ 
               success: true, 
               role: 'kitchen',
               restaurantId: r.id, 
-              restaurantName: r.name 
+              restaurantName: r.name,
+              sessionId: session.id,
+              csrfToken: session.csrfToken
             }));
           } else {
             recordFailedAttempt(clientIp);
@@ -1039,19 +1943,30 @@ const server = http.createServer((req, res) => {
           }
         } else {
           // Billing Counter unlock: strictly blocks kitchen passkey!
-          if (pin === counterPin || isMaster) {
+          if (isCounterPin || isMaster) {
             clearAttempts(clientIp);
+            const session = createSession({
+              role: 'counter_staff',
+              restaurantId: r.id,
+              restaurantName: r.name
+            });
+            setSessionCookie(res, session.id, req);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ 
               success: true, 
               role: 'counter',
               restaurantId: r.id, 
-              restaurantName: r.name 
+              restaurantName: r.name,
+              sessionId: session.id,
+              csrfToken: session.csrfToken
             }));
-          } else if (pin === kitchenPin) {
+          } else if (isKitchenPin) {
             recordFailedAttempt(clientIp);
             res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: '🚫 Access Denied: Kitchen Chef passkey cannot access the Billing Counter. Please enter Cashier / Owner PIN.' }));
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: '🚫 Access Denied: Kitchen Chef passkey cannot access the Billing Counter. Please enter Cashier / Owner PIN.' 
+            }));
           } else {
             recordFailedAttempt(clientIp);
             res.writeHead(401, { 'Content-Type': 'application/json' });
@@ -1073,34 +1988,84 @@ const server = http.createServer((req, res) => {
     // Determine target restaurant for restaurant-specific APIs
     const restIdFromQuery = searchParams.get('restaurant');
     const restMatch = pathname.match(/^\/api\/r\/([A-Za-z0-9_-]+)/);
+    const hasExplicitRestId = Boolean(restMatch || restIdFromQuery);
     const targetRestId = restMatch ? restMatch[1] : (restIdFromQuery || Object.keys(db.restaurants)[0]);
     const restaurant = getRestaurant(targetRestId);
 
-    if (!restaurant) {
+    if (hasExplicitRestId && !restaurant) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Restaurant not found' }));
       return;
     }
 
-    // Helper: Verify restaurant staff authorization (Counter PIN or Kitchen PIN)
+    if (!restaurant) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'No restaurant configured on platform' }));
+      return;
+    }
+
+    // Helper: Verify restaurant staff authorization (Counter PIN or Kitchen PIN or Server Session)
     function verifyStaffAuth(data, roleRequired = 'any') {
-      const staffPin = (req.headers['x-staff-pin'] || data?.staffPin || searchParams.get('staffPin') || '').toString().trim();
-      const masterPin = (req.headers['x-master-pin'] || data?.masterPin || searchParams.get('masterPin') || '').toString().trim();
+      const session = authenticateRequest(req);
+      if (session) {
+        if (!checkCsrfForCookieAuth(req, res, session)) {
+          return false;
+        }
+        if (session.role === 'superadmin') return true;
+        if (session.restaurantId !== targetRestId) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: "Forbidden: Cannot access another restaurant's data" }));
+          return false;
+        }
+        if (roleRequired === 'counter' && session.role !== 'counter_staff' && session.role !== 'restaurant_owner') {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Forbidden: Station requires counter role, but session is ${session.role}` }));
+          return false;
+        }
+        return true;
+      }
+
+      const staffPin = (req.headers['x-staff-pin'] || data?.staffPin || '').toString().trim();
+      const masterPin = (req.headers['x-master-pin'] || data?.masterPin || '').toString().trim();
       if (verifyMasterPin(masterPin)) return true;
       if (!staffPin || !restaurant) return false;
       if (roleRequired === 'counter') {
-        return staffPin === restaurant.pin;
+        return verifyPin(staffPin, restaurant.pin);
       }
-      return staffPin === restaurant.pin || staffPin === restaurant.kitchenPin;
+      return verifyPin(staffPin, restaurant.pin) || verifyPin(staffPin, restaurant.kitchenPin);
     }
 
     // 4. Restaurant State (Role-Filtered & Tenant Isolated): GET /api/state or GET /api/r/:id/state
     if ((pathname === '/api/state' || pathname === `/api/r/${targetRestId}/state`) && req.method === 'GET') {
-      const staffPin = (req.headers['x-staff-pin'] || searchParams.get('staffPin') || '').toString().trim();
-      const masterPin = (req.headers['x-master-pin'] || searchParams.get('masterPin') || '').toString().trim();
-      const isMaster = verifyMasterPin(masterPin);
-      const isCounterStaff = (staffPin && staffPin === restaurant.pin) || isMaster;
-      const isKitchenStaff = (staffPin && staffPin === restaurant.kitchenPin) || isCounterStaff;
+      const session = authenticateRequest(req);
+      let isMaster = false;
+      let isCounterStaff = false;
+      let isKitchenStaff = false;
+
+      if (session) {
+        if (session.role === 'superadmin') {
+          isMaster = true;
+          isCounterStaff = true;
+          isKitchenStaff = true;
+        } else if (session.restaurantId === targetRestId) {
+          if (session.role === 'counter_staff' || session.role === 'restaurant_owner') {
+            isCounterStaff = true;
+            isKitchenStaff = true;
+          } else if (session.role === 'kitchen_staff') {
+            isKitchenStaff = true;
+          }
+        } else {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: "Forbidden: Cannot access another restaurant's data" }));
+          return;
+        }
+      } else {
+        const staffPin = (req.headers['x-staff-pin'] || '').toString().trim();
+        const masterPin = (req.headers['x-master-pin'] || '').toString().trim();
+        isMaster = verifyMasterPin(masterPin);
+        isCounterStaff = (staffPin && verifyPin(staffPin, restaurant.pin)) || isMaster;
+        isKitchenStaff = (staffPin && verifyPin(staffPin, restaurant.kitchenPin)) || isCounterStaff;
+      }
       const isAnyStaff = isCounterStaff || isKitchenStaff;
 
       // Base sanitized restaurant info (Never leak secret credentials)
@@ -1249,7 +2214,7 @@ const server = http.createServer((req, res) => {
 
     // 6. Submit Review: POST /api/reviews
     if (pathname.includes('/reviews') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (err || !data.rating) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Rating is required' }));
@@ -1265,9 +2230,12 @@ const server = http.createServer((req, res) => {
           time: new Date().toISOString()
         };
 
-        if (!restaurant.reviews) restaurant.reviews = [];
-        restaurant.reviews.unshift(newReview);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          if (!restaurant.reviews) restaurant.reviews = [];
+          restaurant.reviews.unshift(newReview);
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'review:new', newReview);
 
         res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -1280,17 +2248,30 @@ const server = http.createServer((req, res) => {
     if (pathname.includes('/create-payment-order') && req.method === 'POST') {
       readJsonBody((err, data) => {
         const orderId = data.orderId;
-        let amount = Number(data.amount) || 0;
-        let order = null;
-
-        if (orderId) {
-          order = restaurant.orders.find(o => o.id === orderId);
-          if (order) amount = order.total;
+        if (!orderId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Valid orderId is required to initiate payment order' }));
+          return;
         }
 
+        const order = restaurant.orders.find(o => o.id === orderId);
+        if (!order) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Order not found' }));
+          return;
+        }
+
+        if (order.isPaid || order.paymentStatus === 'paid') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Order is already paid and settled' }));
+          return;
+        }
+
+        // Trusted server amount strictly from order.total (never trust client-supplied amount)
+        const amount = Number(order.total) || 0;
         if (amount <= 0) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Valid amount is required' }));
+          res.end(JSON.stringify({ error: 'Invalid order amount' }));
           return;
         }
 
@@ -1298,7 +2279,7 @@ const server = http.createServer((req, res) => {
         const razorpayOrderId = `order_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
         const merchantVpa = restaurant.paymentConfig?.upiVpa || 'tiptap.merchant@icici';
         const merchantName = restaurant.paymentConfig?.merchantName || restaurant.name || 'TipTap Bistro';
-        const tableLabel = order ? order.tableName : `Table ${data.tableId || 1}`;
+        const tableLabel = order.tableName || `Table ${order.tableId || 1}`;
 
         // Standard NPCI Dynamic UPI Intent URL
         const note = encodeURIComponent(`Bill ${tableLabel} ${txnId.slice(-6)}`);
@@ -1325,11 +2306,66 @@ const server = http.createServer((req, res) => {
 
     // 6b. Verify Automatic Payment: POST /api/verify-payment
     if (pathname.includes('/verify-payment') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
+        data = data || {};
+        // Enforce counter staff authorization for manual settlement:
+        // Client-supplied UTR length or transaction IDs must NEVER independently mark an order as paid!
+        const session = authenticateRequest(req);
+        const staffPin = (req.headers['x-staff-pin'] || data.staffPin || '').toString().trim();
+        const masterPin = (req.headers['x-master-pin'] || data.masterPin || '').toString().trim();
+
+        let settledBy = null;
+        let isStaffSettlement = false;
+
+        if (session) {
+          if (!checkCsrfForCookieAuth(req, res, session)) {
+            return;
+          }
+          if (session.role === 'superadmin') {
+            isStaffSettlement = true;
+            settledBy = session.username || 'SESSION_SUPERADMIN';
+          } else if (session.restaurantId === restaurant.id) {
+            if (session.role === 'counter_staff' || session.role === 'restaurant_owner') {
+              isStaffSettlement = true;
+              settledBy = session.username || `SESSION_${session.role.toUpperCase()}`;
+            } else {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: `Forbidden: Station requires counter role, but session is ${session.role}` }));
+              return;
+            }
+          } else {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Forbidden: Cannot access another restaurant's data" }));
+            return;
+          }
+        } else if (masterPin && verifyMasterPin(masterPin)) {
+          isStaffSettlement = true;
+          settledBy = 'PIN_AUTH:superadmin';
+        } else if (staffPin && restaurant && verifyPin(staffPin, restaurant.pin)) {
+          isStaffSettlement = true;
+          settledBy = 'PIN_AUTH:counter_staff';
+        }
+
+        if (!isStaffSettlement) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Unauthorized: Manual payment settlement requires counter staff authentication. Client-provided UTR or transaction IDs cannot independently confirm payment.'
+          }));
+          return;
+        }
+
+        // Validate settlement method
+        const ALLOWED_SETTLEMENT_METHODS = ['cash', 'card', 'upi_qr', 'pos_terminal', 'other'];
+        const rawMethod = (data.settlementMethod || data.paymentMethod || 'cash').toString().toLowerCase().trim();
+        const settlementMethod = ALLOWED_SETTLEMENT_METHODS.includes(rawMethod) ? rawMethod : 'cash';
+
+        // Auditable reason
+        const reason = (typeof data.reason === 'string' && data.reason.trim())
+          ? data.reason.trim().substring(0, 200)
+          : 'Manual POS counter cash settlement';
+
         const orderId = data.orderId;
         const txnId = data.txnId || `TXN_${Date.now()}`;
-        const paymentMethod = data.paymentMethod || 'online_upi';
-        const gatewayTxnId = data.gatewayTxnId || `RZP_${Date.now().toString(36).toUpperCase()}`;
 
         let order = restaurant.orders.find(o => o.id === orderId);
         
@@ -1350,6 +2386,7 @@ const server = http.createServer((req, res) => {
               tableName: alreadyPaid.tableName,
               amountPaid: alreadyPaid.total,
               paidAt: alreadyPaid.paidAt,
+              paymentDetails: alreadyPaid.paymentDetails,
               message: `Payment already settled for ${alreadyPaid.tableName}`
             }));
             return;
@@ -1359,70 +2396,77 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        const utr = (data.utr || '').toString().trim();
-        const hasValidUtr = utr.length >= 6;
-        const hasGatewayTxn = Boolean(data.razorpay_payment_id || (data.gatewayTxnId && !data.gatewayTxnId.startsWith('RZP_')));
-        const isStaffSettlement = verifyStaffAuth(data, 'counter');
+        let persistedPaymentDetails = null;
 
-        if (!hasValidUtr && !hasGatewayTxn && !isStaffSettlement) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            error: 'Valid 12-digit UPI UTR reference number or verified payment transaction required to confirm payment.'
-          }));
-          return;
-        }
+        const saved = await persistDbChange(res, async (currentDb) => {
+          const activeRest = (currentDb && currentDb.restaurants && currentDb.restaurants[restaurant.id]) || restaurant;
+          const activeOrder = activeRest.orders.find(o => o.id === order.id);
+          if (!activeOrder) return;
+
+          activeOrder.isPaid = true;
+          activeOrder.paymentStatus = 'paid';
+          activeOrder.paymentMethod = settlementMethod;
+          activeOrder.txnId = txnId;
+          activeOrder.paidAt = new Date().toISOString();
+          activeOrder.paymentDetails = {
+            provider: 'POS Counter Settle (Authorized Staff)',
+            txnId,
+            verified: true,
+            verifiedAt: new Date().toISOString(),
+            settledBy,
+            settlementMethod,
+            reason,
+            restaurantId: restaurant.id,
+            orderId: activeOrder.id
+          };
+          persistedPaymentDetails = activeOrder.paymentDetails;
+
+          // Update customer lifetime spend & loyalty coins immediately
+          if (activeOrder.customerPhone && activeRest.customers) {
+            const cust = activeRest.customers.find(c => c.phone === activeOrder.customerPhone);
+            if (cust) {
+              cust.totalSpent = (cust.totalSpent || 0) + activeOrder.total;
+              cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(activeOrder.total / 10);
+            }
+          }
+
+          // Check if food was already served to table by kitchen
+          const isFoodServed = activeOrder.kitchenStatus === 'served' || activeOrder.status === 'served';
+
+          if (isFoodServed) {
+            // Food was already served AND now paid! Settle and archive to completedOrders
+            activeOrder.status = 'completed';
+            activeRest.completedOrders = activeRest.completedOrders || [];
+            activeRest.completedOrders.push(JSON.parse(JSON.stringify(activeOrder)));
+            activeRest.orders = activeRest.orders.filter(o => o.id !== activeOrder.id);
+
+            // Table is done, set to cleaning
+            const table = activeRest.tables.find(t => t.id === activeOrder.tableId);
+            if (table) {
+              table.status = 'cleaning';
+              table.currentOrderId = null;
+              table.seatingTime = null;
+            }
+          } else {
+            // Food is STILL in kitchen queue or cooking!
+            // DO NOT delete order from active orders or KDS! Keep order active with isPaid = true.
+            // Table remains occupied so staff and chefs know which table this paid food belongs to!
+            const table = activeRest.tables.find(t => t.id === activeOrder.tableId);
+            if (table) {
+              table.status = 'occupied';
+              table.currentOrderId = activeOrder.id;
+            }
+          }
+        });
+
+        if (!saved.success) return;
 
         order.isPaid = true;
         order.paymentStatus = 'paid';
-        order.paymentMethod = paymentMethod;
+        order.paymentMethod = settlementMethod;
         order.txnId = txnId;
-        order.paidAt = new Date().toISOString();
-        order.paymentDetails = {
-          provider: hasGatewayTxn ? 'Razorpay Gateway' : (hasValidUtr ? 'UPI App (UTR Verified)' : 'POS Counter Settle'),
-          txnId,
-          gatewayTxnId,
-          utr: hasValidUtr ? utr : null,
-          verified: true,
-          verifiedAt: new Date().toISOString()
-        };
-
-        // Update customer lifetime spend & loyalty coins immediately
-        if (order.customerPhone && restaurant.customers) {
-          const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
-          if (cust) {
-            cust.totalSpent = (cust.totalSpent || 0) + order.total;
-            cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(order.total / 10);
-          }
-        }
-
-        // Check if food was already served to table by kitchen
-        const isFoodServed = order.kitchenStatus === 'served' || order.status === 'served';
-
-        if (isFoodServed) {
-          // Food was already served AND now paid! Settle and archive to completedOrders
-          order.status = 'completed';
-          restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
-          restaurant.orders = restaurant.orders.filter(o => o.id !== order.id);
-
-          // Table is done, set to cleaning
-          const table = restaurant.tables.find(t => t.id === order.tableId);
-          if (table) {
-            table.status = 'cleaning';
-            table.currentOrderId = null;
-            table.seatingTime = null;
-          }
-        } else {
-          // Food is STILL in kitchen queue or cooking!
-          // DO NOT delete order from active orders or KDS! Keep order active with isPaid = true.
-          // Table remains occupied so staff and chefs know which table this paid food belongs to!
-          const table = restaurant.tables.find(t => t.id === order.tableId);
-          if (table) {
-            table.status = 'occupied';
-            table.currentOrderId = order.id;
-          }
-        }
-
-        saveDb(db);
+        order.paidAt = persistedPaymentDetails?.verifiedAt || new Date().toISOString();
+        order.paymentDetails = persistedPaymentDetails;
 
         // Broadcast instant SSE real-time notifications to POS Counter & Kitchen
         broadcastEvent(restaurant.id, 'payment:success', {
@@ -1431,8 +2475,7 @@ const server = http.createServer((req, res) => {
           tableId: order.tableId,
           total: order.total,
           txnId,
-          utr: data.utr || null,
-          paymentMethod,
+          paymentMethod: settlementMethod,
           paidAt: order.paidAt,
           isPaid: true,
           kitchenStatus: order.kitchenStatus || order.status
@@ -1451,8 +2494,10 @@ const server = http.createServer((req, res) => {
           paidAt: order.paidAt,
           isPaid: true,
           paymentStatus: 'paid',
+          settlementMethod,
           kitchenStatus: order.kitchenStatus || order.status,
           status: order.status,
+          paymentDetails: persistedPaymentDetails,
           order: order,
           message: `Payment of ₹${order.total} verified successfully!`
         }));
@@ -1463,9 +2508,11 @@ const server = http.createServer((req, res) => {
     // 6c. Webhook Handler: POST /api/payment-webhook
     if (pathname.includes('/payment-webhook') && req.method === 'POST') {
       readJsonBody((err, data) => {
-        console.log('Payment Webhook received:', data ? data.event : 'No event');
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok' }));
+        // Unverified webhook requests must never change payment status
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: 'Unauthorized: Webhook signature verification failed. Unauthenticated webhook requests cannot modify payment status.'
+        }));
       });
       return;
     }
@@ -1478,11 +2525,51 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (err || !data.items || !data.items.length) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid order data' }));
           return;
+        }
+
+        // Durable Idempotency & rapid duplicate request detection
+        const rawIdempotencyKey = (req.headers && req.headers['idempotency-key']) || data.idempotencyKey || data.clientOrderId;
+        const itemsSig = (data.items || []).map(i => `${i.id}x${i.qty}@${i.variant || ''}`).sort().join(';');
+        const requestPayloadSig = `${data.tableId || 1}:${data.orderType || 'dinein'}:${itemsSig}:${data.notes || ''}`;
+
+        let scopedIdempKey = null;
+        if (rawIdempotencyKey) {
+          scopedIdempKey = `${restaurant.id}:${rawIdempotencyKey}`;
+          db.idempotencyKeys = db.idempotencyKeys || {};
+          const existingIdemp = db.idempotencyKeys[scopedIdempKey];
+          if (existingIdemp) {
+            if (existingIdemp.payloadSig === requestPayloadSig) {
+              res.writeHead(existingIdemp.statusCode || 200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(existingIdemp.body));
+              return;
+            } else {
+              res.writeHead(409, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                error: 'Idempotency Conflict: This Idempotency-Key was already used with different order parameters.',
+                status: 'idempotency_conflict'
+              }));
+              return;
+            }
+          }
+        } else {
+          // Double-click protection without key (2.5-second sliding window)
+          const dedupKey = `sig:${restaurant.id}:${requestPayloadSig}`;
+          const now = Date.now();
+          for (const [k, v] of recentOrderDeduplications.entries()) {
+            if (now - v.timestamp > 5000) recentOrderDeduplications.delete(k);
+          }
+
+          const existingEntry = recentOrderDeduplications.get(dedupKey);
+          if (existingEntry && (now - existingEntry.timestamp < 2500)) {
+            res.writeHead(existingEntry.statusCode, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(existingEntry.body));
+            return;
+          }
         }
 
         const newId = `ORD-${Date.now().toString().slice(-4)}`;
@@ -1490,195 +2577,361 @@ const server = http.createServer((req, res) => {
         const tableId = parseInt(data.tableId, 10) || 1;
         const targetTable = restaurant.tables.find(t => t.id === tableId) || { id: tableId, name: `Table ${tableId}` };
 
+        // Server-Side Item, Quantity, Price, Variant, Add-on, and Stock Validation
         let subtotal = 0;
-        const items = data.items.map(cartItem => {
-          const menuItem = restaurant.menu.find(m => m.id === cartItem.id);
-          let unitPrice = menuItem ? menuItem.price : cartItem.price;
+        const validatedItems = [];
 
-          if (cartItem.variant && menuItem && menuItem.variants) {
-            const v = menuItem.variants.find(va => va.name === cartItem.variant);
-            if (v) unitPrice = v.price;
+        for (const cartItem of data.items) {
+          if (!cartItem || typeof cartItem !== 'object') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Malformed cart item structure' }));
+            return;
           }
 
+          // Validate quantity: strictly positive integer >= 1
+          const rawQty = cartItem.qty !== undefined ? cartItem.qty : (cartItem.quantity !== undefined ? cartItem.quantity : 1);
+          const qty = Number(rawQty);
+          if (!Number.isInteger(qty) || qty < 1 || qty > 100) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Invalid item quantity: "${rawQty}". Quantity must be a positive integer between 1 and 100.` }));
+            return;
+          }
+
+          // Fetch menu item strictly from restaurant's menu (reject unknown or cross-restaurant IDs)
+          const menuItem = restaurant.menu.find(m =>
+            m.id === cartItem.id ||
+            m.id === (cartItem.id || '').replace(`${restaurant.id}_`, '') ||
+            `${restaurant.id}_${m.id}` === cartItem.id
+          );
+
+          if (!menuItem) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Unknown menu item ID: "${cartItem.id}". All items must belong to this restaurant's catalog.` }));
+            return;
+          }
+
+          // Validate availability (inStock)
+          if (menuItem.inStock === false) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Item "${menuItem.name}" is currently out of stock.` }));
+            return;
+          }
+
+          // Fetch base price strictly from menuItem.price (never trust browser cartItem.price)
+          let unitPrice = Number(menuItem.price);
+          if (isNaN(unitPrice) || unitPrice < 0) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Corrupted server price configuration for item ${menuItem.name}` }));
+            return;
+          }
+
+          // Validate variant if specified
+          let variantName = '';
+          if (cartItem.variant) {
+            if (!Array.isArray(menuItem.variants) || menuItem.variants.length === 0) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: `Item "${menuItem.name}" does not support variants.` }));
+              return;
+            }
+            const matchedVariant = menuItem.variants.find(v => v.name === cartItem.variant);
+            if (!matchedVariant) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: `Invalid variant "${cartItem.variant}" for item "${menuItem.name}".` }));
+              return;
+            }
+            variantName = matchedVariant.name;
+            unitPrice = Number(matchedVariant.price);
+          }
+
+          // Validate addons if specified
           let addonsTotal = 0;
-          if (cartItem.addons && Array.isArray(cartItem.addons) && menuItem && menuItem.addons) {
-            cartItem.addons.forEach(addName => {
-              const matched = menuItem.addons.find(ad => ad.name === addName);
-              if (matched) addonsTotal += matched.price;
-            });
+          const validatedAddons = [];
+          if (cartItem.addons && Array.isArray(cartItem.addons)) {
+            for (const addName of cartItem.addons) {
+              if (!Array.isArray(menuItem.addons) || menuItem.addons.length === 0) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: `Item "${menuItem.name}" does not support add-ons.` }));
+                return;
+              }
+              const matchedAddon = menuItem.addons.find(ad => ad.name === addName);
+              if (!matchedAddon) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: `Invalid add-on "${addName}" for item "${menuItem.name}".` }));
+                return;
+              }
+              addonsTotal += Number(matchedAddon.price || 0);
+              validatedAddons.push(matchedAddon.name);
+            }
           }
 
-          const lineTotal = (unitPrice + addonsTotal) * (cartItem.qty || 1);
+          const lineTotal = (unitPrice + addonsTotal) * qty;
           subtotal += lineTotal;
 
-          return {
-            id: cartItem.id,
-            name: menuItem ? menuItem.name : cartItem.name,
-            variant: cartItem.variant || '',
+          validatedItems.push({
+            id: cartItem.id, // preserve input identifier for caller compatibility
+            menuItemId: menuItem.id,
+            name: menuItem.name,
+            variant: variantName,
             price: unitPrice + addonsTotal,
-            qty: cartItem.qty || 1,
-            addons: cartItem.addons || [],
+            qty,
+            addons: validatedAddons,
             itemTotal: lineTotal
-          };
-        });
+          });
+        }
 
-        // Apply discount if promo
-        const discount = Number(data.discount) || 0;
+        const items = validatedItems;
+
+        // Server-Side Promo Code & Discount Calculation (Never trust client-supplied data.discount)
+        let discount = 0;
+        let appliedPromoCode = '';
+        if (data.promoCode && typeof data.promoCode === 'string') {
+          const promoStr = data.promoCode.trim().toUpperCase();
+          const promo = (restaurant.promoCodes || []).find(p => p.code.toUpperCase() === promoStr);
+          if (promo) {
+            if (subtotal >= (promo.minOrder || 0)) {
+              if (promo.type === 'percent') {
+                discount = Math.round((subtotal * (Number(promo.value) / 100)) * 100) / 100;
+              } else if (promo.type === 'flat') {
+                discount = Math.min(subtotal, Number(promo.value));
+              }
+              appliedPromoCode = promo.code;
+            }
+          }
+        }
+
         const taxableSubtotal = Math.max(0, subtotal - discount);
 
         // Packaging charge for takeaway
         const packagingCharge = orderType === 'takeaway' ? 20 : 0;
 
-        const gst = Math.round((taxableSubtotal * (restaurant.gstPercent / 100)) * 100) / 100;
+        const gst = Math.round((taxableSubtotal * (Number(restaurant.gstPercent || 5) / 100)) * 100) / 100;
         const total = taxableSubtotal + gst + packagingCharge;
 
-        // Check if Table already has an active, unpaid dining session (Round 2+ Multi-Round KOT)
-        if (orderType === 'dinein') {
-          const activeOrder = restaurant.orders.find(o => 
-            o.tableId === tableId && 
-            !o.isPaid && 
-            o.paymentStatus !== 'paid' && 
-            o.status !== 'cancelled' && 
-            o.status !== 'settled'
-          );
+        let responsePayload = null;
+        let statusCode = 201;
+        const sseEvents = [];
+        let isIdempotentReplay = false;
+        let isConflict = false;
 
-          if (activeOrder) {
-            // MULTI-ROUND TABLE RUNNING TAB
-            if (!activeOrder.kots || !Array.isArray(activeOrder.kots)) {
-              activeOrder.kots = [
-                {
-                  kotNumber: 1,
-                  items: (activeOrder.items || []).map(it => ({ ...it, kotNumber: 1 })),
-                  orderedAt: activeOrder.createdAt,
-                  status: activeOrder.kitchenStatus || 'served'
+        const persisted = await persistDbChange(res, async (currentDb) => {
+          const activeRest = (currentDb && currentDb.restaurants && currentDb.restaurants[restaurant.id]) || restaurant;
+
+          // Check if concurrent request with same idempotency key committed while we waited in queue
+          if (scopedIdempKey) {
+            currentDb.idempotencyKeys = currentDb.idempotencyKeys || {};
+            const queuedExisting = currentDb.idempotencyKeys[scopedIdempKey];
+            if (queuedExisting) {
+              if (queuedExisting.payloadSig === requestPayloadSig) {
+                responsePayload = queuedExisting.body;
+                statusCode = queuedExisting.statusCode || 200;
+                isIdempotentReplay = true;
+                return { skipSave: true };
+              } else {
+                isConflict = true;
+                return { skipSave: true };
+              }
+            }
+          }
+
+          // Check if Table already has an active, unpaid dining session (Round 2+ Multi-Round KOT)
+          if (orderType === 'dinein') {
+            const activeOrder = activeRest.orders.find(o =>
+              o.tableId === tableId && 
+              !o.isPaid && 
+              o.paymentStatus !== 'paid' && 
+              o.status !== 'cancelled' && 
+              o.status !== 'settled'
+            );
+
+            if (activeOrder) {
+              // MULTI-ROUND TABLE RUNNING TAB
+              if (!activeOrder.kots || !Array.isArray(activeOrder.kots)) {
+                activeOrder.kots = [
+                  {
+                    kotNumber: 1,
+                    items: (activeOrder.items || []).map(it => ({ ...it, kotNumber: 1 })),
+                    orderedAt: activeOrder.createdAt,
+                    status: activeOrder.kitchenStatus || 'served'
+                  }
+                ];
+              }
+
+              const kotNumber = activeOrder.kots.length + 1;
+              const kotItems = items.map(it => ({ ...it, kotNumber }));
+
+              const newKot = {
+                kotNumber,
+                items: kotItems,
+                orderedAt: new Date().toISOString(),
+                status: 'received'
+              };
+              activeOrder.kots.push(newKot);
+
+              // Append items to consolidated items list
+              kotItems.forEach(it => activeOrder.items.push(it));
+
+              // Recalculate financial totals
+              activeOrder.subtotal = (activeOrder.subtotal || 0) + subtotal;
+              const curDiscount = Number(activeOrder.discount) || 0;
+              const newTaxable = Math.max(0, activeOrder.subtotal - curDiscount);
+              activeOrder.gst = Math.round((newTaxable * (Number(activeRest.gstPercent || 5) / 100)) * 100) / 100;
+              activeOrder.total = newTaxable + activeOrder.gst;
+              activeOrder.kitchenStatus = 'received';
+              activeOrder.status = 'received';
+              activeOrder.updatedAt = new Date().toISOString();
+              if (data.notes) {
+                activeOrder.notes = activeOrder.notes 
+                  ? `${activeOrder.notes} | R${kotNumber}: ${data.notes}` 
+                  : `R${kotNumber}: ${data.notes}`;
+              }
+
+              responsePayload = {
+                ...activeOrder,
+                isMultiRound: true,
+                currentKotNumber: kotNumber,
+                newKot
+              };
+              statusCode = 200;
+
+              sseEvents.push({
+                event: 'order:kot',
+                data: {
+                  orderId: activeOrder.id,
+                  tableId,
+                  tableName: targetTable.name,
+                  kot: newKot,
+                  order: activeOrder
                 }
-              ];
+              });
+              sseEvents.push({ event: 'order:update', data: activeOrder });
+              sseEvents.push({ event: 'table:update', data: activeRest.tables });
+
+              if (scopedIdempKey) {
+                currentDb.idempotencyKeys = currentDb.idempotencyKeys || {};
+                currentDb.idempotencyKeys[scopedIdempKey] = {
+                  orderId: responsePayload.id,
+                  statusCode,
+                  body: responsePayload,
+                  payloadSig: requestPayloadSig,
+                  createdAt: new Date().toISOString()
+                };
+              }
+              return;
             }
+          }
 
-            const kotNumber = activeOrder.kots.length + 1;
-            const kotItems = items.map(it => ({ ...it, kotNumber }));
+          // New Session (Round 1 KOT)
+          const initialKot = {
+            kotNumber: 1,
+            items: items.map(it => ({ ...it, kotNumber: 1 })),
+            orderedAt: new Date().toISOString(),
+            status: 'received'
+          };
 
-            const newKot = {
-              kotNumber,
-              items: kotItems,
-              orderedAt: new Date().toISOString(),
-              status: 'received'
+          const newOrder = {
+            id: newId,
+            orderType,
+            tableId: orderType === 'dinein' ? tableId : null,
+            tableName: orderType === 'dinein' ? targetTable.name : (orderType === 'takeaway' ? '🥡 Takeaway Pickup' : '🛵 Doorstep Delivery'),
+            customerName: data.customerName || '',
+            customerPhone: data.customerPhone || '',
+            deliveryAddress: data.deliveryAddress || '',
+            items: initialKot.items,
+            kots: [initialKot],
+            notes: data.notes || '',
+            subtotal,
+            discount,
+            promoCode: appliedPromoCode || '',
+            packagingCharge,
+            gst,
+            total,
+            status: 'received',
+            kitchenStatus: 'received',
+            paymentStatus: 'unpaid',
+            isPaid: false,
+            paymentMethod: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
+          activeRest.orders = activeRest.orders || [];
+          activeRest.orders.push(newOrder);
+
+          // Track / update customer CRM
+          if (data.customerPhone) {
+            if (!activeRest.customers) activeRest.customers = [];
+            const existingCust = activeRest.customers.find(c => c.phone === data.customerPhone);
+            if (existingCust) {
+              existingCust.visits += 1;
+              existingCust.name = data.customerName || existingCust.name;
+              existingCust.lastVisit = new Date().toISOString();
+            } else {
+              activeRest.customers.push({
+                phone: data.customerPhone,
+                name: data.customerName || 'Customer',
+                visits: 1,
+                totalSpent: 0,
+                loyaltyPoints: 0,
+                lastVisit: new Date().toISOString()
+              });
+            }
+          }
+
+          if (orderType === 'dinein') {
+            const tableObj = (activeRest.tables || []).find(t => t.id === tableId);
+            if (tableObj) {
+              tableObj.status = 'occupied';
+              tableObj.currentOrderId = newId;
+              if (!tableObj.seatingTime) tableObj.seatingTime = new Date().toISOString();
+            }
+          }
+
+          responsePayload = newOrder;
+          statusCode = 201;
+
+          if (scopedIdempKey) {
+            currentDb.idempotencyKeys = currentDb.idempotencyKeys || {};
+            currentDb.idempotencyKeys[scopedIdempKey] = {
+              orderId: responsePayload.id,
+              statusCode,
+              body: responsePayload,
+              payloadSig: requestPayloadSig,
+              createdAt: new Date().toISOString()
             };
-            activeOrder.kots.push(newKot);
-
-            // Append items to consolidated items list
-            kotItems.forEach(it => activeOrder.items.push(it));
-
-            // Recalculate financial totals
-            activeOrder.subtotal = (activeOrder.subtotal || 0) + subtotal;
-            const curDiscount = Number(activeOrder.discount) || 0;
-            const newTaxable = Math.max(0, activeOrder.subtotal - curDiscount);
-            activeOrder.gst = Math.round((newTaxable * (restaurant.gstPercent / 100)) * 100) / 100;
-            activeOrder.total = newTaxable + activeOrder.gst;
-            activeOrder.kitchenStatus = 'received'; // chef has new items to cook
-            activeOrder.status = 'received';
-            activeOrder.updatedAt = new Date().toISOString();
-            if (data.notes) {
-              activeOrder.notes = activeOrder.notes 
-                ? `${activeOrder.notes} | R${kotNumber}: ${data.notes}` 
-                : `R${kotNumber}: ${data.notes}`;
-            }
-
-            saveDb(db);
-
-            // Broadcast real-time notifications
-            broadcastEvent(restaurant.id, 'order:kot', {
-              orderId: activeOrder.id,
-              tableId,
-              tableName: targetTable.name,
-              kot: newKot,
-              order: activeOrder
-            });
-            broadcastEvent(restaurant.id, 'order:update', activeOrder);
-            broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
-
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              ...activeOrder,
-              isMultiRound: true,
-              currentKotNumber: kotNumber,
-              newKot
-            }));
-            return;
           }
+
+          sseEvents.push({ event: 'order:new', data: newOrder });
+          sseEvents.push({ event: 'table:update', data: activeRest.tables });
+        });
+
+        if (!persisted.success) return;
+
+        if (isConflict) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Idempotency Conflict: This Idempotency-Key was already used with different order parameters.',
+            status: 'idempotency_conflict'
+          }));
+          return;
         }
 
-        // New Session (Round 1 KOT)
-        const initialKot = {
-          kotNumber: 1,
-          items: items.map(it => ({ ...it, kotNumber: 1 })),
-          orderedAt: new Date().toISOString(),
-          status: 'received'
-        };
-
-        const newOrder = {
-          id: newId,
-          orderType, // 'dinein' | 'takeaway' | 'delivery'
-          tableId: orderType === 'dinein' ? tableId : null,
-          tableName: orderType === 'dinein' ? targetTable.name : (orderType === 'takeaway' ? '🥡 Takeaway Pickup' : '🛵 Doorstep Delivery'),
-          customerName: data.customerName || '',
-          customerPhone: data.customerPhone || '',
-          deliveryAddress: data.deliveryAddress || '',
-          items: initialKot.items,
-          kots: [initialKot],
-          notes: data.notes || '',
-          subtotal,
-          discount,
-          promoCode: data.promoCode || '',
-          packagingCharge,
-          gst,
-          total,
-          status: 'received',
-          kitchenStatus: 'received',
-          paymentStatus: 'unpaid',
-          isPaid: false,
-          paymentMethod: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        restaurant.orders.push(newOrder);
-
-        // Track / update customer CRM
-        if (data.customerPhone) {
-          if (!restaurant.customers) restaurant.customers = [];
-          const existingCust = restaurant.customers.find(c => c.phone === data.customerPhone);
-          if (existingCust) {
-            existingCust.visits += 1;
-            existingCust.name = data.customerName || existingCust.name;
-            existingCust.lastVisit = new Date().toISOString();
-          } else {
-            restaurant.customers.push({
-              phone: data.customerPhone,
-              name: data.customerName || 'Customer',
-              visits: 1,
-              totalSpent: 0,
-              loyaltyPoints: 0,
-              lastVisit: new Date().toISOString()
-            });
-          }
+        // Cache in short-term deduplication map
+        if (!scopedIdempKey) {
+          const dedupKey = `sig:${restaurant.id}:${requestPayloadSig}`;
+          recentOrderDeduplications.set(dedupKey, {
+            timestamp: Date.now(),
+            statusCode,
+            body: responsePayload
+          });
         }
 
-        if (orderType === 'dinein') {
-          const tableObj = restaurant.tables.find(t => t.id === tableId);
-          if (tableObj) {
-            tableObj.status = 'occupied';
-            tableObj.currentOrderId = newId;
-            if (!tableObj.seatingTime) tableObj.seatingTime = new Date().toISOString();
-          }
+        // Broadcast real-time SSE events after persistence (only for new actions, not replays)
+        if (!isIdempotentReplay) {
+          sseEvents.forEach(evt => broadcastEvent(restaurant.id, evt.event, evt.data));
         }
 
-        saveDb(db);
-        broadcastEvent(restaurant.id, 'order:new', newOrder);
-        broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
-
-        res.writeHead(201, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(newOrder));
+        res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(responsePayload));
       });
       return;
     }
@@ -1690,6 +2943,7 @@ const server = http.createServer((req, res) => {
 
       if (req.method === 'DELETE') {
         if (!verifyStaffAuth(null, 'counter')) {
+          if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to cancel order' }));
           return;
@@ -1702,15 +2956,17 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
-        const table = (restaurant.tables || []).find(t => t.id === order.tableId);
-        if (table) {
-          table.status = 'free';
-          table.currentOrderId = null;
-          table.seatingTime = null;
-        }
+        const deleted = await persistDbChange(res, async () => {
+          restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
+          const table = (restaurant.tables || []).find(t => t.id === order.tableId);
+          if (table) {
+            table.status = 'free';
+            table.currentOrderId = null;
+            table.seatingTime = null;
+          }
+        });
+        if (!deleted.success) return;
 
-        saveDb(db);
         broadcastEvent(restaurant.id, 'order:update', { id: orderId, status: 'cancelled' });
         broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
 
@@ -1719,7 +2975,7 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         // Enforce Role-Based Authorization on Order Updates:
         const isFinancialAction = Boolean(data.status === 'paid' || data.isPaid !== undefined || data.paymentStatus === 'paid' || data.closeTable === true);
         const isKitchenAction = Boolean(data.kitchenStatus || data.status === 'preparing' || data.status === 'ready' || data.status === 'served');
@@ -1727,6 +2983,7 @@ const server = http.createServer((req, res) => {
         if (isFinancialAction) {
           // Marking an order as paid or settling requires Counter PIN (or Master PIN)
           if (!verifyStaffAuth(data, 'counter')) {
+            if (res.headersSent) return;
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to settle bill or mark order paid' }));
             return;
@@ -1734,6 +2991,7 @@ const server = http.createServer((req, res) => {
         } else if (isKitchenAction) {
           // Updating kitchen cooking status requires at least Kitchen Passkey
           if (!verifyStaffAuth(data, 'any')) {
+            if (res.headersSent) return;
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Unauthorized: Staff Passkey required to update cooking status' }));
             return;
@@ -1741,6 +2999,7 @@ const server = http.createServer((req, res) => {
         } else {
           // Any other order modification requires staff authentication
           if (!verifyStaffAuth(data, 'any')) {
+            if (res.headersSent) return;
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Unauthorized: Staff Passkey required to update order' }));
             return;
@@ -1754,98 +3013,101 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        if (data.status) {
-          order.status = data.status;
-          order.updatedAt = new Date().toISOString();
-        }
-        if (data.kitchenStatus) {
-          order.kitchenStatus = data.kitchenStatus;
-        }
-        if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
-        if (data.isPaid !== undefined) order.isPaid = data.isPaid;
-        if (data.paymentStatus) order.paymentStatus = data.paymentStatus;
-
-        if (order.status === 'cancelled') {
-          restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
-          const table = (restaurant.tables || []).find(t => t.id === order.tableId);
-          if (table) {
-            table.status = 'free';
-            table.currentOrderId = null;
-            table.seatingTime = null;
+        const patched = await persistDbChange(res, async () => {
+          if (data.status) {
+            order.status = data.status;
+            order.updatedAt = new Date().toISOString();
           }
-        } else if (order.status === 'served' || data.kitchenStatus === 'served') {
-          order.kitchenStatus = 'served';
-          order.status = 'served';
+          if (data.kitchenStatus) {
+            order.kitchenStatus = data.kitchenStatus;
+          }
+          if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
+          if (data.isPaid !== undefined) order.isPaid = data.isPaid;
+          if (data.paymentStatus) order.paymentStatus = data.paymentStatus;
 
-          // If the order was already paid online by customer
-          if (order.isPaid || order.paymentStatus === 'paid') {
-            // Food served AND bill is already paid! Complete and archive
-            order.status = 'completed';
-            restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+          if (order.status === 'cancelled') {
             restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
-
-            const table = restaurant.tables.find(t => t.id === order.tableId);
+            const table = (restaurant.tables || []).find(t => t.id === order.tableId);
             if (table) {
-              table.status = 'cleaning';
+              table.status = 'free';
               table.currentOrderId = null;
               table.seatingTime = null;
             }
-          } else {
-            // Food served, but customer hasn't paid bill yet
-            const table = restaurant.tables.find(t => t.id === order.tableId);
-            if (table) {
-              table.status = 'occupied';
-              table.currentOrderId = order.id;
-            }
-          }
-        } else if (order.status === 'paid' || data.status === 'paid') {
-          order.isPaid = true;
-          order.paymentStatus = 'paid';
-          if (!order.paidAt) order.paidAt = new Date().toISOString();
-          if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
+          } else if (order.status === 'served' || data.kitchenStatus === 'served') {
+            order.kitchenStatus = 'served';
+            order.status = 'served';
 
-          // Check if food was already served OR if cashier explicitly closes table
-          const isFoodServed = order.kitchenStatus === 'served';
-          const shouldClose = data.closeTable === true || isFoodServed;
+            // If the order was already paid online by customer
+            if (order.isPaid || order.paymentStatus === 'paid') {
+              // Food served AND bill is already paid! Complete and archive
+              order.status = 'completed';
+              restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+              restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
 
-          if (shouldClose) {
-            order.status = 'completed';
-            restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
-            restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
-
-            // Update customer lifetime spend & loyalty coins
-            if (order.customerPhone && restaurant.customers) {
-              const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
-              if (cust) {
-                cust.totalSpent = (cust.totalSpent || 0) + order.total;
-                cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(order.total / 10);
+              const table = restaurant.tables.find(t => t.id === order.tableId);
+              if (table) {
+                table.status = 'cleaning';
+                table.currentOrderId = null;
+                table.seatingTime = null;
+              }
+            } else {
+              // Food served, but customer hasn't paid bill yet
+              const table = restaurant.tables.find(t => t.id === order.tableId);
+              if (table) {
+                table.status = 'occupied';
+                table.currentOrderId = order.id;
               }
             }
+          } else if (order.status === 'paid' || data.status === 'paid') {
+            order.isPaid = true;
+            order.paymentStatus = 'paid';
+            if (!order.paidAt) order.paidAt = new Date().toISOString();
+            if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
 
-            const table = restaurant.tables.find(t => t.id === order.tableId);
-            if (table) {
-              table.status = 'cleaning';
-              table.currentOrderId = null;
-              table.seatingTime = null;
+            // Check if food was already served OR if cashier explicitly closes table
+            const isFoodServed = order.kitchenStatus === 'served';
+            const shouldClose = data.closeTable === true || isFoodServed;
+
+            if (shouldClose) {
+              order.status = 'completed';
+              restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
+              restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
+
+              // Update customer lifetime spend & loyalty coins
+              if (order.customerPhone && restaurant.customers) {
+                const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
+                if (cust) {
+                  cust.totalSpent = (cust.totalSpent || 0) + order.total;
+                  cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(order.total / 10);
+                }
+              }
+
+              const table = restaurant.tables.find(t => t.id === order.tableId);
+              if (table) {
+                table.status = 'cleaning';
+                table.currentOrderId = null;
+                table.seatingTime = null;
+              }
+            } else {
+              // Cashier marked paid, but kitchen is still cooking! Keep active with isPaid = true.
+              const table = restaurant.tables.find(t => t.id === order.tableId);
+              if (table) {
+                table.status = 'occupied';
+                table.currentOrderId = order.id;
+              }
             }
-          } else {
-            // Cashier marked paid, but kitchen is still cooking! Keep active with isPaid = true.
+          } else if (order.status === 'preparing') {
+            order.kitchenStatus = 'preparing';
             const table = restaurant.tables.find(t => t.id === order.tableId);
             if (table) {
               table.status = 'occupied';
               table.currentOrderId = order.id;
             }
           }
-        } else if (order.status === 'preparing') {
-          order.kitchenStatus = 'preparing';
-          const table = restaurant.tables.find(t => t.id === order.tableId);
-          if (table) {
-            table.status = 'occupied';
-            table.currentOrderId = order.id;
-          }
-        }
+        });
 
-        saveDb(db);
+        if (!patched.success) return;
+
         broadcastEvent(restaurant.id, 'order:update', order);
         broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
 
@@ -1857,7 +3119,7 @@ const server = http.createServer((req, res) => {
 
     // 7. Service Request (Call Waiter / Water): POST /api/service-request
     if (pathname.includes('/service-request') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (err || !data.tableId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid data' }));
@@ -1875,8 +3137,11 @@ const server = http.createServer((req, res) => {
           time: new Date().toISOString()
         };
 
-        restaurant.serviceRequests.unshift(reqObj);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          restaurant.serviceRequests.unshift(reqObj);
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'service:call', reqObj);
 
         res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -1889,14 +3154,18 @@ const server = http.createServer((req, res) => {
     const srMatch = pathname.match(/service-request\/([A-Za-z0-9-]+)$/);
     if (srMatch && (req.method === 'PATCH' || req.method === 'DELETE')) {
       if (!verifyStaffAuth(null, 'any')) {
+        if (res.headersSent) return;
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Unauthorized: Staff Passkey required to resolve service call' }));
         return;
       }
 
       const srId = srMatch[1];
-      restaurant.serviceRequests = (restaurant.serviceRequests || []).filter(s => s.id !== srId);
-      saveDb(db);
+      const saved = await persistDbChange(res, async () => {
+        restaurant.serviceRequests = (restaurant.serviceRequests || []).filter(s => s.id !== srId);
+      });
+      if (!saved.success) return;
+
       broadcastEvent(restaurant.id, 'service:resolved', { id: srId });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, id: srId }));
@@ -1907,8 +3176,9 @@ const server = http.createServer((req, res) => {
     const tableMatch = pathname.match(/tables\/([0-9]+)$/);
     if (tableMatch && req.method === 'PATCH') {
       const tableId = parseInt(tableMatch[1], 10);
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyStaffAuth(data, 'counter')) {
+          if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to update floor tables' }));
           return;
@@ -1921,10 +3191,13 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        if (data.status) table.status = data.status;
-        if (data.reservedFor !== undefined) table.reservedFor = data.reservedFor;
-        if (data.reservedTime !== undefined) table.reservedTime = data.reservedTime;
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          if (data.status) table.status = data.status;
+          if (data.reservedFor !== undefined) table.reservedFor = data.reservedFor;
+          if (data.reservedTime !== undefined) table.reservedTime = data.reservedTime;
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1935,8 +3208,9 @@ const server = http.createServer((req, res) => {
 
     // 9b. Transfer / Shift Table: POST /api/tables/transfer
     if (pathname.includes('/tables/transfer') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyStaffAuth(data, 'counter')) {
+          if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to transfer tables' }));
           return;
@@ -1960,22 +3234,25 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        // Find active order of fromTable
-        const activeOrder = restaurant.orders.find(o => o.tableId === fromTableId && o.status !== 'paid');
-        if (activeOrder) {
-          activeOrder.tableId = toTableId;
-          activeOrder.tableName = toTable.name;
-          toTable.currentOrderId = activeOrder.id;
-        }
+        let activeOrder = null;
+        const saved = await persistDbChange(res, async () => {
+          // Find active order of fromTable
+          activeOrder = restaurant.orders.find(o => o.tableId === fromTableId && o.status !== 'paid');
+          if (activeOrder) {
+            activeOrder.tableId = toTableId;
+            activeOrder.tableName = toTable.name;
+            toTable.currentOrderId = activeOrder.id;
+          }
 
-        toTable.status = 'occupied';
-        toTable.seatingTime = fromTable.seatingTime || new Date().toISOString();
+          toTable.status = 'occupied';
+          toTable.seatingTime = fromTable.seatingTime || new Date().toISOString();
 
-        fromTable.status = 'cleaning';
-        fromTable.currentOrderId = null;
-        fromTable.seatingTime = null;
+          fromTable.status = 'cleaning';
+          fromTable.currentOrderId = null;
+          fromTable.seatingTime = null;
+        });
+        if (!saved.success) return;
 
-        saveDb(db);
         broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
         if (activeOrder) broadcastEvent(restaurant.id, 'order:update', activeOrder);
 
@@ -1987,8 +3264,9 @@ const server = http.createServer((req, res) => {
 
     // 10. Add New Dish: POST /api/menu
     if (pathname.endsWith('/menu') && req.method === 'POST') {
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyStaffAuth(data, 'counter')) {
+          if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized: Cashier PIN required to add dishes' }));
           return;
@@ -2013,8 +3291,11 @@ const server = http.createServer((req, res) => {
           addons: data.addons || []
         };
 
-        restaurant.menu.push(newDish);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          restaurant.menu.push(newDish);
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'menu:update', restaurant.menu);
 
         res.writeHead(201, { 'Content-Type': 'application/json' });
@@ -2027,8 +3308,9 @@ const server = http.createServer((req, res) => {
     const menuMatch = pathname.match(/menu\/([A-Za-z0-9_-]+)$/);
     if (menuMatch && req.method === 'PATCH') {
       const dishId = menuMatch[1];
-      readJsonBody((err, data) => {
+      readJsonBody(async (err, data) => {
         if (!verifyStaffAuth(data, 'any')) {
+          if (res.headersSent) return;
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unauthorized: Staff Passkey required to modify dish stock/price' }));
           return;
@@ -2041,9 +3323,12 @@ const server = http.createServer((req, res) => {
           return;
         }
 
-        if (typeof data.inStock === 'boolean') dish.inStock = data.inStock;
-        if (data.price) dish.price = Number(data.price);
-        saveDb(db);
+        const saved = await persistDbChange(res, async () => {
+          if (typeof data.inStock === 'boolean') dish.inStock = data.inStock;
+          if (data.price) dish.price = Number(data.price);
+        });
+        if (!saved.success) return;
+
         broadcastEvent(restaurant.id, 'menu:update', restaurant.menu);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2054,30 +3339,59 @@ const server = http.createServer((req, res) => {
 
     // 12. Update Restaurant Settings: POST /api/settings
     if (pathname.endsWith('/settings') && req.method === 'POST') {
-      readJsonBody((err, data) => {
-        if (!verifyStaffAuth(data, 'counter')) {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to update settings' }));
-          return;
+      readJsonBody(async (err, data) => {
+        const session = authenticateRequest(req);
+        if (session) {
+          if (!checkCsrfForCookieAuth(req, res, session)) {
+            return;
+          }
+          if (session.role === 'kitchen_staff') {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Forbidden: Kitchen staff cannot modify restaurant settings" }));
+            return;
+          }
+          if (session.role !== 'superadmin' && session.restaurantId !== restaurant.id) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Forbidden: Cannot modify another restaurant's settings" }));
+            return;
+          }
+        } else {
+          if (!verifyStaffAuth(data, 'counter')) {
+            if (res.headersSent) return;
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to update settings' }));
+            return;
+          }
         }
 
-        if (typeof data.rushMode === 'boolean') restaurant.rushMode = data.rushMode;
-        if (data.name) restaurant.name = data.name;
-        if (data.phone) restaurant.phone = data.phone;
-        if (data.address) restaurant.address = data.address;
-        if (data.pin) restaurant.pin = data.pin.toString().trim();
-        if (data.kitchenPin) restaurant.kitchenPin = data.kitchenPin.toString().trim();
-        if (data.paymentConfig) {
-          restaurant.paymentConfig = {
-            ...(restaurant.paymentConfig || {}),
-            ...data.paymentConfig
-          };
-        }
-        saveDb(db);
-        broadcastEvent(restaurant.id, 'settings:update', restaurant);
+        const saved = await persistDbChange(res, async () => {
+          if (typeof data.rushMode === 'boolean') restaurant.rushMode = data.rushMode;
+          if (data.name) restaurant.name = data.name;
+          if (data.phone) restaurant.phone = data.phone;
+          if (data.address) restaurant.address = data.address;
+          if (data.pin) {
+            restaurant.pin = hashPin(data.pin.toString().trim());
+            invalidateRestaurantSessions(restaurant.id);
+          }
+          if (data.kitchenPin) {
+            restaurant.kitchenPin = hashPin(data.kitchenPin.toString().trim());
+            invalidateRestaurantSessions(restaurant.id);
+          }
+          if (data.paymentConfig) {
+            restaurant.paymentConfig = {
+              ...(restaurant.paymentConfig || {}),
+              ...data.paymentConfig
+            };
+          }
+        });
+
+        if (!saved.success) return;
+
+        const safeRestaurant = safeRestaurantForClient(restaurant);
+        broadcastEvent(restaurant.id, 'settings:update', safeRestaurant);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(restaurant));
+        res.end(JSON.stringify(safeRestaurant));
       });
       return;
     }
@@ -2181,6 +3495,7 @@ process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 async function boot() {
   await initCloudDatabase();
+  migrateAndSecureCredentials();
   startServer();
 }
 

@@ -236,10 +236,19 @@
         const data = await res.json();
 
         if (res.ok && data.success) {
+          // Store session token and CSRF token securely (No plaintext PINs!)
+          if (data.sessionId) {
+            sessionStorage.setItem('tiptap_session_id', data.sessionId);
+            if (remember) localStorage.setItem('tiptap_session_id', data.sessionId);
+          }
+          if (data.csrfToken) {
+            sessionStorage.setItem('tiptap_csrf_token', data.csrfToken);
+            if (remember) localStorage.setItem('tiptap_csrf_token', data.csrfToken);
+          }
+
           if (data.role === 'superadmin') {
             sessionStorage.setItem('tiptap_admin_auth', 'true');
-            sessionStorage.setItem('tiptap_admin_pin', pin);
-            localStorage.setItem('tiptap_admin_auth', 'true');
+            if (remember) localStorage.setItem('tiptap_admin_auth', 'true');
             btn.innerText = '✓ Master PIN Verified! Opening Super Admin HQ...';
             btn.className = 'w-full py-3.5 rounded-xl bg-amber-500 text-[#2a1a0e] font-black text-sm shadow-xl flex items-center justify-center gap-2';
             setTimeout(() => {
@@ -254,25 +263,17 @@
 
           if (station === 'kds') {
             sessionStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
-            sessionStorage.setItem('tiptap_kds_pin_' + data.restaurant.id, pin);
-            localStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
-            localStorage.setItem('tiptap_kds_pin_' + data.restaurant.id, pin);
+            if (remember) localStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
             sessionStorage.setItem('tiptap_role', 'kitchen');
             localStorage.setItem('tiptap_role', 'kitchen');
             // Remove counter access so kitchen tablet can NEVER open counter
             sessionStorage.removeItem('tiptap_counter_auth_' + data.restaurant.id);
-            sessionStorage.removeItem('tiptap_staff_pin_' + data.restaurant.id);
             localStorage.removeItem('tiptap_counter_auth_' + data.restaurant.id);
-            localStorage.removeItem('tiptap_staff_pin_' + data.restaurant.id);
           } else {
             sessionStorage.setItem('tiptap_counter_auth_' + data.restaurant.id, 'true');
-            sessionStorage.setItem('tiptap_staff_pin_' + data.restaurant.id, pin);
-            localStorage.setItem('tiptap_counter_auth_' + data.restaurant.id, 'true');
-            localStorage.setItem('tiptap_staff_pin_' + data.restaurant.id, pin);
+            if (remember) localStorage.setItem('tiptap_counter_auth_' + data.restaurant.id, 'true');
             sessionStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
-            sessionStorage.setItem('tiptap_kds_pin_' + data.restaurant.id, pin);
-            localStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
-            localStorage.setItem('tiptap_kds_pin_' + data.restaurant.id, pin);
+            if (remember) localStorage.setItem('tiptap_kds_auth_' + data.restaurant.id, 'true');
             sessionStorage.setItem('tiptap_role', 'counter');
             localStorage.setItem('tiptap_role', 'counter');
           }
@@ -303,6 +304,27 @@
         handleStationToggle();
       }
     }
+
+    // Auto-redirect if already authenticated with active session
+    (async function checkExistingSession() {
+      try {
+        const res = await fetch('/api/auth/session');
+        const session = await res.json();
+        if (session && session.authenticated) {
+          if (session.csrfToken) sessionStorage.setItem('tiptap_csrf_token', session.csrfToken);
+          if (session.role === 'superadmin') {
+            window.location.href = '/super-admin.html';
+          } else if (session.restaurantId) {
+            sessionStorage.setItem('tiptap_active_restaurant', session.restaurantId);
+            if (session.role === 'kitchen') {
+              window.location.href = '/kds.html?restaurant=' + session.restaurantId;
+            } else {
+              window.location.href = '/dashboard.html?restaurant=' + session.restaurantId;
+            }
+          }
+        }
+      } catch (e) {}
+    })();
   </script>
 </body>
 </html>

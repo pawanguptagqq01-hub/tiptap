@@ -370,10 +370,19 @@
   <script>
     let restaurants = [];
 
+    function getAuthHeaders(extra = {}) {
+      const h = { ...extra };
+      const csrf = sessionStorage.getItem('tiptap_csrf_token') || localStorage.getItem('tiptap_csrf_token');
+      const sess = sessionStorage.getItem('tiptap_session_id') || localStorage.getItem('tiptap_session_id');
+      if (csrf) h['X-CSRF-Token'] = csrf;
+      if (sess) h['Authorization'] = 'Bearer ' + sess;
+      return h;
+    }
+
     async function loadRestaurants() {
       try {
         const res = await fetch('/api/restaurants', {
-          headers: { 'x-master-pin': getAdminPin() }
+          headers: getAuthHeaders()
         });
         if (res.ok) {
           restaurants = await res.json();
@@ -492,7 +501,7 @@
     }
 
     function getAdminPin() {
-      return sessionStorage.getItem('tiptap_admin_pin') || '';
+      return '';
     }
 
     async function handleOnboardSubmit(e) {
@@ -509,17 +518,13 @@
         gstin: document.getElementById('inpGstin').value.trim(),
         pin: document.getElementById('inpPin').value.trim() || '1234',
         kitchenPin: document.getElementById('inpKitchenPin').value.trim() || '5678',
-        upiVpa: document.getElementById('inpUpi').value.trim() || 'tiptap.merchant@icici',
-        masterPin: getAdminPin()
+        upiVpa: document.getElementById('inpUpi').value.trim() || 'tiptap.merchant@icici'
       };
 
       try {
         const res = await fetch('/api/restaurants', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-master-pin': getAdminPin()
-          },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(payload)
         });
 
@@ -573,10 +578,10 @@
       try {
         const res = await fetch('/api/admin/reset', { 
           method: 'POST',
-          headers: {
+          headers: getAuthHeaders({
             'Content-Type': 'application/json',
             'x-master-pin': pin
-          },
+          }),
           body: JSON.stringify({ pin })
         });
         const data = await res.json();
@@ -602,10 +607,10 @@
       try {
         const res = await fetch(`/api/admin/reset?restaurant=${id}`, { 
           method: 'POST',
-          headers: {
+          headers: getAuthHeaders({
             'Content-Type': 'application/json',
             'x-master-pin': pin
-          },
+          }),
           body: JSON.stringify({ pin, restaurant: id })
         });
         const data = await res.json();
@@ -631,9 +636,9 @@
       try {
         const res = await fetch(`/api/restaurants/${id}`, { 
           method: 'DELETE',
-          headers: {
+          headers: getAuthHeaders({
             'x-master-pin': pin
-          }
+          })
         });
         if (res.ok) {
           alert(`Restaurant "${name}" has been deleted.`);
@@ -647,16 +652,22 @@
       }
     }
 
-    function checkSuperAdminAuth() {
-      const isAuth = sessionStorage.getItem('tiptap_admin_auth') || localStorage.getItem('tiptap_admin_auth');
+    async function checkSuperAdminAuth() {
       const gateModal = document.getElementById('superAdminGateModal');
-      if (isAuth === 'true') {
-        gateModal.classList.add('hidden');
-        initSuperAdmin();
-      } else {
-        gateModal.classList.remove('hidden');
-        setTimeout(() => document.getElementById('adminPinInput')?.focus(), 200);
-      }
+      try {
+        const res = await fetch('/api/auth/session');
+        const session = await res.json();
+        if (session && session.authenticated && session.role === 'superadmin') {
+          sessionStorage.setItem('tiptap_admin_auth', 'true');
+          if (session.csrfToken) sessionStorage.setItem('tiptap_csrf_token', session.csrfToken);
+          gateModal.classList.add('hidden');
+          initSuperAdmin();
+          return;
+        }
+      } catch (e) {}
+
+      gateModal.classList.remove('hidden');
+      setTimeout(() => document.getElementById('adminPinInput')?.focus(), 200);
     }
 
     async function handleMasterPinSubmit(e) {
@@ -677,7 +688,8 @@
         const data = await res.json();
         if (res.ok && data.success) {
           sessionStorage.setItem('tiptap_admin_auth', 'true');
-          sessionStorage.setItem('tiptap_admin_pin', pin);
+          if (data.sessionId) sessionStorage.setItem('tiptap_session_id', data.sessionId);
+          if (data.csrfToken) sessionStorage.setItem('tiptap_csrf_token', data.csrfToken);
           localStorage.setItem('tiptap_admin_auth', 'true');
           document.getElementById('superAdminGateModal').classList.add('hidden');
           initSuperAdmin();
@@ -696,10 +708,14 @@
       }
     }
 
-    function lockAdminSession() {
-      sessionStorage.removeItem('tiptap_admin_auth');
-      sessionStorage.removeItem('tiptap_admin_pin');
+    async function lockAdminSession() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) {}
+      sessionStorage.clear();
       localStorage.removeItem('tiptap_admin_auth');
+      localStorage.removeItem('tiptap_session_id');
+      localStorage.removeItem('tiptap_csrf_token');
       location.reload();
     }
 
@@ -708,7 +724,7 @@
     async function loadLeads() {
       try {
         const res = await fetch('/api/leads', {
-          headers: { 'x-master-pin': getAdminPin() }
+          headers: getAuthHeaders()
         });
         if (res.ok) {
           leads = await res.json();
@@ -802,7 +818,7 @@
       try {
         const res = await fetch(`/api/leads/${leadId}/approve`, { 
           method: 'POST',
-          headers: { 'x-master-pin': getAdminPin() }
+          headers: getAuthHeaders()
         });
         const data = await res.json();
         if (res.ok && data.success) {
@@ -822,7 +838,7 @@
       try {
         const res = await fetch(`/api/leads/${leadId}`, { 
           method: 'DELETE',
-          headers: { 'x-master-pin': getAdminPin() }
+          headers: getAuthHeaders()
         });
         if (res.ok) {
           await loadLeads();

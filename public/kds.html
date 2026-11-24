@@ -276,6 +276,14 @@
 
   <!-- Audio Chime Generator & KDS Application Logic -->
   <script>
+    // Native DOM-based HTML Escaper (Prevents Stored XSS from guest order notes & names)
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      const div = document.createElement('div');
+      div.textContent = String(str);
+      return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     let restaurantId = urlParams.get('restaurant') || sessionStorage.getItem('tiptap_active_restaurant') || localStorage.getItem('tiptap_active_restaurant') || 'tiptap-bistro';
     
@@ -401,12 +409,23 @@
              '';
     }
 
+    function getKdsAuthHeaders(extra = {}) {
+      const h = { ...extra };
+      const csrf = sessionStorage.getItem('tiptap_csrf_token') || localStorage.getItem('tiptap_csrf_token') || '';
+      const sess = sessionStorage.getItem('tiptap_session_id') || localStorage.getItem('tiptap_session_id') || '';
+      const pin = getKdsPin();
+      if (csrf) h['X-CSRF-Token'] = csrf;
+      if (sess) h['Authorization'] = 'Bearer ' + sess;
+      if (pin) h['x-staff-pin'] = pin;
+      return h;
+    }
+
     // 2. Data Fetching & Sync
     // ----------------------------------------------------
     async function fetchKdsState() {
       try {
         const res = await fetch(`/api/state?restaurant=${restaurantId}`, {
-          headers: { 'x-staff-pin': getKdsPin() }
+          headers: getKdsAuthHeaders()
         });
         if (!res.ok) throw new Error('State fetch failed');
         const data = await res.json();
@@ -538,7 +557,7 @@
               <div class="flex items-start justify-between pb-3.5 border-b border-[#352112]/90 gap-2">
                 <div>
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-display font-black text-white text-2xl tracking-tight">${order.tableName || 'Table'}</span>
+                    <span class="font-display font-black text-white text-2xl tracking-tight">${escapeHtml(order.tableName || 'Table')}</span>
                     <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${order.orderType === 'takeaway' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-[#f4ae52]/20 text-[#f4ae52] border border-[#f4ae52]/40'}">
                       ${order.orderType === 'takeaway' ? '🥡 TAKEAWAY' : '🍽️ DINE-IN'}
                     </span>
@@ -582,7 +601,7 @@
                   <p class="text-[10px] uppercase tracking-wider text-amber-400 font-black flex items-center gap-1">
                     <span>👨‍🍳</span> <span>Special Cooking Instructions:</span>
                   </p>
-                  <p class="font-extrabold text-sm text-amber-100">"${order.notes}"</p>
+                  <p class="font-extrabold text-sm text-amber-100">"${escapeHtml(order.notes)}"</p>
                 </div>
               ` : ''}
 
@@ -603,8 +622,8 @@
                               ${i.qty}x
                             </span>
                             <div class="flex-1">
-                              <p class="font-display font-black ${isLatestKot ? 'text-amber-100' : 'text-slate-200'} text-base leading-snug tracking-tight">${i.name}</p>
-                              ${i.variant ? `<span class="text-[10px] font-extrabold text-[#f4ae52] bg-[#352112] px-2 py-0.5 rounded-md border border-[#f4ae52]/40 mt-0.5 inline-block">${i.variant}</span>` : ''}
+                              <p class="font-display font-black ${isLatestKot ? 'text-amber-100' : 'text-slate-200'} text-base leading-snug tracking-tight">${escapeHtml(i.name)}</p>
+                              ${i.variant ? `<span class="text-[10px] font-extrabold text-[#f4ae52] bg-[#352112] px-2 py-0.5 rounded-md border border-[#f4ae52]/40 mt-0.5 inline-block">${escapeHtml(i.variant)}</span>` : ''}
                             </div>
                           </div>
                         `).join('')}
@@ -616,13 +635,13 @@
                     ${(order.items || []).map((i, idx) => `
                       <div onclick="toggleItemStrike(this)" class="pt-2.5 flex items-start gap-3 cursor-pointer select-none group/item hover:bg-slate-800/40 p-1.5 rounded-xl transition">
                         <span class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 text-amber-400 font-display font-black text-base flex items-center justify-center shrink-0 shadow-inner group-hover/item:border-amber-400">
-                          ${i.qty}x
+                          ${Number(i.qty) || 1}x
                         </span>
                         <div class="flex-1">
-                          <p class="font-display font-black text-white text-base leading-snug tracking-tight">${i.name}</p>
+                          <p class="font-display font-black text-white text-base leading-snug tracking-tight">${escapeHtml(i.name)}</p>
                           <div class="flex items-center gap-2 mt-1 flex-wrap">
-                            ${i.variant ? `<span class="text-[11px] font-extrabold text-[#f4ae52] bg-[#352112] px-2 py-0.5 rounded-md border border-[#f4ae52]/40">Portion: ${i.variant}</span>` : ''}
-                            ${(i.addons && i.addons.length) ? `<span class="text-[11px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/30">Add: ${i.addons.join(', ')}</span>` : ''}
+                            ${i.variant ? `<span class="text-[11px] font-extrabold text-[#f4ae52] bg-[#352112] px-2 py-0.5 rounded-md border border-[#f4ae52]/40">Portion: ${escapeHtml(i.variant)}</span>` : ''}
+                            ${(i.addons && i.addons.length) ? `<span class="text-[11px] font-bold text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/30">Add: ${i.addons.map(a => escapeHtml(a)).join(', ')}</span>` : ''}
                           </div>
                         </div>
                       </div>
@@ -683,10 +702,7 @@
       try {
         const res = await fetch(`/api/orders/${orderId}?restaurant=${restaurantId}`, {
           method: 'PATCH',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-staff-pin': getKdsPin()
-          },
+          headers: getKdsAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ status, kitchenStatus: status })
         });
         if (res.ok) {
@@ -718,8 +734,8 @@
       list.innerHTML = reqs.map(r => `
         <div class="px-3 py-1.5 rounded-xl bg-[#2a1a0e] border border-amber-400/50 text-white text-xs font-bold flex items-center gap-2">
           <span>${r.type === 'water' ? '💧 Drinking Water' : '🛎️ Waiter Call'}:</span>
-          <span class="text-amber-300 font-extrabold">${r.tableName}</span>
-          <button onclick="resolveServiceCall('${r.id}')" class="ml-1 px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-[#2a1a0e] font-black text-[10px]">
+          <span class="text-amber-300 font-extrabold">${escapeHtml(r.tableName)}</span>
+          <button onclick="resolveServiceCall('${encodeURIComponent(r.id)}')" class="ml-1 px-2 py-0.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-[#2a1a0e] font-black text-[10px]">
             Done ✓
           </button>
         </div>
@@ -730,7 +746,7 @@
       try {
         await fetch(`/api/service-request/${id}?restaurant=${restaurantId}`, { 
           method: 'DELETE',
-          headers: { 'x-staff-pin': getKdsPin() }
+          headers: getKdsAuthHeaders()
         });
         fetchKdsState();
       } catch (e) {}
@@ -749,14 +765,17 @@
 
       document.getElementById('kotPrintItems').innerHTML = (order.items || []).map(i => `
         <div class="flex justify-between py-1 font-bold text-base">
-          <span>${i.qty}x ${i.name}</span>
-          <span>${i.variant ? `(${i.variant})` : ''}</span>
+          <span>${escapeHtml(i.qty)}x ${escapeHtml(i.name)}</span>
+          <span>${i.variant ? `(${escapeHtml(i.variant)})` : ''}</span>
         </div>
       `).join('');
 
-      document.getElementById('kotPrintNotes').innerHTML = order.notes 
-        ? `*** SPECIAL COOKING INSTRUCTIONS: ${order.notes} ***` 
-        : '';
+      const kotPrintNotesEl = document.getElementById('kotPrintNotes');
+      if (kotPrintNotesEl) {
+        kotPrintNotesEl.textContent = order.notes
+          ? `*** SPECIAL COOKING INSTRUCTIONS: ${order.notes} ***`
+          : '';
+      }
 
       window.print();
     }
@@ -851,12 +870,26 @@
     // ----------------------------------------------------
     // 9. Passkey Security Gate Check
     // ----------------------------------------------------
-    function checkKdsAuthentication() {
+    async function checkKdsAuthentication() {
+      const modal = document.getElementById('kdsSecurityGateModal');
+      try {
+        const res = await fetch('/api/auth/session');
+        const session = await res.json();
+        if (session && session.authenticated) {
+          if (session.csrfToken) sessionStorage.setItem('tiptap_csrf_token', session.csrfToken);
+          if (session.role === 'superadmin' || session.restaurantId === restaurantId) {
+            sessionStorage.setItem('tiptap_kds_auth_' + restaurantId, 'true');
+            modal.classList.add('hidden');
+            fetchKdsState();
+            return;
+          }
+        }
+      } catch (e) {}
+
       const isAuth = sessionStorage.getItem('tiptap_kds_auth_' + restaurantId) === 'true' ||
                      localStorage.getItem('tiptap_kds_auth_' + restaurantId) === 'true' ||
                      sessionStorage.getItem('tiptap_counter_auth_' + restaurantId) === 'true' ||
                      localStorage.getItem('tiptap_counter_auth_' + restaurantId) === 'true';
-      const modal = document.getElementById('kdsSecurityGateModal');
       if (!isAuth) {
         modal.classList.remove('hidden');
         setTimeout(() => document.getElementById('kdsGatePinInput')?.focus(), 200);
@@ -883,7 +916,8 @@
         const data = await res.json();
         if (res.ok && data.success) {
           sessionStorage.setItem('tiptap_kds_auth_' + restaurantId, 'true');
-          sessionStorage.setItem('tiptap_kds_pin_' + restaurantId, pin);
+          if (data.sessionId) sessionStorage.setItem('tiptap_session_id', data.sessionId);
+          if (data.csrfToken) sessionStorage.setItem('tiptap_csrf_token', data.csrfToken);
           localStorage.setItem('tiptap_kds_auth_' + restaurantId, 'true');
           if (data.role === 'kitchen') {
             sessionStorage.setItem('tiptap_role', 'kitchen');
@@ -914,12 +948,16 @@
       }
     }
 
-    function lockKdsSession() {
-      sessionStorage.removeItem('tiptap_kds_auth_' + restaurantId);
-      sessionStorage.removeItem('tiptap_kds_pin_' + restaurantId);
+    async function lockKdsSession() {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) {}
+      sessionStorage.clear();
       localStorage.removeItem('tiptap_kds_auth_' + restaurantId);
-      sessionStorage.removeItem('tiptap_counter_auth_' + restaurantId);
+      localStorage.removeItem('tiptap_session_id');
+      localStorage.removeItem('tiptap_csrf_token');
       localStorage.removeItem('tiptap_counter_auth_' + restaurantId);
+      localStorage.removeItem('tiptap_role');
       checkKdsAuthentication();
     }
 
