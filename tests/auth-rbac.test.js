@@ -1,6 +1,7 @@
 const http = require('http');
 const { fork } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 const TEST_PORT = 3198;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
@@ -56,10 +57,13 @@ async function runTests() {
   console.log('🛡️  TIPTAP PHASE 1: AUTHENTICATION & RBAC TEST SUITE');
   console.log('====================================================\n');
 
-  // Spawn server process
+  const { createIsolatedTestDb } = require('./test-db-helper');
+  const { tempDbPath, cleanup } = createIsolatedTestDb('auth-rbac');
+
+  // Spawn server process with isolated temporary database
   const serverProc = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '' },
+    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', TIPTAP_DB_FILE: tempDbPath },
     stdio: 'pipe'
   });
 
@@ -152,6 +156,12 @@ async function runTests() {
     }, { rushMode: true });
     assert(counterSettings.statusCode === 200, 'Counter staff can modify settings with valid CSRF token (200)');
 
+    // Reset rushMode to false so database state remains clean for other suites
+    await makeRequest('POST', '/api/settings?restaurant=tiptap-bistro', {
+      Cookie: counterCookie,
+      'X-CSRF-Token': counterLogin.data.csrfToken
+    }, { rushMode: false });
+
     // ----------------------------------------------------
     // TEST 4: CROSS-RESTAURANT TENANT ISOLATION
     // ----------------------------------------------------
@@ -197,6 +207,7 @@ async function runTests() {
     process.exit(1);
   } finally {
     serverProc.kill('SIGTERM');
+    cleanup();
   }
 }
 

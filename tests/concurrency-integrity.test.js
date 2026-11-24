@@ -69,6 +69,9 @@ function makeRequest(method, urlPath, headers = {}, body = null) {
   });
 }
 
+const { createIsolatedTestDb } = require('./test-db-helper');
+let isolatedDb = null;
+
 function spawnServer(envOverrides = {}) {
   return fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
@@ -76,6 +79,7 @@ function spawnServer(envOverrides = {}) {
       ...process.env,
       PORT: String(TEST_PORT),
       NODE_ENV: 'development',
+      TIPTAP_DB_FILE: isolatedDb ? isolatedDb.tempDbPath : undefined,
       ...envOverrides
     },
     stdio: 'pipe'
@@ -100,16 +104,19 @@ async function runConcurrencyTests() {
     }
   }
 
-  // Backup data/tiptap-db.json to restore afterwards
-  const dbPath = path.resolve(__dirname, '../data/tiptap-db.json');
-  const backupPath = path.resolve(__dirname, '../data/tiptap-db.json.concurrency.bak');
-  fs.copyFileSync(dbPath, backupPath);
+  // Create isolated temporary database in os.tmpdir()
+  isolatedDb = createIsolatedTestDb('concurrency');
 
   let serverProcess = null;
 
   try {
     serverProcess = spawnServer();
     await new Promise(r => setTimeout(r, 2000));
+
+    // Ensure rushMode is false
+    await makeRequest('POST', '/api/settings?restaurant=tiptap-bistro', {
+      'x-staff-pin': '1234'
+    }, { rushMode: false });
 
     // -------------------------------------------------------------
     // SECTION 1: SIMULTANEOUS ORDERS ACROSS DIFFERENT TABLES
@@ -238,6 +245,11 @@ async function runConcurrencyTests() {
 
     serverProcess = spawnServer();
     await new Promise(r => setTimeout(r, 2000));
+
+    // Ensure rushMode is false
+    await makeRequest('POST', '/api/settings?restaurant=tiptap-bistro', {
+      'x-staff-pin': '1234'
+    }, { rushMode: false });
 
     // 3d. Replay after server restart
     const postRestartReplay = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {
@@ -444,10 +456,8 @@ async function runConcurrencyTests() {
     if (serverProcess) {
       serverProcess.kill('SIGTERM');
     }
-    // Restore original database
-    if (fs.existsSync(backupPath)) {
-      fs.copyFileSync(backupPath, dbPath);
-      fs.unlinkSync(backupPath);
+    if (isolatedDb) {
+      isolatedDb.cleanup();
     }
   }
 

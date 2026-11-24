@@ -4,7 +4,8 @@
   "description": "TipTap - Smart NFC Restaurant POS & Table Ordering Platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node tests/run-all-tests.js"
   },
   "keywords": [
     "restaurant",

@@ -1,6 +1,7 @@
 const http = require('http');
 const { fork } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 const TEST_PORT = 3201;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
@@ -62,10 +63,13 @@ async function runAudit() {
   console.log('🔍 PHASE 1: SECONDARY VALIDATION & SECURITY AUDIT');
   console.log('====================================================\n');
 
+  const { createIsolatedTestDb } = require('./test-db-helper');
+  const { tempDbPath, cleanup } = createIsolatedTestDb('sec-audit');
+
   // Spawn test server with NODE_ENV=production to test production security controls
   const serverProc = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', NODE_ENV: 'production', TIPTAP_TEST_ALLOW_MUTATIONS: 'true' },
+    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', NODE_ENV: 'production', TIPTAP_TEST_ALLOW_MUTATIONS: 'true', TIPTAP_DB_FILE: tempDbPath },
     stdio: 'pipe'
   });
 
@@ -413,6 +417,7 @@ async function runAudit() {
     console.error('Audit execution error:', err);
   } finally {
     serverProc.kill('SIGTERM');
+    cleanup();
   }
 }
 

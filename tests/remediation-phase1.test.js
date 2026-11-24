@@ -1,6 +1,7 @@
 const http = require('http');
 const { fork } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 const TEST_PORT = 3205;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
@@ -57,9 +58,12 @@ async function runRemediationTests() {
   console.log('🛡️  TIPTAP PHASE 1: TARGETED SECURITY REMEDIATION TESTS');
   console.log('====================================================\n');
 
+  const { createIsolatedTestDb } = require('./test-db-helper');
+  const { tempDbPath, cleanup } = createIsolatedTestDb('remed-p1');
+
   const serverProc = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', NODE_ENV: 'test', TIPTAP_TEST_ALLOW_MUTATIONS: 'true' },
+    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', NODE_ENV: 'test', TIPTAP_TEST_ALLOW_MUTATIONS: 'true', TIPTAP_DB_FILE: tempDbPath },
     stdio: 'pipe'
   });
 
@@ -289,7 +293,10 @@ async function runRemediationTests() {
         hostname: '127.0.0.1',
         port: TEST_PORT,
         path: '/api/events?restaurant=tiptap-bistro',
-        method: 'GET'
+        method: 'GET',
+        headers: {
+          Cookie: counterCookie
+        }
       }, (res) => {
         let buffer = '';
         res.on('data', chunk => {
@@ -379,6 +386,7 @@ async function runRemediationTests() {
     process.exitCode = 1;
   } finally {
     serverProc.kill('SIGTERM');
+    cleanup();
   }
 }
 

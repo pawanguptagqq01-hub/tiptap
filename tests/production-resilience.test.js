@@ -53,6 +53,9 @@ async function runResilienceTests() {
   console.log('🛡️  TIPTAP PHASE 1: PRODUCTION RESILIENCE AUDIT SUITE');
   console.log('====================================================\n');
 
+  const { createIsolatedTestDb } = require('./test-db-helper');
+  const { tempDbPath, cleanup } = createIsolatedTestDb('resilience');
+
   let passed = 0;
   let failed = 0;
 
@@ -66,6 +69,7 @@ async function runResilienceTests() {
     }
   }
 
+  try {
   // ----------------------------------------------------
   // TEST 1: PRODUCTION MONGODB OUTAGE & FAIL-CLOSED BEHAVIOR
   // ----------------------------------------------------
@@ -78,7 +82,8 @@ async function runResilienceTests() {
       PORT: String(OUTAGE_PORT),
       NODE_ENV: 'production',
       MONGODB_TIMEOUT_MS: '1500',
-      MONGODB_URI: 'mongodb://127.0.0.1:27999/unreachable_db_test'
+      MONGODB_URI: 'mongodb://127.0.0.1:27999/unreachable_db_test',
+      TIPTAP_DB_FILE: tempDbPath
     },
     stdio: 'pipe'
   });
@@ -116,7 +121,7 @@ async function runResilienceTests() {
   const RESTART_PORT = 3211;
   let restartServer = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(RESTART_PORT), NODE_ENV: 'production', MONGODB_URI: '' },
+    env: { ...process.env, PORT: String(RESTART_PORT), NODE_ENV: 'production', MONGODB_URI: '', TIPTAP_DB_FILE: tempDbPath },
     stdio: 'pipe'
   });
 
@@ -143,7 +148,7 @@ async function runResilienceTests() {
   // Spawn fresh server on same port to simulate restart
   restartServer = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(RESTART_PORT), NODE_ENV: 'production', MONGODB_URI: '' },
+    env: { ...process.env, PORT: String(RESTART_PORT), NODE_ENV: 'production', MONGODB_URI: '', TIPTAP_DB_FILE: tempDbPath },
     stdio: 'pipe'
   });
 
@@ -169,13 +174,13 @@ async function runResilienceTests() {
 
   const instanceA = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(PORT_INSTANCE_A), NODE_ENV: 'production', MONGODB_URI: '' },
+    env: { ...process.env, PORT: String(PORT_INSTANCE_A), NODE_ENV: 'production', MONGODB_URI: '', TIPTAP_DB_FILE: tempDbPath },
     stdio: 'pipe'
   });
 
   const instanceB = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(PORT_INSTANCE_B), NODE_ENV: 'production', MONGODB_URI: '' },
+    env: { ...process.env, PORT: String(PORT_INSTANCE_B), NODE_ENV: 'production', MONGODB_URI: '', TIPTAP_DB_FILE: tempDbPath },
     stdio: 'pipe'
   });
 
@@ -214,7 +219,8 @@ async function runResilienceTests() {
       PORT: String(AUTH_TEST_PORT),
       NODE_ENV: 'production',
       SUPER_ADMIN_PIN: '948201',
-      MONGODB_URI: ''
+      MONGODB_URI: '',
+      TIPTAP_DB_FILE: tempDbPath
     },
     stdio: 'pipe'
   });
@@ -239,6 +245,9 @@ async function runResilienceTests() {
   console.log('====================================================');
 
   if (failed > 0) process.exitCode = 1;
+  } finally {
+    cleanup();
+  }
 }
 
 runResilienceTests();

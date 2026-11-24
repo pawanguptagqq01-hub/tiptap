@@ -18,6 +18,8 @@ const { fork } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+process.env.SUPER_ADMIN_PIN = process.env.SUPER_ADMIN_PIN || 'ProdSecr3t#991';
+
 function makeRequest(port, method, pathStr, headers = {}, body = null) {
   return new Promise((resolve, reject) => {
     const opts = {
@@ -69,9 +71,9 @@ async function runDurabilityAudit() {
     }
   }
 
-  // Record initial mtime and content of data/tiptap-db.json to verify it is NEVER touched in prod
-  const dbPath = path.resolve(__dirname, '../data/tiptap-db.json');
-  const initialDbRaw = fs.readFileSync(dbPath, 'utf8');
+  const { createIsolatedTestDb } = require('./test-db-helper');
+  const { tempDbPath, cleanup } = createIsolatedTestDb('durability');
+  const initialDbRaw = fs.readFileSync(tempDbPath, 'utf8');
 
   // =========================================================================
   // TEST SECTION 1: CHECK 1 — MISSING MONGODB_URI IN PRODUCTION
@@ -84,7 +86,8 @@ async function runDurabilityAudit() {
       ...process.env,
       PORT: String(PORT_MISSING_URI),
       NODE_ENV: 'production',
-      MONGODB_URI: '' // explicitly unset
+      MONGODB_URI: '', // explicitly unset
+      TIPTAP_DB_FILE: tempDbPath
     },
     stdio: 'pipe'
   });
@@ -118,9 +121,9 @@ async function runDurabilityAudit() {
     const menuRes = await makeRequest(PORT_MISSING_URI, 'GET', '/api/state?restaurant=tiptap-bistro&table=3');
     assert(menuRes.statusCode === 200, 'Public diner read request succeeds without error');
 
-    // 1e. Verify data/tiptap-db.json was NOT modified in production
-    const currentDbRaw = fs.readFileSync(dbPath, 'utf8');
-    assert(currentDbRaw === initialDbRaw, 'data/tiptap-db.json was NOT modified (silent ephemeral write prevented)');
+    // 1e. Verify isolated database was NOT modified in production
+    const currentDbRaw = fs.readFileSync(tempDbPath, 'utf8');
+    assert(currentDbRaw === initialDbRaw, 'Isolated database was NOT modified (silent ephemeral write prevented)');
   } finally {
     missingUriServer.kill('SIGTERM');
   }
@@ -139,7 +142,8 @@ async function runDurabilityAudit() {
       PORT: String(PORT_OUTAGE),
       NODE_ENV: 'production',
       MONGODB_TIMEOUT_MS: '1200',
-      MONGODB_URI: 'mongodb://127.0.0.1:27999/unreachable_db' // guaranteed unreachable port
+      MONGODB_URI: 'mongodb://127.0.0.1:27999/unreachable_db', // guaranteed unreachable port
+      TIPTAP_DB_FILE: tempDbPath
     },
     stdio: 'pipe'
   });
@@ -183,7 +187,8 @@ async function runDurabilityAudit() {
       ...process.env,
       PORT: String(PORT_IDEMP),
       NODE_ENV: 'test',
-      MONGODB_URI: ''
+      MONGODB_URI: '',
+      TIPTAP_DB_FILE: tempDbPath
     },
     stdio: 'pipe'
   });
@@ -251,8 +256,7 @@ async function runDurabilityAudit() {
     assert(round2Res.data.currentKotNumber === 2, 'KOT round number incremented to 2');
   } finally {
     idempServer.kill('SIGTERM');
-    // Restore pristine seed database state on disk
-    fs.writeFileSync(dbPath, initialDbRaw, 'utf8');
+    cleanup();
   }
 
   console.log('\n====================================================');

@@ -1,6 +1,7 @@
 const http = require('http');
 const { fork } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 const TEST_PORT = 3199;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
@@ -48,9 +49,12 @@ async function runRegressionTests() {
   console.log('🍽️  TIPTAP REGRESSION TEST: DINER & GUEST WORKFLOWS');
   console.log('====================================================\n');
 
+  const { createIsolatedTestDb } = require('./test-db-helper');
+  const { tempDbPath, cleanup } = createIsolatedTestDb('guest-wf');
+
   const serverProc = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
-    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '' },
+    env: { ...process.env, PORT: String(TEST_PORT), MONGODB_URI: '', TIPTAP_DB_FILE: tempDbPath },
     stdio: 'pipe'
   });
 
@@ -131,6 +135,7 @@ async function runRegressionTests() {
     process.exit(1);
   } finally {
     serverProc.kill('SIGTERM');
+    cleanup();
   }
 }
 

@@ -104,7 +104,7 @@
           "isJain": true,
           "price": 280,
           "description": "Rich, creamy cottage cheese curry cooked with aromatic butter & spices.",
-          "inStock": false,
+          "inStock": true,
           "variants": [
             {
               "name": "Half",
