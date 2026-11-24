@@ -222,6 +222,7 @@ function createInitialMultiDb() {
       name: 'TipTap HQ Platform Admin',
       pin: '0000'
     },
+    idempotencyKeys: {},
     restaurants: {
       'tiptap-bistro': createDefaultRestaurant(
         'tiptap-bistro',
@@ -343,6 +344,9 @@ function loadDb() {
           }
         });
       }
+      if (!data.idempotencyKeys) {
+        data.idempotencyKeys = {};
+      }
       return data;
     }
   } catch (err) {
@@ -371,6 +375,7 @@ const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_URL || proces
 function cleanProductionSeed(sourceDb) {
   const clean = JSON.parse(JSON.stringify(sourceDb || {}));
   clean.leads = [];
+  clean.idempotencyKeys = {};
   if (clean.restaurants) {
     Object.values(clean.restaurants).forEach(r => {
       r.orders = [];
@@ -407,10 +412,20 @@ async function initCloudDatabase() {
   try {
     const { MongoClient } = require('mongodb');
     const timeoutMs = parseInt(process.env.MONGODB_TIMEOUT_MS, 10) || 3000;
+    const writeConcernW = process.env.MONGODB_WRITE_CONCERN || (process.env.NODE_ENV === 'production' ? 'majority' : 1);
+    const writeConcernJ = process.env.MONGODB_JOURNAL !== undefined 
+      ? process.env.MONGODB_JOURNAL === 'true' 
+      : (process.env.NODE_ENV === 'production');
+
     mongoClient = new MongoClient(MONGODB_URI, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: timeoutMs,
-      connectTimeoutMS: timeoutMs
+      connectTimeoutMS: timeoutMs,
+      writeConcern: {
+        w: writeConcernW,
+        j: writeConcernJ,
+        wtimeoutMS: timeoutMs
+      }
     });
 
     await mongoClient.connect();
@@ -419,7 +434,7 @@ async function initCloudDatabase() {
     mongoDb = mongoClient.db('tiptap');
     mongoCollection = mongoDb.collection('system_store');
 
-    console.log('✅ [TipTap Cloud DB] Successfully connected to MongoDB Atlas Cloud Cluster!');
+    console.log('✅ [TipTap Cloud DB] Successfully connected to MongoDB Atlas Cloud Cluster with majority durability!');
 
     // Check if cloud database already has saved state
     const cloudRecord = await mongoCollection.findOne({ _id: 'tiptap_main_store' });
@@ -438,7 +453,14 @@ async function initCloudDatabase() {
       await mongoCollection.updateOne(
         { _id: 'tiptap_main_store' },
         { $set: seedData },
-        { upsert: true }
+        {
+          upsert: true,
+          writeConcern: {
+            w: writeConcernW,
+            j: writeConcernJ,
+            wtimeoutMS: timeoutMs
+          }
+        }
       );
       console.log('✅ [TipTap Cloud DB] Clean restaurant catalogs and floor layouts uploaded to MongoDB Atlas.');
     }
@@ -455,7 +477,18 @@ async function initCloudDatabase() {
 }
 
 async function saveDb(data) {
-  // 1. In production, writes MUST be persisted to MongoDB Atlas cloud cluster
+  const timeoutMs = parseInt(process.env.MONGODB_TIMEOUT_MS, 10) || 3000;
+  const writeConcernW = process.env.MONGODB_WRITE_CONCERN || (process.env.NODE_ENV === 'production' ? 'majority' : 1);
+  const writeConcernJ = process.env.MONGODB_JOURNAL !== undefined 
+    ? process.env.MONGODB_JOURNAL === 'true' 
+    : (process.env.NODE_ENV === 'production');
+  const writeConcern = {
+    w: writeConcernW,
+    j: writeConcernJ,
+    wtimeoutMS: timeoutMs
+  };
+
+  // 1. In production, writes MUST be persisted to MongoDB Atlas cloud cluster with acknowledged durability
   if (process.env.NODE_ENV === 'production' && !process.env.TIPTAP_TEST_ALLOW_MUTATIONS) {
     if (!isMongoConnected || !mongoCollection) {
       const errMsg = 'Database Unavailable: MongoDB Atlas cluster is not connected or MONGODB_URI is missing. Writes are rejected in production.';
@@ -467,7 +500,7 @@ async function saveDb(data) {
       const result = await mongoCollection.updateOne(
         { _id: 'tiptap_main_store' },
         { $set: data },
-        { upsert: true }
+        { upsert: true, writeConcern }
       );
       if (!result || result.acknowledged === false) {
         throw new Error('Database write unacknowledged by MongoDB cluster');
@@ -493,7 +526,7 @@ async function saveDb(data) {
       const result = await mongoCollection.updateOne(
         { _id: 'tiptap_main_store' },
         { $set: data },
-        { upsert: true }
+        { upsert: true, writeConcern }
       );
       if (!result || result.acknowledged === false) {
         throw new Error('Database write unacknowledged by MongoDB cluster');
@@ -517,29 +550,48 @@ async function saveDb(data) {
   return true;
 }
 
-// In-Memory Order Deduplication & Idempotency Store (Sliding 15-second window)
+// In-Memory Order Deduplication Store for UI button double-clicks (Sliding 5-second window)
 const recentOrderDeduplications = new Map();
 
-// Helper: Safely mutate in-memory state and await acknowledged cloud persistence.
-// If persistence fails, in-memory state is rolled back to prevent state drift.
-async function persistDbChange(res, mutateFn) {
-  const snapshot = JSON.parse(JSON.stringify(db));
-  try {
-    const result = await mutateFn();
-    await saveDb(db);
-    return { success: true, result };
-  } catch (err) {
-    db = snapshot; // Rollback in-memory state on write failure
-    console.error('❌ [TipTap Persistence Error]:', err.message);
-    if (res && !res.headersSent) {
-      res.writeHead(503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Database Write Failed: ' + err.message,
-        status: 'service_unavailable'
-      }));
+// Serialized Mutation & Persistence Queue (Mutex)
+// Enforces strict FIFO serialization of state mutations and MongoDB writes,
+// preventing concurrent write interleaving, lost updates, and rollback cross-contamination.
+let mutationQueue = Promise.resolve();
+
+function persistDbChange(res, mutateFn) {
+  const previousOp = mutationQueue;
+
+  const currentOp = (async () => {
+    // Wait for the prior queued operation to settle (even if it rejected/failed)
+    try {
+      await previousOp;
+    } catch (_) {}
+
+    // Take snapshot of database state immediately prior to applying this mutation
+    const snapshot = JSON.parse(JSON.stringify(db));
+    try {
+      const result = await mutateFn();
+      if (!result || !result.skipSave) {
+        await saveDb(db);
+      }
+      return { success: true, result };
+    } catch (err) {
+      // Rollback database state to pre-mutation snapshot without affecting previous committed mutations
+      db = snapshot;
+      console.error('❌ [TipTap Persistence Error]:', err.message);
+      if (res && !res.headersSent) {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          error: 'Database Write Failed: ' + err.message,
+          status: 'service_unavailable'
+        }));
+      }
+      return { success: false, error: err };
     }
-    return { success: false, error: err };
-  }
+  })();
+
+  mutationQueue = currentOp;
+  return currentOp;
 }
 
 // In-Memory Rate Limiting for Security
@@ -2081,27 +2133,44 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Idempotency & rapid duplicate request detection
-        const idempotencyKey = (req.headers && req.headers['idempotency-key']) || data.idempotencyKey || data.clientOrderId;
-        let dedupKey = null;
-        if (idempotencyKey) {
-          dedupKey = `idemp:${restaurant.id}:${idempotencyKey}`;
+        // Durable Idempotency & rapid duplicate request detection
+        const rawIdempotencyKey = (req.headers && req.headers['idempotency-key']) || data.idempotencyKey || data.clientOrderId;
+        const itemsSig = (data.items || []).map(i => `${i.id}x${i.qty}@${i.variant || ''}`).sort().join(';');
+        const requestPayloadSig = `${data.tableId || 1}:${data.orderType || 'dinein'}:${itemsSig}:${data.notes || ''}`;
+
+        let scopedIdempKey = null;
+        if (rawIdempotencyKey) {
+          scopedIdempKey = `${restaurant.id}:${rawIdempotencyKey}`;
+          db.idempotencyKeys = db.idempotencyKeys || {};
+          const existingIdemp = db.idempotencyKeys[scopedIdempKey];
+          if (existingIdemp) {
+            if (existingIdemp.payloadSig === requestPayloadSig) {
+              res.writeHead(existingIdemp.statusCode || 200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify(existingIdemp.body));
+              return;
+            } else {
+              res.writeHead(409, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                error: 'Idempotency Conflict: This Idempotency-Key was already used with different order parameters.',
+                status: 'idempotency_conflict'
+              }));
+              return;
+            }
+          }
         } else {
-          const itemsSig = (data.items || []).map(i => `${i.id}x${i.qty}@${i.variant || ''}`).sort().join(';');
-          dedupKey = `sig:${restaurant.id}:${data.tableId || 1}:${data.orderType || 'dinein'}:${itemsSig}:${data.notes || ''}`;
-        }
+          // Double-click protection without key (2.5-second sliding window)
+          const dedupKey = `sig:${restaurant.id}:${requestPayloadSig}`;
+          const now = Date.now();
+          for (const [k, v] of recentOrderDeduplications.entries()) {
+            if (now - v.timestamp > 5000) recentOrderDeduplications.delete(k);
+          }
 
-        const now = Date.now();
-        for (const [k, v] of recentOrderDeduplications.entries()) {
-          if (now - v.timestamp > 15000) recentOrderDeduplications.delete(k);
-        }
-
-        const existingEntry = recentOrderDeduplications.get(dedupKey);
-        if (existingEntry && (now - existingEntry.timestamp < 10000)) {
-          console.log(`ℹ️ [TipTap Deduplication] Duplicate order submission detected (${dedupKey}). Returning existing order.`);
-          res.writeHead(existingEntry.statusCode, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(existingEntry.body));
-          return;
+          const existingEntry = recentOrderDeduplications.get(dedupKey);
+          if (existingEntry && (now - existingEntry.timestamp < 2500)) {
+            res.writeHead(existingEntry.statusCode, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(existingEntry.body));
+            return;
+          }
         }
 
         const newId = `ORD-${Date.now().toString().slice(-4)}`;
@@ -2154,8 +2223,27 @@ const server = http.createServer(async (req, res) => {
         let responsePayload = null;
         let statusCode = 201;
         const sseEvents = [];
+        let isIdempotentReplay = false;
+        let isConflict = false;
 
         const persisted = await persistDbChange(res, async () => {
+          // Check if concurrent request with same idempotency key committed while we waited in queue
+          if (scopedIdempKey) {
+            db.idempotencyKeys = db.idempotencyKeys || {};
+            const queuedExisting = db.idempotencyKeys[scopedIdempKey];
+            if (queuedExisting) {
+              if (queuedExisting.payloadSig === requestPayloadSig) {
+                responsePayload = queuedExisting.body;
+                statusCode = queuedExisting.statusCode || 200;
+                isIdempotentReplay = true;
+                return { skipSave: true };
+              } else {
+                isConflict = true;
+                return { skipSave: true };
+              }
+            }
+          }
+
           // Check if Table already has an active, unpaid dining session (Round 2+ Multi-Round KOT)
           if (orderType === 'dinein') {
             const activeOrder = restaurant.orders.find(o => 
@@ -2228,6 +2316,17 @@ const server = http.createServer(async (req, res) => {
               });
               sseEvents.push({ event: 'order:update', data: activeOrder });
               sseEvents.push({ event: 'table:update', data: restaurant.tables });
+
+              if (scopedIdempKey) {
+                db.idempotencyKeys = db.idempotencyKeys || {};
+                db.idempotencyKeys[scopedIdempKey] = {
+                  orderId: responsePayload.id,
+                  statusCode,
+                  body: responsePayload,
+                  payloadSig: requestPayloadSig,
+                  createdAt: new Date().toISOString()
+                };
+              }
               return;
             }
           }
@@ -2300,21 +2399,46 @@ const server = http.createServer(async (req, res) => {
           responsePayload = newOrder;
           statusCode = 201;
 
+          if (scopedIdempKey) {
+            db.idempotencyKeys = db.idempotencyKeys || {};
+            db.idempotencyKeys[scopedIdempKey] = {
+              orderId: responsePayload.id,
+              statusCode,
+              body: responsePayload,
+              payloadSig: requestPayloadSig,
+              createdAt: new Date().toISOString()
+            };
+          }
+
           sseEvents.push({ event: 'order:new', data: newOrder });
           sseEvents.push({ event: 'table:update', data: restaurant.tables });
         });
 
         if (!persisted.success) return;
 
-        // Cache in deduplication map upon acknowledged write
-        recentOrderDeduplications.set(dedupKey, {
-          timestamp: Date.now(),
-          statusCode,
-          body: responsePayload
-        });
+        if (isConflict) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Idempotency Conflict: This Idempotency-Key was already used with different order parameters.',
+            status: 'idempotency_conflict'
+          }));
+          return;
+        }
 
-        // Broadcast real-time SSE events after persistence
-        sseEvents.forEach(evt => broadcastEvent(restaurant.id, evt.event, evt.data));
+        // Cache in short-term deduplication map
+        if (!scopedIdempKey) {
+          const dedupKey = `sig:${restaurant.id}:${requestPayloadSig}`;
+          recentOrderDeduplications.set(dedupKey, {
+            timestamp: Date.now(),
+            statusCode,
+            body: responsePayload
+          });
+        }
+
+        // Broadcast real-time SSE events after persistence (only for new actions, not replays)
+        if (!isIdempotentReplay) {
+          sseEvents.forEach(evt => broadcastEvent(restaurant.id, evt.event, evt.data));
+        }
 
         res.writeHead(statusCode, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(responsePayload));
