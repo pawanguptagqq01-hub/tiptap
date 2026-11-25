@@ -3416,12 +3416,13 @@ const server = http.createServer(async (req, res) => {
           }
           capturedAmount = rawAmount;
 
-          // If orderEntity provides amount_paid, ensure it does not conflict with paymentEntity.amount
-          if (orderEntity && orderEntity.amount_paid !== undefined && orderEntity.amount_paid !== null) {
-            if (typeof orderEntity.amount_paid !== 'number' || !Number.isSafeInteger(orderEntity.amount_paid) || orderEntity.amount_paid !== capturedAmount) {
+          // If orderEntity has its own amount_paid property, require safe integer strictly equal to paymentEntity.amount
+          if (orderEntity && Object.prototype.hasOwnProperty.call(orderEntity, 'amount_paid')) {
+            const ordAmountPaid = orderEntity.amount_paid;
+            if (typeof ordAmountPaid !== 'number' || !Number.isSafeInteger(ordAmountPaid) || ordAmountPaid !== capturedAmount) {
               res.writeHead(400, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({
-                error: `Payload inconsistency: orderEntity.amount_paid (${orderEntity.amount_paid}) does not match paymentEntity.amount (${capturedAmount}).`
+                error: `Payload inconsistency: orderEntity.amount_paid (${ordAmountPaid}) is invalid or does not match paymentEntity.amount (${capturedAmount}).`
               }));
               return;
             }

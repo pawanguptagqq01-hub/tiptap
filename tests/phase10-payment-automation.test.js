@@ -704,6 +704,74 @@ async function runPhase10Tests() {
     assert(negAmtRes.statusCode === 400, 'order.paid webhook with negative amount rejected with HTTP 400');
     assert(negAmtRes.data.error && negAmtRes.data.error.includes('paymentEntity.amount is mandatory'), 'Error confirms negative amount rejected');
 
+    // 5q. orderEntity.amount_paid explicitly null rejected
+    const nullOrdAmtPayload = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        order: { entity: { id: rzpOrder3Id, amount: 29400, amount_paid: null, currency: 'INR', status: 'paid' } },
+        payment: { entity: { id: `pay_nullordamt_${Date.now()}`, order_id: rzpOrder3Id, amount: 29400, currency: 'INR', status: 'captured', method: 'upi' } }
+      }
+    });
+    const nullOrdAmtSig = computeWebhookSignature(nullOrdAmtPayload);
+    const nullOrdAmtRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': nullOrdAmtSig,
+      'x-razorpay-event-id': `evt_nullordamt_${Date.now()}`
+    }, nullOrdAmtPayload);
+    assert(nullOrdAmtRes.statusCode === 400, 'order.paid webhook with null orderEntity.amount_paid rejected with HTTP 400');
+    assert(nullOrdAmtRes.data.error && nullOrdAmtRes.data.error.includes('orderEntity.amount_paid'), 'Error confirms null orderEntity.amount_paid rejected');
+
+    // 5r. orderEntity.amount_paid numeric string rejected
+    const strOrdAmtPayload = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        order: { entity: { id: rzpOrder3Id, amount: 29400, amount_paid: '29400', currency: 'INR', status: 'paid' } },
+        payment: { entity: { id: `pay_strordamt_${Date.now()}`, order_id: rzpOrder3Id, amount: 29400, currency: 'INR', status: 'captured', method: 'upi' } }
+      }
+    });
+    const strOrdAmtSig = computeWebhookSignature(strOrdAmtPayload);
+    const strOrdAmtRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': strOrdAmtSig,
+      'x-razorpay-event-id': `evt_strordamt_${Date.now()}`
+    }, strOrdAmtPayload);
+    assert(strOrdAmtRes.statusCode === 400, 'order.paid webhook with numeric string orderEntity.amount_paid rejected with HTTP 400');
+    assert(strOrdAmtRes.data.error && strOrdAmtRes.data.error.includes('orderEntity.amount_paid'), 'Error confirms string orderEntity.amount_paid rejected');
+
+    // 5s. orderEntity.amount_paid fractional value rejected
+    const fracOrdAmtPayload = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        order: { entity: { id: rzpOrder3Id, amount: 29400, amount_paid: 29400.5, currency: 'INR', status: 'paid' } },
+        payment: { entity: { id: `pay_fracordamt_${Date.now()}`, order_id: rzpOrder3Id, amount: 29400, currency: 'INR', status: 'captured', method: 'upi' } }
+      }
+    });
+    const fracOrdAmtSig = computeWebhookSignature(fracOrdAmtPayload);
+    const fracOrdAmtRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': fracOrdAmtSig,
+      'x-razorpay-event-id': `evt_fracordamt_${Date.now()}`
+    }, fracOrdAmtPayload);
+    assert(fracOrdAmtRes.statusCode === 400, 'order.paid webhook with fractional orderEntity.amount_paid rejected with HTTP 400');
+    assert(fracOrdAmtRes.data.error && fracOrdAmtRes.data.error.includes('orderEntity.amount_paid'), 'Error confirms fractional orderEntity.amount_paid rejected');
+
+    // 5t. orderEntity.amount_paid mismatched value rejected
+    const mismatchOrdAmtPayload = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        order: { entity: { id: rzpOrder3Id, amount: 29400, amount_paid: 20000, currency: 'INR', status: 'paid' } },
+        payment: { entity: { id: `pay_mismatchordamt_${Date.now()}`, order_id: rzpOrder3Id, amount: 29400, currency: 'INR', status: 'captured', method: 'upi' } }
+      }
+    });
+    const mismatchOrdAmtSig = computeWebhookSignature(mismatchOrdAmtPayload);
+    const mismatchOrdAmtRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': mismatchOrdAmtSig,
+      'x-razorpay-event-id': `evt_mismatchordamt_${Date.now()}`
+    }, mismatchOrdAmtPayload);
+    assert(mismatchOrdAmtRes.statusCode === 400, 'order.paid webhook with mismatched orderEntity.amount_paid rejected with HTTP 400');
+    assert(mismatchOrdAmtRes.data.error && mismatchOrdAmtRes.data.error.includes('orderEntity.amount_paid'), 'Error confirms mismatched orderEntity.amount_paid rejected');
+
     // PROOF: Verify order3 remained unpaid and zero customer spend was incremented after all invalid amount attempts
     const checkOrd3State = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${order3Id}`);
     const sec5OrdDoc = (checkOrd3State.data.orders || []).find(o => o.id === order3Id);
