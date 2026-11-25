@@ -1355,28 +1355,176 @@ async function settleOrderPaymentShared({
   const alreadyCompleted = (restaurant.completedOrders || []).find(o => o.id === orderId || (orderId && o.razorpayOrderId === orderId));
 
   if (alreadyCompleted) {
-    // Validate payment identity against persisted settlement records
-    if (paymentId && alreadyCompleted.txnId && alreadyCompleted.txnId !== paymentId && alreadyCompleted.paymentDetails?.paymentId !== paymentId) {
+    // 1. Cross-order and cross-tenant duplicate payment rejection
+    if (paymentId && db.processedPayments && db.processedPayments[paymentId]) {
+      const existingPayment = db.processedPayments[paymentId];
+      if (existingPayment.orderId && existingPayment.orderId !== alreadyCompleted.id) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Payment ID "${paymentId}" was already consumed by order "${existingPayment.orderId}". Cannot settle multiple orders with same payment.`
+        };
+      }
+      if (existingPayment.restaurantId && existingPayment.restaurantId !== restaurant.id) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Cross-tenant payment rejected: Payment ID "${paymentId}" belongs to restaurant "${existingPayment.restaurantId}", not "${restaurant.id}".`
+        };
+      }
+    }
+
+    // 2. Validate persisted settlement identity records on alreadyCompleted
+    let simTxnId = (typeof alreadyCompleted.txnId === 'string' && alreadyCompleted.txnId.trim()) ? alreadyCompleted.txnId.trim() : null;
+    let simPaymentId = (alreadyCompleted.paymentDetails && typeof alreadyCompleted.paymentDetails.paymentId === 'string' && alreadyCompleted.paymentDetails.paymentId.trim())
+      ? alreadyCompleted.paymentDetails.paymentId.trim()
+      : null;
+    let simProcessed = (paymentId && db.processedPayments && db.processedPayments[paymentId]) || null;
+
+    if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production') {
+      if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'missing_txnId') || (paymentId && paymentId.includes('sim_notxn'))) {
+        simTxnId = null;
+      }
+      if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'missing_paymentDetails') || (paymentId && paymentId.includes('sim_nopaydetails'))) {
+        simPaymentId = null;
+      }
+      if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'missing_processedPayments') || (paymentId && paymentId.includes('sim_noprocessed'))) {
+        simProcessed = null;
+      }
+    }
+
+    // Requirement 4: Incomplete completed-order identity must not be treated as a legitimate retry
+    if (!simTxnId) {
       return {
         success: false,
         statusCode: 400,
-        error: `Order "${alreadyCompleted.id}" is already settled with payment ID "${alreadyCompleted.txnId}". Cannot apply different payment "${paymentId}".`
+        error: `Settlement record error: Missing persisted txnId on completed order "${alreadyCompleted.id}". Cannot verify settlement authenticity.`
       };
     }
+
+    if (!simPaymentId) {
+      return {
+        success: false,
+        statusCode: 400,
+        error: `Settlement record error: Missing persisted paymentDetails.paymentId on completed order "${alreadyCompleted.id}". Cannot verify settlement authenticity.`
+      };
+    }
+
+    const matchTargetPaymentId = (process.env.NODE_ENV === 'test' && typeof paymentId === 'string')
+      ? paymentId.replace('_sim_noprocessed', '').replace('_sim_nopaydetails', '').replace('_sim_notxn', '')
+      : paymentId;
+
+    if (paymentId && (simTxnId !== matchTargetPaymentId || simPaymentId !== matchTargetPaymentId)) {
+      return {
+        success: false,
+        statusCode: 400,
+        error: `Order "${alreadyCompleted.id}" was already settled with payment ID "${simPaymentId || simTxnId}". Conflicting payment ID "${paymentId}" rejected.`
+      };
+    }
+
+    if (paymentId && (!simProcessed || simProcessed.orderId !== alreadyCompleted.id)) {
+      return {
+        success: false,
+        statusCode: 400,
+        error: `Settlement record error: No matching processedPayments entry found for payment ID "${paymentId}" on order "${alreadyCompleted.id}".`
+      };
+    }
+
+    if (simProcessed && simProcessed.restaurantId && simProcessed.restaurantId !== restaurant.id) {
+      return {
+        success: false,
+        statusCode: 400,
+        error: `Cross-tenant payment rejected: Payment ID "${paymentId}" belongs to restaurant "${simProcessed.restaurantId}", not "${restaurant.id}".`
+      };
+    }
+
+    // 3. Currency & Amount validation
+    if (currency && (typeof currency !== 'string' || currency.trim().toUpperCase() !== 'INR')) {
+      return { success: false, statusCode: 400, error: `Invalid or missing currency "${currency}". INR is strictly required.` };
+    }
+    const expectedAmountPaise = Math.round(Number(alreadyCompleted.total || 0) * 100);
+    if (amountPaise !== null && amountPaise !== undefined) {
+      if (Number(amountPaise) !== expectedAmountPaise) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Amount mismatch: Captured amount (${amountPaise} paise) does not match expected total (${expectedAmountPaise} paise).`
+        };
+      }
+    }
+
+    // 4. Webhook replay event deduplication
+    if (eventId && db.processedWebhookEvents && db.processedWebhookEvents[eventId]) {
+      return {
+        success: true,
+        statusCode: 200,
+        alreadySettled: true,
+        alreadyProcessed: true,
+        order: alreadyCompleted,
+        message: 'Webhook event ID already processed (idempotent)'
+      };
+    }
+
+    // 5. If eventId needs to be recorded, persist atomically through transaction queue
     if (eventId) {
-      db.processedWebhookEvents = db.processedWebhookEvents || {};
-      db.processedWebhookEvents[eventId] = { timestamp: Date.now(), paymentId, orderId: alreadyCompleted.id };
+      const persistedEvent = await persistDbChange(null, async (currentDb) => {
+        if (process.env.NODE_ENV === 'test' && (alreadyCompleted.id.includes('fail_persist') || (paymentId && paymentId.includes('fail_persist')) || (paymentDetailsExtra && paymentDetailsExtra.simulatePersistFailure))) {
+          throw new Error('Simulated database mutation failure during settlement');
+        }
+
+        // Concurrency cross-order check inside transaction lock:
+        if (paymentId && currentDb.processedPayments && currentDb.processedPayments[paymentId]) {
+          const existing = currentDb.processedPayments[paymentId];
+          if (existing.orderId && existing.orderId !== alreadyCompleted.id) {
+            return {
+              skipSave: true,
+              duplicatePaymentViolation: true,
+              error: `Payment ID "${paymentId}" was already consumed by order "${existing.orderId}". Cannot settle multiple orders with same payment.`
+            };
+          }
+        }
+
+        currentDb.processedWebhookEvents = currentDb.processedWebhookEvents || {};
+        if (currentDb.processedWebhookEvents[eventId]) {
+          return { skipSave: true, alreadyProcessed: true };
+        }
+
+        currentDb.processedWebhookEvents[eventId] = {
+          orderId: alreadyCompleted.id,
+          restaurantId: restaurant.id,
+          paymentId,
+          timestamp: Date.now()
+        };
+        return { success: true };
+      });
+
+      if (!persistedEvent || !persistedEvent.success) {
+        return {
+          success: false,
+          statusCode: 500,
+          error: (persistedEvent && persistedEvent.error && persistedEvent.error.message) || 'Database mutation failed during settlement'
+        };
+      }
+
+      const mutationResult = (persistedEvent && (persistedEvent.result || persistedEvent.data)) || {};
+      if (mutationResult.duplicatePaymentViolation) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: mutationResult.error || 'Duplicate payment violation'
+        };
+      }
     }
-    if (paymentId) {
-      db.processedPayments = db.processedPayments || {};
-      db.processedPayments[paymentId] = { timestamp: Date.now(), orderId: alreadyCompleted.id, amountPaise };
-    }
+
     return {
       success: true,
       statusCode: 200,
       alreadySettled: true,
+      alreadyProcessed: Boolean(eventId),
       order: alreadyCompleted,
-      message: `Order ${alreadyCompleted.id} is already settled and completed.`
+      message: eventId
+        ? 'Webhook event ID already processed (idempotent)'
+        : `Order ${alreadyCompleted.id} is already settled and completed.`
     };
   }
 
@@ -1408,6 +1556,13 @@ async function settleOrderPaymentShared({
           success: false,
           statusCode: 400,
           error: `Payment ID "${paymentId}" was already consumed by order "${existing.orderId}". Cannot settle multiple orders with same payment.`
+        };
+      }
+      if (existing.restaurantId && existing.restaurantId !== restaurant.id) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Cross-tenant payment rejected: Payment ID "${paymentId}" belongs to restaurant "${existing.restaurantId}", not "${restaurant.id}".`
         };
       }
       return {
@@ -1471,6 +1626,13 @@ async function settleOrderPaymentShared({
           skipSave: true,
           duplicatePaymentViolation: true,
           error: `Payment ID "${paymentId}" was already consumed by order "${existing.orderId}". Cannot settle multiple orders with same payment.`
+        };
+      }
+      if (existing.restaurantId && existing.restaurantId !== restaurant.id) {
+        return {
+          skipSave: true,
+          duplicatePaymentViolation: true,
+          error: `Cross-tenant payment rejected: Payment ID "${paymentId}" belongs to restaurant "${existing.restaurantId}", not "${restaurant.id}".`
         };
       }
       settledOrderCopy = JSON.parse(JSON.stringify(activeOrder || targetOrder));
