@@ -562,6 +562,40 @@ async function runPhase10Tests() {
     }, whNoOrdIdPayload);
     assert(whNoOrdIdRes.statusCode === 400, 'Webhook payment entity missing order_id rejected with HTTP 400');
 
+    // 5j. Finding 2: Webhook order.paid missing paymentEntity.amount rejected even when orderEntity.amount_paid is correct
+    const missingPayAmtWithOrderAmtPayload = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        order: {
+          entity: {
+            id: rzpOrder3Id,
+            amount: 29400,
+            amount_paid: 29400,
+            currency: 'INR',
+            status: 'paid'
+          }
+        },
+        payment: {
+          entity: {
+            id: `pay_noamt_${Date.now()}`,
+            order_id: rzpOrder3Id,
+            // paymentEntity.amount is completely missing/undefined!
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const missingPayAmtSig = computeWebhookSignature(missingPayAmtWithOrderAmtPayload);
+    const missingPayAmtRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': missingPayAmtSig,
+      'x-razorpay-event-id': `evt_noamt_${Date.now()}`
+    }, missingPayAmtWithOrderAmtPayload);
+    assert(missingPayAmtRes.statusCode === 400, 'order.paid webhook missing paymentEntity.amount rejected with HTTP 400 even when orderEntity.amount_paid is correct');
+    assert(missingPayAmtRes.data.error && missingPayAmtRes.data.error.includes('paymentEntity.amount is mandatory'), 'Error confirms paymentEntity.amount cannot be substituted by orderEntity.amount_paid');
+
     // ----------------------------------------------------
     // SECTION 6: FAILED PAYMENT ACKNOWLEDGEMENT
     // ----------------------------------------------------
@@ -894,6 +928,39 @@ async function runPhase10Tests() {
     // 7t-4: Verify sensitive fields are NOT leaked in completed order response
     assert(!legitCompRetryRes.data.order.customerPhone, 'Sanitized completed order does not leak customer phone');
     assert(!legitCompRetryRes.data.order.serviceRequests, 'Sanitized completed order does not leak service requests');
+
+    // 7t-5: Missing txnId on completed order rejected with HTTP 400
+    const missingTxnRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: paymentId3,
+      razorpay_signature: validCheckoutSig,
+      simulateIncompleteRecord: 'missing_txnId'
+    });
+    assert(missingTxnRes.statusCode === 400, 'Completed order with missing txnId rejected with HTTP 400');
+    assert(missingTxnRes.data.error && missingTxnRes.data.error.includes('Missing persisted txnId'), 'Error confirms missing txnId rejected');
+
+    // 7t-6: Missing paymentDetails.paymentId on completed order rejected with HTTP 400
+    const missingDetailsRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: paymentId3,
+      razorpay_signature: validCheckoutSig,
+      simulateIncompleteRecord: 'missing_paymentDetails'
+    });
+    assert(missingDetailsRes.statusCode === 400, 'Completed order with missing paymentDetails.paymentId rejected with HTTP 400');
+    assert(missingDetailsRes.data.error && missingDetailsRes.data.error.includes('Missing persisted paymentDetails'), 'Error confirms missing paymentDetails rejected');
+
+    // 7t-7: Missing processedPayments entry on completed order rejected with HTTP 400
+    const missingProcessedRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: paymentId3,
+      razorpay_signature: validCheckoutSig,
+      simulateIncompleteRecord: 'missing_processedPayments'
+    });
+    assert(missingProcessedRes.statusCode === 400, 'Completed order with missing processedPayments entry rejected with HTTP 400');
+    assert(missingProcessedRes.data.error && missingProcessedRes.data.error.includes('No matching processedPayments entry found'), 'Error confirms missing processedPayments entry rejected');
 
     // ----------------------------------------------------
     // SECTION 8: CROSS-TENANT ORDER BINDING INTEGRITY & WEBHOOK TENANT ENFORCEMENT

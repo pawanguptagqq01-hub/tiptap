@@ -3328,6 +3328,22 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        // Verify cryptographic HMAC signature upfront using available restaurant or environment secret
+        const queryRestId = (searchParams.get('restaurant') || '').trim();
+        const queryRest = queryRestId && db.restaurants && db.restaurants[queryRestId];
+        const upfrontSecret = queryRest?.paymentConfig?.razorpayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET;
+
+        if (upfrontSecret) {
+          const isUpfrontValid = verifyRazorpayWebhookSignature(req.rawBody || rawBody, signature, upfrontSecret);
+          if (!isUpfrontValid) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: 'Unauthorized: Webhook signature verification failed. Invalid signature.'
+            }));
+            return;
+          }
+        }
+
         // Parse event type & entity
         const eventType = data.event;
         let rzpOrderId = null;
@@ -3389,13 +3405,25 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
-          const rawAmount = paymentEntity.amount !== undefined ? paymentEntity.amount : orderEntity?.amount_paid;
+          // Finding 2: Require paymentEntity.amount strictly - never substitute orderEntity.amount_paid
+          const rawAmount = paymentEntity.amount;
           if (rawAmount === undefined || rawAmount === null || typeof Number(rawAmount) !== 'number' || isNaN(Number(rawAmount)) || Number(rawAmount) <= 0) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Webhook payload missing valid captured amount.' }));
+            res.end(JSON.stringify({
+              error: 'Webhook payload missing valid paymentEntity.amount. paymentEntity.amount is mandatory; orderEntity.amount_paid cannot substitute.'
+            }));
             return;
           }
           capturedAmount = Number(rawAmount);
+
+          // If orderEntity provides amount_paid, ensure it does not conflict with paymentEntity.amount
+          if (orderEntity && orderEntity.amount_paid !== undefined && Number(orderEntity.amount_paid) !== capturedAmount) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: `Payload inconsistency: orderEntity.amount_paid (${orderEntity.amount_paid}) does not match paymentEntity.amount (${capturedAmount}).`
+            }));
+            return;
+          }
 
           paymentMethod = paymentEntity.method || 'upi';
           paymentDetailsExtra = {
@@ -3514,7 +3542,6 @@ const server = http.createServer(async (req, res) => {
         }
 
         // Cross-Tenant query parameter rejection
-        const queryRestId = (searchParams.get('restaurant') || '').trim();
         if (queryRestId && queryRestId !== matchedRestId) {
           res.writeHead(403, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
@@ -3651,17 +3678,64 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // 2. Finding 1: Completed order verification protection & legitimate idempotent retry
+        // 2. Finding 1: Completed / already-settled order payment identity verification & legitimate idempotent retry
         if (alreadyCompleted || (targetOrder && (targetOrder.isPaid || targetOrder.paymentStatus === 'paid'))) {
           const settledOrder = alreadyCompleted || targetOrder;
-          const knownPaymentId = settledOrder.txnId || settledOrder.paymentDetails?.paymentId;
-          const knownInDb = db.processedPayments && db.processedPayments[razorpay_payment_id] && db.processedPayments[razorpay_payment_id].orderId === settledOrder.id;
 
-          // Reject conflicting payment attempts on already-settled orders
-          if (knownPaymentId && knownPaymentId !== razorpay_payment_id && !knownInDb) {
+          // In test mode: allow simulating missing settlement records for automated negative testing without permanent mutation
+          let simTxnId = (typeof settledOrder.txnId === 'string' && settledOrder.txnId.trim()) ? settledOrder.txnId.trim() : null;
+          let simPaymentId = (settledOrder.paymentDetails && typeof settledOrder.paymentDetails.paymentId === 'string' && settledOrder.paymentDetails.paymentId.trim())
+            ? settledOrder.paymentDetails.paymentId.trim()
+            : null;
+          let simProcessed = db.processedPayments && db.processedPayments[razorpay_payment_id];
+
+          if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production') {
+            if (data.simulateIncompleteRecord === 'missing_txnId' || razorpay_payment_id.includes('sim_notxn')) {
+              simTxnId = null;
+            }
+            if (data.simulateIncompleteRecord === 'missing_paymentDetails' || razorpay_payment_id.includes('sim_nopaydetails')) {
+              simPaymentId = null;
+            }
+            if (data.simulateIncompleteRecord === 'missing_processedPayments' || razorpay_payment_id.includes('sim_noprocessed')) {
+              simProcessed = null;
+            }
+          }
+
+          // Check 1: Require persisted payment identity on the settled order
+          const orderTxnId = simTxnId;
+          const orderPaymentId = simPaymentId;
+
+          if (!orderTxnId) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
-              error: `Order "${settledOrder.id}" was already settled with payment ID "${knownPaymentId}". Cannot verify with conflicting payment ID "${razorpay_payment_id}".`
+              error: `Settlement record error: Missing persisted txnId on settled order "${settledOrder.id}". Cannot verify settlement authenticity.`
+            }));
+            return;
+          }
+
+          if (!orderPaymentId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: `Settlement record error: Missing persisted paymentDetails.paymentId on settled order "${settledOrder.id}". Cannot verify settlement authenticity.`
+            }));
+            return;
+          }
+
+          // Check 2: Require exact payment ID matching across all persisted settlement records
+          if (orderTxnId !== razorpay_payment_id || orderPaymentId !== razorpay_payment_id) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: `Order "${settledOrder.id}" was already settled with payment ID "${orderPaymentId || orderTxnId}". Conflicting payment ID "${razorpay_payment_id}" rejected.`
+            }));
+            return;
+          }
+
+          // Check 3: Require matching entry in processedPayments persistent storage
+          const processedEntry = simProcessed;
+          if (!processedEntry || processedEntry.orderId !== settledOrder.id) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: `Settlement record error: No matching processedPayments entry found for payment ID "${razorpay_payment_id}" on order "${settledOrder.id}".`
             }));
             return;
           }
@@ -3680,7 +3754,7 @@ const server = http.createServer(async (req, res) => {
               total: settledOrder.total,
               isPaid: true,
               paymentStatus: 'paid',
-              txnId: settledOrder.txnId || razorpay_payment_id,
+              txnId: orderTxnId,
               paidAt: settledOrder.paidAt
             },
             message: 'Payment already settled'
