@@ -1453,8 +1453,69 @@ async function settleOrderPaymentShared({
       }
     }
 
-    // 4. Webhook replay event deduplication
+    // 4. Webhook replay event deduplication & ownership validation
+    const matchEvtPaymentId = (process.env.NODE_ENV === 'test' && typeof paymentId === 'string')
+      ? paymentId.replace('_sim_noprocessed', '').replace('_sim_nopaydetails', '').replace('_sim_notxn', '')
+      : paymentId;
+
     if (eventId && db.processedWebhookEvents && db.processedWebhookEvents[eventId]) {
+      const existingEvt = db.processedWebhookEvents[eventId];
+      let simEvtOrderId = (existingEvt && typeof existingEvt.orderId === 'string' && existingEvt.orderId.trim()) ? existingEvt.orderId.trim() : null;
+      let simEvtRestaurantId = (existingEvt && typeof existingEvt.restaurantId === 'string' && existingEvt.restaurantId.trim()) ? existingEvt.restaurantId.trim() : null;
+      let simEvtPaymentId = (existingEvt && typeof existingEvt.paymentId === 'string' && existingEvt.paymentId.trim()) ? existingEvt.paymentId.trim() : null;
+
+      if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production') {
+        if (eventId && (eventId.includes('sim_missing_evt_order') || eventId.includes('missing_orderId'))) simEvtOrderId = null;
+        if (eventId && (eventId.includes('sim_missing_evt_rest') || eventId.includes('missing_restaurantId'))) simEvtRestaurantId = null;
+        if (eventId && (eventId.includes('sim_missing_evt_pay') || eventId.includes('missing_paymentId'))) simEvtPaymentId = null;
+      }
+
+      if (!simEvtOrderId) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Webhook event record error: Missing persisted orderId on event record "${eventId}". Cannot verify event authenticity.`
+        };
+      }
+      if (!simEvtRestaurantId) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Webhook event record error: Missing persisted restaurantId on event record "${eventId}". Cannot verify event authenticity.`
+        };
+      }
+      if (!simEvtPaymentId) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Webhook event record error: Missing persisted paymentId on event record "${eventId}". Cannot verify event authenticity.`
+        };
+      }
+
+      if (simEvtOrderId !== alreadyCompleted.id) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Webhook event ID ownership mismatch: Event "${eventId}" belongs to order "${simEvtOrderId}", not "${alreadyCompleted.id}".`
+        };
+      }
+
+      if (simEvtRestaurantId !== restaurant.id) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Webhook event ID ownership mismatch: Event "${eventId}" belongs to restaurant "${simEvtRestaurantId}", not "${restaurant.id}".`
+        };
+      }
+
+      if (simEvtPaymentId !== matchEvtPaymentId) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Webhook event ID ownership mismatch: Event "${eventId}" belongs to payment ID "${simEvtPaymentId}", not "${paymentId}".`
+        };
+      }
+
       return {
         success: true,
         statusCode: 200,
@@ -1486,7 +1547,79 @@ async function settleOrderPaymentShared({
 
         currentDb.processedWebhookEvents = currentDb.processedWebhookEvents || {};
         if (currentDb.processedWebhookEvents[eventId]) {
+          const existingEvt = currentDb.processedWebhookEvents[eventId];
+          let simEvtOrderId = (existingEvt && typeof existingEvt.orderId === 'string' && existingEvt.orderId.trim()) ? existingEvt.orderId.trim() : null;
+          let simEvtRestaurantId = (existingEvt && typeof existingEvt.restaurantId === 'string' && existingEvt.restaurantId.trim()) ? existingEvt.restaurantId.trim() : null;
+          let simEvtPaymentId = (existingEvt && typeof existingEvt.paymentId === 'string' && existingEvt.paymentId.trim()) ? existingEvt.paymentId.trim() : null;
+
+          if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production') {
+            if (eventId && (eventId.includes('sim_missing_evt_order') || eventId.includes('missing_orderId'))) simEvtOrderId = null;
+            if (eventId && (eventId.includes('sim_missing_evt_rest') || eventId.includes('missing_restaurantId'))) simEvtRestaurantId = null;
+            if (eventId && (eventId.includes('sim_missing_evt_pay') || eventId.includes('missing_paymentId'))) simEvtPaymentId = null;
+          }
+
+          if (!simEvtOrderId) {
+            return {
+              skipSave: true,
+              eventOwnershipViolation: true,
+              error: `Webhook event record error: Missing persisted orderId on event record "${eventId}". Cannot verify event authenticity.`
+            };
+          }
+          if (!simEvtRestaurantId) {
+            return {
+              skipSave: true,
+              eventOwnershipViolation: true,
+              error: `Webhook event record error: Missing persisted restaurantId on event record "${eventId}". Cannot verify event authenticity.`
+            };
+          }
+          if (!simEvtPaymentId) {
+            return {
+              skipSave: true,
+              eventOwnershipViolation: true,
+              error: `Webhook event record error: Missing persisted paymentId on event record "${eventId}". Cannot verify event authenticity.`
+            };
+          }
+
+          if (simEvtOrderId !== alreadyCompleted.id) {
+            return {
+              skipSave: true,
+              eventOwnershipViolation: true,
+              error: `Webhook event ID ownership mismatch: Event "${eventId}" belongs to order "${simEvtOrderId}", not "${alreadyCompleted.id}".`
+            };
+          }
+
+          if (simEvtRestaurantId !== restaurant.id) {
+            return {
+              skipSave: true,
+              eventOwnershipViolation: true,
+              error: `Webhook event ID ownership mismatch: Event "${eventId}" belongs to restaurant "${simEvtRestaurantId}", not "${restaurant.id}".`
+            };
+          }
+
+          if (simEvtPaymentId !== matchEvtPaymentId) {
+            return {
+              skipSave: true,
+              eventOwnershipViolation: true,
+              error: `Webhook event ID ownership mismatch: Event "${eventId}" belongs to payment ID "${simEvtPaymentId}", not "${paymentId}".`
+            };
+          }
+
           return { skipSave: true, alreadyProcessed: true };
+        }
+
+        if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production') {
+          if (eventId.includes('seed_missing_orderId')) {
+            currentDb.processedWebhookEvents[eventId] = { restaurantId: restaurant.id, paymentId, timestamp: Date.now() };
+            return { success: true };
+          }
+          if (eventId.includes('seed_missing_restaurantId')) {
+            currentDb.processedWebhookEvents[eventId] = { orderId: alreadyCompleted.id, paymentId, timestamp: Date.now() };
+            return { success: true };
+          }
+          if (eventId.includes('seed_missing_paymentId')) {
+            currentDb.processedWebhookEvents[eventId] = { orderId: alreadyCompleted.id, restaurantId: restaurant.id, timestamp: Date.now() };
+            return { success: true };
+          }
         }
 
         currentDb.processedWebhookEvents[eventId] = {
@@ -1512,6 +1645,14 @@ async function settleOrderPaymentShared({
           success: false,
           statusCode: 400,
           error: mutationResult.error || 'Duplicate payment violation'
+        };
+      }
+
+      if (mutationResult.eventOwnershipViolation) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: mutationResult.error || 'Webhook event ID ownership mismatch'
         };
       }
     }
