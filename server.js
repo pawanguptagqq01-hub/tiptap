@@ -3405,24 +3405,26 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
-          // Finding 2: Require paymentEntity.amount strictly - never substitute orderEntity.amount_paid
+          // Strict paymentEntity.amount type validation: Safe positive integer in paise, never substitute orderEntity.amount_paid
           const rawAmount = paymentEntity.amount;
-          if (rawAmount === undefined || rawAmount === null || typeof Number(rawAmount) !== 'number' || isNaN(Number(rawAmount)) || Number(rawAmount) <= 0) {
+          if (typeof rawAmount !== 'number' || !Number.isSafeInteger(rawAmount) || rawAmount <= 0) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
-              error: 'Webhook payload missing valid paymentEntity.amount. paymentEntity.amount is mandatory; orderEntity.amount_paid cannot substitute.'
+              error: 'Webhook payload missing valid paymentEntity.amount. paymentEntity.amount is mandatory and must be a safe positive integer (in paise); orderEntity.amount_paid cannot substitute.'
             }));
             return;
           }
-          capturedAmount = Number(rawAmount);
+          capturedAmount = rawAmount;
 
           // If orderEntity provides amount_paid, ensure it does not conflict with paymentEntity.amount
-          if (orderEntity && orderEntity.amount_paid !== undefined && Number(orderEntity.amount_paid) !== capturedAmount) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              error: `Payload inconsistency: orderEntity.amount_paid (${orderEntity.amount_paid}) does not match paymentEntity.amount (${capturedAmount}).`
-            }));
-            return;
+          if (orderEntity && orderEntity.amount_paid !== undefined && orderEntity.amount_paid !== null) {
+            if (typeof orderEntity.amount_paid !== 'number' || !Number.isSafeInteger(orderEntity.amount_paid) || orderEntity.amount_paid !== capturedAmount) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                error: `Payload inconsistency: orderEntity.amount_paid (${orderEntity.amount_paid}) does not match paymentEntity.amount (${capturedAmount}).`
+              }));
+              return;
+            }
           }
 
           paymentMethod = paymentEntity.method || 'upi';
@@ -3480,12 +3482,12 @@ const server = http.createServer(async (req, res) => {
           currency = rawCurrency.trim().toUpperCase();
 
           const rawAmount = paymentEntity.amount;
-          if (rawAmount === undefined || rawAmount === null || typeof Number(rawAmount) !== 'number' || isNaN(Number(rawAmount)) || Number(rawAmount) <= 0) {
+          if (typeof rawAmount !== 'number' || !Number.isSafeInteger(rawAmount) || rawAmount <= 0) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Webhook payload missing valid captured amount.' }));
+            res.end(JSON.stringify({ error: 'Webhook payload missing valid captured amount. Amount must be a safe positive integer in paise.' }));
             return;
           }
-          capturedAmount = Number(rawAmount);
+          capturedAmount = rawAmount;
 
           paymentMethod = paymentEntity.method || 'upi';
           paymentDetailsExtra = {
