@@ -1326,6 +1326,336 @@ async function runPhase10Tests() {
     assert(settleADiffRes.data.error && settleADiffRes.data.error.includes('already settled with payment ID'), 'Rejection error confirms conflicting payment ID rejected');
 
     // ----------------------------------------------------
+    // SECTION 9d: TARGETED REMEDIATION REGRESSION TESTS (A THROUGH E)
+    // ----------------------------------------------------
+    console.log('\n--- 9d. TARGETED REMEDIATION REGRESSION TESTS (A THROUGH E) ---');
+
+    // TEST A: Cross-order duplicate payment race
+    console.log('\n  [TEST A]: Cross-order duplicate payment race');
+    const orderRaceARes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 31,
+      tableName: 'Table 31',
+      customerPhone: '9876543221',
+      customerName: 'Racer A',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderRaceAId = orderRaceARes.data.id;
+    const payOrderRaceARes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderRaceAId });
+    const rzpOrderRaceAId = payOrderRaceARes.data.razorpayOrderId;
+
+    const orderRaceBRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 32,
+      tableName: 'Table 32',
+      customerPhone: '9876543222',
+      customerName: 'Racer B',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderRaceBId = orderRaceBRes.data.id;
+    const payOrderRaceBRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderRaceBId });
+    const rzpOrderRaceBId = payOrderRaceBRes.data.razorpayOrderId;
+
+    const sharedRacePayId = `pay_race_shared_${Date.now()}`;
+    const sigRaceA = computeCheckoutSignature(rzpOrderRaceAId, sharedRacePayId);
+    const sigRaceB = computeCheckoutSignature(rzpOrderRaceBId, sharedRacePayId);
+
+    // Concurrently fire settlement for both distinct orders using identical payment ID
+    const [raceResA, raceResB] = await Promise.all([
+      makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+        orderId: orderRaceAId,
+        razorpay_order_id: rzpOrderRaceAId,
+        razorpay_payment_id: sharedRacePayId,
+        razorpay_signature: sigRaceA
+      }),
+      makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+        orderId: orderRaceBId,
+        razorpay_order_id: rzpOrderRaceBId,
+        razorpay_payment_id: sharedRacePayId,
+        razorpay_signature: sigRaceB
+      })
+    ]);
+
+    const winnerRes = raceResA.statusCode === 200 ? raceResA : raceResB;
+    const loserRes = raceResA.statusCode === 200 ? raceResB : raceResA;
+    const winningOrderId = raceResA.statusCode === 200 ? orderRaceAId : orderRaceBId;
+    const losingOrderId = raceResA.statusCode === 200 ? orderRaceBId : orderRaceAId;
+    const winningPhone = raceResA.statusCode === 200 ? '9876543221' : '9876543222';
+    const losingPhone = raceResA.statusCode === 200 ? '9876543222' : '9876543221';
+
+    assert(winnerRes.statusCode === 200 && winnerRes.data.verified === true, 'Test A: Exactly one order wins the race and settles successfully with HTTP 200');
+    assert(loserRes.statusCode === 400 && loserRes.data.error && loserRes.data.error.includes('Cannot settle multiple orders with same payment'), 'Test A: Losing order is strictly rejected with HTTP 400 duplicate payment violation');
+    assert(loserRes.data.verified !== true && loserRes.data.success !== true, 'Test A: Losing order receives no false success response');
+
+    // Verify losing order remains unpaid
+    const checkLosingOrderState = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${losingOrderId}`);
+    const losingOrdDoc = (checkLosingOrderState.data.orders || []).find(o => o.id === losingOrderId);
+    assert(losingOrdDoc && losingOrdDoc.isPaid === false && losingOrdDoc.paymentStatus !== 'paid', 'Test A: Losing order remains unpaid (isPaid: false) in database');
+
+    // Verify CRM lifetime spend incremented ONLY for the winning order
+    const custRaceStateAfter = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custWinnerAfter = (custRaceStateAfter.data.customers || []).find(c => c.phone === winningPhone);
+    const custLoserAfter = (custRaceStateAfter.data.customers || []).find(c => c.phone === losingPhone);
+    assert((custWinnerAfter ? custWinnerAfter.totalSpent : 0) === 294, 'Test A: Customer spend incremented for legitimate winning settlement');
+    assert((custLoserAfter ? custLoserAfter.totalSpent : 0) === 0, 'Test A: Zero customer spend incremented for rejected settlement');
+
+    // Verify payment records in db point to exactly one order
+    const currentDbSnapshotA = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(currentDbSnapshotA.processedPayments && currentDbSnapshotA.processedPayments[sharedRacePayId] && currentDbSnapshotA.processedPayments[sharedRacePayId].orderId === winningOrderId, 'Test A: Processed payment records point to exactly one order (the winning order)');
+
+    // TEST B: Same-order duplicate delivery
+    console.log('\n  [TEST B]: Same-order duplicate delivery');
+    const orderDupRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 33,
+      tableName: 'Table 33',
+      customerPhone: '9876543223',
+      customerName: 'Dup User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderDupId = orderDupRes.data.id;
+    const payOrderDupRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderDupId });
+    const rzpOrderDupId = payOrderDupRes.data.razorpayOrderId;
+    const dupPaymentId = `pay_dup_deliv_${Date.now()}`;
+
+    const dupWhPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: dupPaymentId,
+            order_id: rzpOrderDupId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const dupWhSig = computeWebhookSignature(dupWhPayload);
+    const dupCheckoutSig = computeCheckoutSignature(rzpOrderDupId, dupPaymentId);
+
+    // Get customer CRM before
+    const custDupStateBefore = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custDupBefore = (custDupStateBefore.data.customers || []).find(c => c.phone === '9876543223');
+    const spentDupBefore = custDupBefore ? (custDupBefore.totalSpent || 0) : 0;
+
+    // Fire 2 webhooks and 2 checkout callbacks concurrently for the same order
+    const dupDeliveries = await Promise.all([
+      makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', { 'x-razorpay-signature': dupWhSig, 'x-razorpay-event-id': `evt_dup_a_${Date.now()}` }, dupWhPayload),
+      makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', { 'x-razorpay-signature': dupWhSig, 'x-razorpay-event-id': `evt_dup_b_${Date.now()}` }, dupWhPayload),
+      makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, { orderId: orderDupId, razorpay_order_id: rzpOrderDupId, razorpay_payment_id: dupPaymentId, razorpay_signature: dupCheckoutSig }),
+      makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, { orderId: orderDupId, razorpay_order_id: rzpOrderDupId, razorpay_payment_id: dupPaymentId, razorpay_signature: dupCheckoutSig })
+    ]);
+
+    const allDup200 = dupDeliveries.every(r => r.statusCode === 200);
+    assert(allDup200, 'Test B: All concurrent webhook and checkout duplicate deliveries returned HTTP 200');
+
+    // Verify idempotent response indicators
+    const hasAlreadySettledOrProcessed = dupDeliveries.some(r => r.data && (r.data.alreadySettled === true || r.data.alreadyProcessed === true));
+    assert(hasAlreadySettledOrProcessed, 'Test B: Retries returned documented idempotent acknowledgement (alreadySettled / alreadyProcessed)');
+
+    // Verify customer spend incremented exactly once (294)
+    const custDupStateAfter = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custDupAfter = (custDupStateAfter.data.customers || []).find(c => c.phone === '9876543223');
+    const spentDupAfter = custDupAfter ? (custDupAfter.totalSpent || 0) : 0;
+    assert(spentDupAfter === spentDupBefore + 294, `Test B: Customer spend incremented exactly once (+294), got ${spentDupAfter}`);
+
+    // TEST C: Persistence failure simulation & state rollback
+    console.log('\n  [TEST C]: Persistence failure simulation & state rollback');
+    const orderFailRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 34,
+      tableName: 'Table 34',
+      customerPhone: '9876543224',
+      customerName: 'Fail Persist User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderFailId = orderFailRes.data.id;
+    const payOrderFailRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderFailId });
+    const rzpOrderFailId = payOrderFailRes.data.razorpayOrderId;
+    const failPaymentId = `pay_fail_persist_${Date.now()}`;
+    const failSig = computeCheckoutSignature(rzpOrderFailId, failPaymentId);
+
+    // Attempt settlement with fail_persist trigger in paymentId
+    const settleFailRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderFailId,
+      razorpay_order_id: rzpOrderFailId,
+      razorpay_payment_id: failPaymentId,
+      razorpay_signature: failSig
+    });
+
+    assert(settleFailRes.statusCode === 500, 'Test C: Persistence failure returns HTTP 500');
+    assert(settleFailRes.data.error && (settleFailRes.data.error.includes('mutation failure') || settleFailRes.data.error.includes('mutation failed') || settleFailRes.data.error.includes('Database mutation failed')), 'Test C: Error explains database mutation failure');
+    assert(settleFailRes.data.verified !== true && settleFailRes.data.success !== true, 'Test C: No false success response emitted');
+
+    // Confirm order remains unpaid and state is not partially mutated
+    const checkFailOrderState = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${orderFailId}`);
+    const failOrdDoc = (checkFailOrderState.data.orders || []).find(o => o.id === orderFailId);
+    assert(failOrdDoc && failOrdDoc.isPaid === false && failOrdDoc.paymentStatus !== 'paid', 'Test C: In-memory order rolled back to unpaid (isPaid: false)');
+    assert(!failOrdDoc.txnId, 'Test C: In-memory order txnId rolled back/cleared');
+
+    // Confirm customer spend was not incremented
+    const custFailState = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custFail = (custFailState.data.customers || []).find(c => c.phone === '9876543224');
+    assert((custFail ? custFail.totalSpent : 0) === 0, 'Test C: Customer lifetime spend not incremented on persistence failure');
+
+    // TEST D: Shared settlement result-handling explicit coverage
+    console.log('\n  [TEST D]: Shared settlement result-handling explicit coverage');
+    // D1: Explicitly test success: false via webhook caller
+    const orderFailWhRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 35,
+      tableName: 'Table 35',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderFailWhId = orderFailWhRes.data.id;
+    const payOrderFailWh = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderFailWhId });
+    const rzpOrderFailWhId = payOrderFailWh.data.razorpayOrderId;
+    const failWhPaymentId = `pay_fail_persist_wh_${Date.now()}`;
+    const failWhPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: failWhPaymentId,
+            order_id: rzpOrderFailWhId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const failWhSig = computeWebhookSignature(failWhPayload);
+    const failWhRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': failWhSig,
+      'x-razorpay-event-id': `evt_fail_wh_${Date.now()}`
+    }, failWhPayload);
+    assert(failWhRes.statusCode === 500, 'Test D1: Webhook caller handles settlement success: false with HTTP 500');
+    assert(failWhRes.data.status === 'error' && failWhRes.data.settled === false, 'Test D1: Webhook response body confirms status: error and settled: false');
+
+    // D2: Explicitly test duplicatePaymentViolation via webhook caller
+    const dupViolationWhPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: sharedRacePayId, // Already consumed by winning order in Test A
+            order_id: rzpOrderFailWhId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const dupViolationWhSig = computeWebhookSignature(dupViolationWhPayload);
+    const dupViolationWhRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': dupViolationWhSig,
+      'x-razorpay-event-id': `evt_dup_viol_${Date.now()}`
+    }, dupViolationWhPayload);
+    assert(dupViolationWhRes.statusCode === 400, 'Test D2: Webhook caller handles duplicatePaymentViolation with HTTP 400');
+    assert(dupViolationWhRes.data.status === 'error' && dupViolationWhRes.data.settled === false, 'Test D2: Webhook response body confirms error and settled: false');
+    assert(dupViolationWhRes.data.error && dupViolationWhRes.data.error.includes('Cannot settle multiple orders with same payment'), 'Test D2: Error explains duplicate payment violation');
+
+    // D3: Explicitly test alreadySettled via webhook caller
+    const alreadySettledWhPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: dupPaymentId, // Settled in Test B for orderDupId
+            order_id: rzpOrderDupId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const alreadySettledWhSig = computeWebhookSignature(alreadySettledWhPayload);
+    const alreadySettledWhRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': alreadySettledWhSig,
+      'x-razorpay-event-id': `evt_already_settled_${Date.now()}`
+    }, alreadySettledWhPayload);
+    assert(alreadySettledWhRes.statusCode === 200, 'Test D3: Webhook caller handles alreadySettled with HTTP 200');
+    assert(alreadySettledWhRes.data.status === 'ok' && alreadySettledWhRes.data.settled === true && alreadySettledWhRes.data.alreadySettled === true, 'Test D3: Webhook response confirms settled: true, alreadySettled: true');
+
+    // D4: Explicitly test alreadyProcessed via webhook caller (replaying identical event ID)
+    const replayEventId = `evt_already_proc_${Date.now()}`;
+    const firstProcRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': alreadySettledWhSig,
+      'x-razorpay-event-id': replayEventId
+    }, alreadySettledWhPayload);
+    assert(firstProcRes.statusCode === 200, 'Test D4: Initial webhook event processed successfully');
+
+    const replayProcRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': alreadySettledWhSig,
+      'x-razorpay-event-id': replayEventId
+    }, alreadySettledWhPayload);
+    assert(replayProcRes.statusCode === 200, 'Test D4: Webhook caller handles alreadyProcessed replay with HTTP 200');
+    assert(replayProcRes.data.status === 'ok' && replayProcRes.data.settled === true && replayProcRes.data.alreadyProcessed === true, 'Test D4: Webhook response confirms settled: true, alreadyProcessed: true');
+
+    // TEST E: Cross-tenant duplicate payment isolation
+    console.log('\n  [TEST E]: Cross-tenant duplicate payment isolation');
+    const orderTenantARes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 36,
+      tableName: 'Table 36',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderTenantAId = orderTenantARes.data.id;
+    const payTenantARes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderTenantAId });
+    const rzpTenantAId = payTenantARes.data.razorpayOrderId;
+    const crossTenantSharedPayId = `pay_cross_tenant_iso_${Date.now()}`;
+    const sigTenantA = computeCheckoutSignature(rzpTenantAId, crossTenantSharedPayId);
+
+    // Settle Order on tiptap-bistro
+    const settleTenantARes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderTenantAId,
+      razorpay_order_id: rzpTenantAId,
+      razorpay_payment_id: crossTenantSharedPayId,
+      razorpay_signature: sigTenantA
+    });
+    assert(settleTenantARes.statusCode === 200, 'Test E: Tenant A (tiptap-bistro) order settled successfully with shared payment ID');
+
+    // Create an order on sharma-dhaba
+    const orderTenantBRes = await makeRequest('POST', '/api/orders?restaurant=sharma-dhaba', {}, {
+      tableId: 1,
+      tableName: 'Table 1',
+      customerPhone: '9876543225',
+      customerName: 'Tenant B User',
+      items: [{ id: 'sharma-dhaba_m1', qty: 1 }] // price 280
+    });
+    const orderTenantBId = orderTenantBRes.data.id;
+    const payTenantBRes = await makeRequest('POST', '/api/create-payment-order?restaurant=sharma-dhaba', {}, { orderId: orderTenantBId });
+    const rzpTenantBId = payTenantBRes.data.razorpayOrderId;
+    const sigTenantB = computeCheckoutSignature(rzpTenantBId, crossTenantSharedPayId);
+
+    // Attempt to settle sharma-dhaba order using the payment ID already consumed on tiptap-bistro
+    const settleTenantBRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=sharma-dhaba', {}, {
+      orderId: orderTenantBId,
+      razorpay_order_id: rzpTenantBId,
+      razorpay_payment_id: crossTenantSharedPayId,
+      razorpay_signature: sigTenantB
+    });
+    assert(settleTenantBRes.statusCode === 400, 'Test E: Cross-tenant duplicate payment strictly rejected with HTTP 400');
+    assert(settleTenantBRes.data.error && settleTenantBRes.data.error.includes('Cannot settle multiple orders with same payment'), 'Test E: Error confirms payment already consumed by another order');
+
+    // Verify sharma-dhaba order remains unpaid
+    const checkTenantBState = await makeRequest('GET', `/api/state?restaurant=sharma-dhaba&orderId=${orderTenantBId}`);
+    const ordBDocTenant = (checkTenantBState.data.orders || []).find(o => o.id === orderTenantBId);
+    assert(ordBDocTenant && ordBDocTenant.isPaid === false && ordBDocTenant.paymentStatus !== 'paid', 'Test E: Cross-tenant order remains unpaid (isPaid: false)');
+
+    // Verify customer spend on sharma-dhaba was not incremented
+    const custTenantBState = await makeRequest('GET', '/api/state?restaurant=sharma-dhaba', { 'x-master-pin': 'SuperAdminPin#Phase10' });
+    const custTenantB = (custTenantBState.data.customers || []).find(c => c.phone === '9876543225');
+    assert((custTenantB ? custTenantB.totalSpent : 0) === 0, 'Test E: Zero customer spend mutation on cross-tenant rejected settlement');
+
+    // ----------------------------------------------------
     // SECTION 10: CUSTOMER UI COMPLETE UTR REMOVAL CHECK
     // ----------------------------------------------------
     console.log('\n--- 10. CUSTOMER UI (ZERO MANUAL UTR INPUT) VERIFICATION ---');

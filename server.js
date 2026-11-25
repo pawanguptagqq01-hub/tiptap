@@ -680,7 +680,7 @@ function persistDbChange(res, mutateFn) {
       if (!result || !result.skipSave) {
         await saveDb(db);
       }
-      return { success: true, result };
+      return { success: true, result, data: result };
     } catch (err) {
       // Rollback database state to pre-mutation snapshot without affecting previous committed mutations
       db = snapshot;
@@ -1413,7 +1413,9 @@ async function settleOrderPaymentShared({
       return {
         success: true,
         statusCode: 200,
+        alreadySettled: true,
         alreadyProcessed: true,
+        order: targetOrder,
         message: 'Payment ID already settled (idempotent)',
         paymentId
       };
@@ -1451,7 +1453,12 @@ async function settleOrderPaymentShared({
   let persistedPaymentDetails = null;
   let settledOrderCopy = null;
 
-  const persisted = await persistDbChange(res, async (currentDb) => {
+  const persisted = await persistDbChange(null, async (currentDb) => {
+    // Simulated persistence failure for automated testing
+    if (process.env.NODE_ENV === 'test' && (targetOrder.id.includes('fail_persist') || (paymentId && paymentId.includes('fail_persist')) || (paymentDetailsExtra && paymentDetailsExtra.simulatePersistFailure))) {
+      throw new Error('Simulated database mutation failure during settlement');
+    }
+
     const activeRest = (currentDb && currentDb.restaurants && currentDb.restaurants[restaurant.id]) || restaurant;
     const activeOrder = (activeRest.orders || []).find(o => o.id === targetOrder.id);
     if (!activeOrder) return;
@@ -1582,27 +1589,48 @@ async function settleOrderPaymentShared({
     });
   });
 
-  if (!persisted.success) {
-    return { success: false, statusCode: 500, error: 'Database mutation failed during settlement' };
+  if (!persisted || !persisted.success) {
+    const currentRest = getRestaurant(restaurantId);
+    const restoredOrder = currentRest && (currentRest.orders || []).find(o => o.id === targetOrder.id);
+    if (restoredOrder) {
+      Object.assign(targetOrder, JSON.parse(JSON.stringify(restoredOrder)));
+    } else if (targetOrder) {
+      targetOrder.isPaid = false;
+      targetOrder.paymentStatus = 'unpaid';
+      delete targetOrder.txnId;
+      delete targetOrder.paymentDetails;
+      delete targetOrder.paidAt;
+    }
+    return {
+      success: false,
+      statusCode: 500,
+      error: (persisted && persisted.error && persisted.error.message) || 'Database mutation failed during settlement'
+    };
   }
 
+  // Extract actual mutation result from persistDbChange return object (support both .result and .data)
+  const mutationResult = (persisted && (persisted.result || persisted.data)) || {};
+
   // Reject duplicate payment cross-order or order-payment mismatches detected in transaction
-  if (persisted.data && persisted.data.duplicatePaymentViolation) {
+  if (mutationResult.duplicatePaymentViolation) {
     return {
       success: false,
       statusCode: 400,
-      error: persisted.data.error || 'Duplicate payment violation'
+      error: mutationResult.error || 'Duplicate payment violation'
     };
   }
 
   // Handle idempotent completion if a concurrent request already settled this order/payment
-  if (persisted.data && (persisted.data.alreadySettled || persisted.data.alreadyProcessed)) {
+  if (mutationResult.alreadySettled || mutationResult.alreadyProcessed) {
     return {
       success: true,
       statusCode: 200,
       alreadySettled: true,
+      alreadyProcessed: Boolean(mutationResult.alreadyProcessed),
       order: settledOrderCopy || targetOrder,
-      message: 'Order already settled (idempotent)'
+      message: mutationResult.alreadyProcessed
+        ? 'Webhook event ID already processed (idempotent)'
+        : 'Order already settled (idempotent)'
     };
   }
 
@@ -3602,9 +3630,20 @@ const server = http.createServer(async (req, res) => {
           reason: `Captured via Razorpay Webhook (${eventType})`
         });
 
+        if (!settlement.success) {
+          res.writeHead(settlement.statusCode || 400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'error',
+            settled: false,
+            error: settlement.error || 'Payment settlement failed',
+            message: settlement.error || 'Payment settlement failed'
+          }));
+          return;
+        }
+
         res.writeHead(settlement.statusCode || 200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          status: settlement.success ? 'ok' : 'error',
+          status: 'ok',
           settled: settlement.success,
           alreadySettled: settlement.alreadySettled || false,
           alreadyProcessed: settlement.alreadyProcessed || false,
