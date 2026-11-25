@@ -1,6 +1,7 @@
 // TipTap - Real-Time Multi-Restaurant SaaS Platform Server
 // Zero external dependencies - uses pure Node.js standard modules!
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -938,6 +939,347 @@ function getLocalIpAddress() {
   return 'localhost';
 }
 
+// ====================================================
+// AUTOMATED RAZORPAY PAYMENT & SETTLEMENT ENGINE
+// ====================================================
+
+function verifyRazorpayWebhookSignature(rawBody, signature, secret) {
+  if (!rawBody || !signature || !secret) return false;
+  try {
+    const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    const bufA = Buffer.from(signature, 'utf8');
+    const bufB = Buffer.from(expected, 'utf8');
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch (err) {
+    return false;
+  }
+}
+
+function verifyRazorpayCheckoutSignature(orderId, paymentId, signature, secret) {
+  if (!orderId || !paymentId || !signature || !secret) return false;
+  try {
+    const payload = `${orderId}|${paymentId}`;
+    const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+    const bufA = Buffer.from(signature, 'utf8');
+    const bufB = Buffer.from(expected, 'utf8');
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch (err) {
+    return false;
+  }
+}
+
+function createRazorpayOrder({ keyId, keySecret, amountPaise, currency = 'INR', receipt, notes = {} }) {
+  return new Promise((resolve) => {
+    // In test mode or when secrets are not configured, generate deterministic mock order
+    const isMock = !keySecret || keyId === 'rzp_test_TipTapPOS99' || process.env.NODE_ENV === 'test' || !process.env.RAZORPAY_KEY_SECRET;
+    if (isMock) {
+      const mockId = `order_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+      resolve({
+        success: true,
+        isMock: true,
+        order: {
+          id: mockId,
+          entity: 'order',
+          amount: amountPaise,
+          amount_paid: 0,
+          amount_due: amountPaise,
+          currency,
+          receipt,
+          status: 'created',
+          notes,
+          created_at: Math.floor(Date.now() / 1000)
+        }
+      });
+      return;
+    }
+
+    const postData = JSON.stringify({
+      amount: amountPaise,
+      currency,
+      receipt: String(receipt || '').substring(0, 40),
+      notes: {
+        ...notes
+      }
+    });
+
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+    const req = https.request({
+      hostname: 'api.razorpay.com',
+      port: 443,
+      path: '/v1/orders',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        'Authorization': `Basic ${auth}`
+      }
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve({ success: true, isMock: false, order: json });
+          } else {
+            resolve({ success: false, statusCode: res.statusCode, error: json });
+          }
+        } catch (e) {
+          resolve({ success: false, statusCode: res.statusCode, error: data });
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      resolve({ success: false, error: err.message });
+    });
+    req.write(postData);
+    req.end();
+  });
+}
+
+/**
+ * Shared Atomic, Idempotent Payment Settlement Service
+ * Used by Razorpay Webhooks, Verified Checkout Signatures, and Manual Staff POS Settlement.
+ */
+async function settleOrderPaymentShared({
+  res = null,
+  restaurantId,
+  orderId,
+  paymentId,
+  eventId = null,
+  settlementMethod = 'upi',
+  provider = 'Razorpay Automated Webhook',
+  amountPaise = null,
+  currency = 'INR',
+  paymentDetailsExtra = {},
+  actorId = 'WEBHOOK:order.paid',
+  actorRole = 'system_webhook',
+  reason = 'Automated online payment capture'
+}) {
+  const restaurant = getRestaurant(restaurantId);
+  if (!restaurant) {
+    return { success: false, statusCode: 404, error: `Restaurant "${restaurantId}" not found.` };
+  }
+
+  // 1. Replay & Duplicate Webhook Event ID Check (Persistent Storage)
+  if (eventId) {
+    db.processedWebhookEvents = db.processedWebhookEvents || {};
+    if (db.processedWebhookEvents[eventId]) {
+      return {
+        success: true,
+        statusCode: 200,
+        alreadyProcessed: true,
+        message: 'Webhook event ID already processed (idempotent)',
+        eventId
+      };
+    }
+  }
+
+  // 2. Replay & Duplicate Payment ID Check
+  if (paymentId) {
+    db.processedPayments = db.processedPayments || {};
+    if (db.processedPayments[paymentId]) {
+      return {
+        success: true,
+        statusCode: 200,
+        alreadyProcessed: true,
+        message: 'Payment ID already settled (idempotent)',
+        paymentId
+      };
+    }
+  }
+
+  // 3. Locate Order (Active or Completed)
+  let targetOrder = (restaurant.orders || []).find(o => o.id === orderId || (orderId && o.razorpayOrderId === orderId));
+  const alreadyCompleted = (restaurant.completedOrders || []).find(o => o.id === orderId || (orderId && o.razorpayOrderId === orderId));
+
+  if (alreadyCompleted) {
+    if (eventId) {
+      db.processedWebhookEvents = db.processedWebhookEvents || {};
+      db.processedWebhookEvents[eventId] = { timestamp: Date.now(), paymentId, orderId: alreadyCompleted.id };
+    }
+    if (paymentId) {
+      db.processedPayments = db.processedPayments || {};
+      db.processedPayments[paymentId] = { timestamp: Date.now(), orderId: alreadyCompleted.id, amountPaise };
+    }
+    return {
+      success: true,
+      statusCode: 200,
+      alreadySettled: true,
+      order: alreadyCompleted,
+      message: `Order ${alreadyCompleted.id} is already settled and completed.`
+    };
+  }
+
+  if (!targetOrder) {
+    return { success: false, statusCode: 404, error: `Order "${orderId}" not found for restaurant "${restaurantId}".` };
+  }
+
+  // 4. Validate Currency & Captured Amount
+  if (currency && currency.toUpperCase() !== 'INR') {
+    return { success: false, statusCode: 400, error: `Invalid currency "${currency}". Only INR is supported.` };
+  }
+
+  const expectedAmountPaise = Math.round(Number(targetOrder.total || 0) * 100);
+  if (amountPaise !== null && amountPaise !== undefined) {
+    if (Number(amountPaise) !== expectedAmountPaise) {
+      return {
+        success: false,
+        statusCode: 400,
+        error: `Amount mismatch: Captured amount (${amountPaise} paise) does not match expected total (${expectedAmountPaise} paise).`
+      };
+    }
+  }
+
+  // 5. Apply Atomic Mutation & Persistence
+  let persistedPaymentDetails = null;
+  let settledOrderCopy = null;
+
+  const persisted = await persistDbChange(res, async (currentDb) => {
+    const activeRest = (currentDb && currentDb.restaurants && currentDb.restaurants[restaurant.id]) || restaurant;
+    const activeOrder = (activeRest.orders || []).find(o => o.id === targetOrder.id);
+    if (!activeOrder) return;
+
+    if (activeOrder.isPaid || activeOrder.paymentStatus === 'paid') {
+      settledOrderCopy = JSON.parse(JSON.stringify(activeOrder));
+      return { skipSave: true };
+    }
+
+    activeOrder.isPaid = true;
+    activeOrder.paymentStatus = 'paid';
+    activeOrder.paymentMethod = settlementMethod || 'upi';
+    activeOrder.txnId = paymentId || `TXN_${Date.now()}`;
+    activeOrder.paidAt = new Date().toISOString();
+    activeOrder.paymentDetails = {
+      provider,
+      paymentId: paymentId || activeOrder.txnId,
+      txnId: activeOrder.txnId,
+      orderId: activeOrder.id,
+      restaurantId: activeRest.id,
+      tableId: activeOrder.tableId,
+      verified: true,
+      verifiedAt: activeOrder.paidAt,
+      settledBy: actorId,
+      settlementMethod,
+      reason,
+      ...paymentDetailsExtra
+    };
+    persistedPaymentDetails = activeOrder.paymentDetails;
+
+    // Track payment IDs separately to prevent duplicate settlements
+    currentDb.processedPayments = currentDb.processedPayments || {};
+    if (paymentId) {
+      currentDb.processedPayments[paymentId] = {
+        orderId: activeOrder.id,
+        restaurantId: activeRest.id,
+        amountPaise: expectedAmountPaise,
+        timestamp: Date.now()
+      };
+    }
+
+    // Track x-razorpay-event-id in persistent storage
+    currentDb.processedWebhookEvents = currentDb.processedWebhookEvents || {};
+    if (eventId) {
+      currentDb.processedWebhookEvents[eventId] = {
+        orderId: activeOrder.id,
+        restaurantId: activeRest.id,
+        paymentId,
+        timestamp: Date.now()
+      };
+    }
+
+    // Update customer lifetime spend & loyalty points
+    if (activeOrder.customerPhone && activeRest.customers) {
+      const cust = activeRest.customers.find(c => c.phone === activeOrder.customerPhone);
+      if (cust) {
+        cust.totalSpent = (cust.totalSpent || 0) + activeOrder.total;
+        cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(activeOrder.total / 10);
+      }
+    }
+
+    // Check if food was already served to table by kitchen
+    const isFoodServed = activeOrder.kitchenStatus === 'served' || activeOrder.status === 'served';
+    if (isFoodServed) {
+      activeOrder.status = 'completed';
+      activeRest.completedOrders = activeRest.completedOrders || [];
+      activeRest.completedOrders.push(JSON.parse(JSON.stringify(activeOrder)));
+      activeRest.orders = activeRest.orders.filter(o => o.id !== activeOrder.id);
+
+      const table = (activeRest.tables || []).find(t => t.id === activeOrder.tableId);
+      if (table) {
+        table.status = 'cleaning';
+        table.currentOrderId = null;
+        table.seatingTime = null;
+      }
+    } else {
+      const table = (activeRest.tables || []).find(t => t.id === activeOrder.tableId);
+      if (table) {
+        table.status = 'occupied';
+        table.currentOrderId = activeOrder.id;
+      }
+    }
+
+    settledOrderCopy = JSON.parse(JSON.stringify(activeOrder));
+
+    // Record operational audit log
+    await recordAuditLog({
+      actorId,
+      actorRole,
+      restaurantId: activeRest.id,
+      action: 'PAYMENT_SETTLEMENT',
+      entityType: 'order',
+      entityId: activeOrder.id,
+      diff: {
+        orderId: activeOrder.id,
+        tableId: activeOrder.tableId,
+        tableName: activeOrder.tableName,
+        amountPaid: activeOrder.total,
+        settlementMethod,
+        provider,
+        paymentId: paymentId || activeOrder.txnId,
+        reason
+      }
+    });
+  });
+
+  if (!persisted.success) {
+    return { success: false, statusCode: 500, error: 'Database mutation failed during settlement' };
+  }
+
+  // Update in-memory reference
+  targetOrder.isPaid = true;
+  targetOrder.paymentStatus = 'paid';
+  targetOrder.paymentMethod = settlementMethod || 'upi';
+  targetOrder.txnId = paymentId || targetOrder.txnId;
+  targetOrder.paidAt = persistedPaymentDetails?.verifiedAt || new Date().toISOString();
+  targetOrder.paymentDetails = persistedPaymentDetails;
+
+  // Broadcast instant SSE real-time notifications to Diner, POS Counter & Kitchen
+  broadcastEvent(restaurant.id, 'payment:success', {
+    orderId: targetOrder.id,
+    tableName: targetOrder.tableName,
+    tableId: targetOrder.tableId,
+    total: targetOrder.total,
+    txnId: targetOrder.txnId,
+    paymentMethod: settlementMethod,
+    paidAt: targetOrder.paidAt,
+    isPaid: true,
+    kitchenStatus: targetOrder.kitchenStatus || targetOrder.status
+  });
+  broadcastEvent(restaurant.id, 'order:update', settledOrderCopy || targetOrder);
+  broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
+
+  return {
+    success: true,
+    statusCode: 200,
+    order: settledOrderCopy || targetOrder,
+    paymentDetails: persistedPaymentDetails
+  };
+}
+
 // MIME types dictionary
 const MIME_TYPES = {
   '.html': 'text/html; charset=UTF-8',
@@ -1410,9 +1752,10 @@ const server = http.createServer(async (req, res) => {
 
       const onEnd = () => {
         if (isTooLarge) return;
+        req.rawBody = body; // Preserve exact raw request bytes before JSON parsing for HMAC verification
         try {
           const json = body ? JSON.parse(body) : {};
-          Promise.resolve(callback(null, json)).catch(err => {
+          Promise.resolve(callback(null, json, body)).catch(err => {
             console.error('Unhandled route handler error:', err);
             if (!res.headersSent) {
               res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -2353,8 +2696,8 @@ const server = http.createServer(async (req, res) => {
 
     // 6a. Create Payment Gateway Order: POST /api/create-payment-order
     if (pathname.includes('/create-payment-order') && req.method === 'POST') {
-      readJsonBody((err, data) => {
-        const orderId = data.orderId;
+      readJsonBody(async (err, data) => {
+        const orderId = data?.orderId;
         if (!orderId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Valid orderId is required to initiate payment order' }));
@@ -2382,8 +2725,39 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        const amountPaise = Math.round(amount * 100);
+        const keyId = restaurant.paymentConfig?.razorpayKeyId || process.env.RAZORPAY_KEY_ID || 'rzp_test_TipTapPOS99';
+        const keySecret = restaurant.paymentConfig?.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
+
+        // Call Razorpay Orders API
+        const rzpResult = await createRazorpayOrder({
+          keyId,
+          keySecret,
+          amountPaise,
+          currency: 'INR',
+          receipt: order.id,
+          notes: {
+            restaurantId: restaurant.id,
+            orderId: order.id,
+            tableId: String(order.tableId || 1)
+          }
+        });
+
+        const razorpayOrderId = (rzpResult.success && rzpResult.order && rzpResult.order.id)
+          ? rzpResult.order.id
+          : `order_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+
+        // Bind razorpayOrderId to the local order and persist
+        order.razorpayOrderId = razorpayOrderId;
+        await persistDbChange(null, async (currentDb) => {
+          const activeRest = (currentDb && currentDb.restaurants && currentDb.restaurants[restaurant.id]) || restaurant;
+          const activeOrder = (activeRest.orders || []).find(o => o.id === order.id);
+          if (activeOrder) {
+            activeOrder.razorpayOrderId = razorpayOrderId;
+          }
+        });
+
         const txnId = `TXN_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`;
-        const razorpayOrderId = `order_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
         const merchantVpa = restaurant.paymentConfig?.upiVpa || 'tiptap.merchant@icici';
         const merchantName = restaurant.paymentConfig?.merchantName || restaurant.name || 'TipTap Bistro';
         const tableLabel = order.tableName || `Table ${order.tableId || 1}`;
@@ -2398,13 +2772,13 @@ const server = http.createServer(async (req, res) => {
           txnId,
           razorpayOrderId,
           amount,
-          amountPaise: Math.round(amount * 100),
+          amountPaise,
           merchantVpa,
           merchantName,
           tableLabel,
           upiIntent,
           currency: 'INR',
-          keyId: restaurant.paymentConfig?.razorpayKeyId || 'rzp_test_TipTapPOS99',
+          keyId,
           testMode: restaurant.paymentConfig?.testMode !== false
         }));
       });
@@ -2503,128 +2877,49 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        let persistedPaymentDetails = null;
-
-        const saved = await persistDbChange(res, async (currentDb) => {
-          const activeRest = (currentDb && currentDb.restaurants && currentDb.restaurants[restaurant.id]) || restaurant;
-          const activeOrder = activeRest.orders.find(o => o.id === order.id);
-          if (!activeOrder) return;
-
-          activeOrder.isPaid = true;
-          activeOrder.paymentStatus = 'paid';
-          activeOrder.paymentMethod = settlementMethod;
-          activeOrder.txnId = txnId;
-          activeOrder.paidAt = new Date().toISOString();
-          activeOrder.paymentDetails = {
-            provider: 'POS Counter Settle (Authorized Staff)',
-            txnId,
-            verified: true,
-            verifiedAt: new Date().toISOString(),
+        const settlement = await settleOrderPaymentShared({
+          res,
+          restaurantId: restaurant.id,
+          orderId: order.id,
+          paymentId: txnId,
+          settlementMethod,
+          provider: 'POS Counter Settle (Authorized Staff)',
+          amountPaise: Math.round(Number(order.total || 0) * 100),
+          currency: 'INR',
+          paymentDetailsExtra: {
             settledBy,
             settlementMethod,
-            reason,
-            restaurantId: restaurant.id,
-            orderId: activeOrder.id
-          };
-          persistedPaymentDetails = activeOrder.paymentDetails;
-
-          // Update customer lifetime spend & loyalty coins immediately
-          if (activeOrder.customerPhone && activeRest.customers) {
-            const cust = activeRest.customers.find(c => c.phone === activeOrder.customerPhone);
-            if (cust) {
-              cust.totalSpent = (cust.totalSpent || 0) + activeOrder.total;
-              cust.loyaltyPoints = (cust.loyaltyPoints || 0) + Math.floor(activeOrder.total / 10);
-            }
-          }
-
-          // Check if food was already served to table by kitchen
-          const isFoodServed = activeOrder.kitchenStatus === 'served' || activeOrder.status === 'served';
-
-          if (isFoodServed) {
-            // Food was already served AND now paid! Settle and archive to completedOrders
-            activeOrder.status = 'completed';
-            activeRest.completedOrders = activeRest.completedOrders || [];
-            activeRest.completedOrders.push(JSON.parse(JSON.stringify(activeOrder)));
-            activeRest.orders = activeRest.orders.filter(o => o.id !== activeOrder.id);
-
-            // Table is done, set to cleaning
-            const table = activeRest.tables.find(t => t.id === activeOrder.tableId);
-            if (table) {
-              table.status = 'cleaning';
-              table.currentOrderId = null;
-              table.seatingTime = null;
-            }
-          } else {
-            // Food is STILL in kitchen queue or cooking!
-            // DO NOT delete order from active orders or KDS! Keep order active with isPaid = true.
-            // Table remains occupied so staff and chefs know which table this paid food belongs to!
-            const table = activeRest.tables.find(t => t.id === activeOrder.tableId);
-            if (table) {
-              table.status = 'occupied';
-              table.currentOrderId = activeOrder.id;
-            }
-          }
-
-          // Record operational audit log for payment settlement
-          await recordAuditLog({
-            actorId: settledBy,
-            actorRole: 'counter_staff',
-            restaurantId: restaurant.id,
-            action: 'PAYMENT_SETTLEMENT',
-            entityType: 'order',
-            entityId: activeOrder.id,
-            diff: {
-              orderId: activeOrder.id,
-              tableId: activeOrder.tableId,
-              tableName: activeOrder.tableName,
-              amountPaid: activeOrder.total,
-              settlementMethod,
-              reason
-            }
-          });
+            reason
+          },
+          actorId: settledBy,
+          actorRole: 'counter_staff',
+          reason
         });
 
-        if (!saved.success) return;
+        if (!settlement.success) {
+          res.writeHead(settlement.statusCode || 500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: settlement.error }));
+          return;
+        }
 
-        order.isPaid = true;
-        order.paymentStatus = 'paid';
-        order.paymentMethod = settlementMethod;
-        order.txnId = txnId;
-        order.paidAt = persistedPaymentDetails?.verifiedAt || new Date().toISOString();
-        order.paymentDetails = persistedPaymentDetails;
-
-        // Broadcast instant SSE real-time notifications to POS Counter & Kitchen
-        broadcastEvent(restaurant.id, 'payment:success', {
-          orderId: order.id,
-          tableName: order.tableName,
-          tableId: order.tableId,
-          total: order.total,
-          txnId,
-          paymentMethod: settlementMethod,
-          paidAt: order.paidAt,
-          isPaid: true,
-          kitchenStatus: order.kitchenStatus || order.status
-        });
-        broadcastEvent(restaurant.id, 'order:update', order);
-        broadcastEvent(restaurant.id, 'table:update', restaurant.tables);
-
+        const settledOrder = settlement.order;
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           success: true,
           verified: true,
-          orderId: order.id,
+          orderId: settledOrder.id,
           txnId,
-          tableName: order.tableName,
-          amountPaid: order.total,
-          paidAt: order.paidAt,
+          tableName: settledOrder.tableName,
+          amountPaid: settledOrder.total,
+          paidAt: settledOrder.paidAt,
           isPaid: true,
           paymentStatus: 'paid',
           settlementMethod,
-          kitchenStatus: order.kitchenStatus || order.status,
-          status: order.status,
-          paymentDetails: persistedPaymentDetails,
-          order: order,
-          message: `Payment of ₹${order.total} verified successfully!`
+          kitchenStatus: settledOrder.kitchenStatus || settledOrder.status,
+          status: settledOrder.status,
+          paymentDetails: settlement.paymentDetails,
+          order: settledOrder,
+          message: `Payment of ₹${settledOrder.total} verified successfully!`
         }));
       });
       return;
@@ -2632,11 +2927,266 @@ const server = http.createServer(async (req, res) => {
 
     // 6c. Webhook Handler: POST /api/payment-webhook
     if (pathname.includes('/payment-webhook') && req.method === 'POST') {
-      readJsonBody((err, data) => {
-        // Unverified webhook requests must never change payment status
-        res.writeHead(401, { 'Content-Type': 'application/json' });
+      readJsonBody(async (err, data, rawBody) => {
+        if (err || !data) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Malformed webhook payload' }));
+          return;
+        }
+
+        const signature = (req.headers && req.headers['x-razorpay-signature']) || '';
+        const eventId = (req.headers && req.headers['x-razorpay-event-id']) || '';
+
+        // Webhook secret resolution: restaurant specific if present, else global environment variable
+        const webhookSecret = restaurant?.paymentConfig?.razorpayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET;
+
+        if (!signature || !webhookSecret) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Unauthorized: Webhook signature verification failed. Missing signature header or webhook secret configuration.'
+          }));
+          return;
+        }
+
+        // Verify HMAC-SHA256 signature using unparsed raw request bytes
+        const isSignatureValid = verifyRazorpayWebhookSignature(req.rawBody || rawBody, signature, webhookSecret);
+        if (!isSignatureValid) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Unauthorized: Webhook signature verification failed. Invalid signature.'
+          }));
+          return;
+        }
+
+        // Parse event type & entity
+        const eventType = data.event;
+        let rzpOrderId = null;
+        let rzpPaymentId = null;
+        let capturedAmount = null;
+        let currency = 'INR';
+        let paymentMethod = 'upi';
+        let paymentDetailsExtra = {};
+
+        if (eventType === 'order.paid') {
+          const orderEntity = data.payload?.order?.entity;
+          const paymentEntity = data.payload?.payment?.entity;
+          rzpOrderId = orderEntity?.id || paymentEntity?.order_id;
+          rzpPaymentId = paymentEntity?.id || (orderEntity && `PAY_${orderEntity.id}`);
+          capturedAmount = paymentEntity?.amount || orderEntity?.amount_paid;
+          currency = paymentEntity?.currency || orderEntity?.currency || 'INR';
+          paymentMethod = paymentEntity?.method || 'upi';
+          paymentDetailsExtra = {
+            gateway: 'razorpay',
+            eventType,
+            orderEntityId: orderEntity?.id,
+            vpa: paymentEntity?.vpa || null,
+            bank: paymentEntity?.bank || null,
+            wallet: paymentEntity?.wallet || null
+          };
+        } else if (eventType === 'payment.captured') {
+          const paymentEntity = data.payload?.payment?.entity;
+          rzpOrderId = paymentEntity?.order_id;
+          rzpPaymentId = paymentEntity?.id;
+          capturedAmount = paymentEntity?.amount;
+          currency = paymentEntity?.currency || 'INR';
+          paymentMethod = paymentEntity?.method || 'upi';
+          paymentDetailsExtra = {
+            gateway: 'razorpay',
+            eventType,
+            vpa: paymentEntity?.vpa || null,
+            bank: paymentEntity?.bank || null,
+            wallet: paymentEntity?.wallet || null,
+            cardNetwork: paymentEntity?.card?.network || null,
+            cardLast4: paymentEntity?.card?.last4 || null
+          };
+        } else if (eventType === 'payment.failed') {
+          const paymentEntity = data.payload?.payment?.entity;
+          console.warn(`⚠️ [Razorpay Payment Failed]: ID ${paymentEntity?.id}, error: ${paymentEntity?.error_description}`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ignored', message: 'Payment failure acknowledged without settlement' }));
+          return;
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ignored', message: `Event ${eventType} acknowledged` }));
+          return;
+        }
+
+        if (!rzpOrderId && !rzpPaymentId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Webhook payload missing order_id or payment id' }));
+          return;
+        }
+
+        // Locate target restaurant and order
+        // Architecture Rule 9: Do not rely on payment notes alone. First look for server-stored order.razorpayOrderId
+        let matchedRestId = null;
+        let matchedOrder = null;
+
+        for (const [rId, rObj] of Object.entries(db.restaurants || {})) {
+          const found = (rObj.orders || []).find(o => o.razorpayOrderId === rzpOrderId || o.id === rzpOrderId);
+          if (found) {
+            matchedRestId = rId;
+            matchedOrder = found;
+            break;
+          }
+          const foundCompleted = (rObj.completedOrders || []).find(o => o.razorpayOrderId === rzpOrderId || o.id === rzpOrderId);
+          if (foundCompleted) {
+            matchedRestId = rId;
+            matchedOrder = foundCompleted;
+            break;
+          }
+        }
+
+        // Fallback: check targetRestId or notes
+        if (!matchedOrder) {
+          const notes = data.payload?.payment?.entity?.notes || data.payload?.order?.entity?.notes || {};
+          const noteRestId = notes.restaurantId || targetRestId;
+          const noteOrderId = notes.orderId;
+          const noteRest = db.restaurants && db.restaurants[noteRestId];
+          if (noteRest && noteOrderId) {
+            matchedOrder = (noteRest.orders || []).find(o => o.id === noteOrderId) ||
+                           (noteRest.completedOrders || []).find(o => o.id === noteOrderId);
+            if (matchedOrder) matchedRestId = noteRestId;
+          }
+        }
+
+        if (!matchedOrder || !matchedRestId) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `No local order found matching Razorpay Order "${rzpOrderId}".` }));
+          return;
+        }
+
+        // Execute shared atomic idempotent settlement
+        const settlement = await settleOrderPaymentShared({
+          res,
+          restaurantId: matchedRestId,
+          orderId: matchedOrder.id,
+          paymentId: rzpPaymentId,
+          eventId,
+          settlementMethod: paymentMethod,
+          provider: `Razorpay Webhook (${eventType})`,
+          amountPaise: capturedAmount,
+          currency,
+          paymentDetailsExtra,
+          actorId: `WEBHOOK:${eventType}`,
+          actorRole: 'razorpay_webhook',
+          reason: `Captured via Razorpay Webhook (${eventType})`
+        });
+
+        res.writeHead(settlement.statusCode || 200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          error: 'Unauthorized: Webhook signature verification failed. Unauthenticated webhook requests cannot modify payment status.'
+          status: settlement.success ? 'ok' : 'error',
+          settled: settlement.success,
+          alreadySettled: settlement.alreadySettled || false,
+          alreadyProcessed: settlement.alreadyProcessed || false,
+          message: settlement.message || 'Payment settled successfully'
+        }));
+      });
+      return;
+    }
+
+    // 6d. Direct Razorpay Client-Side Callback Signature Verification: POST /api/payment/verify-signature
+    if (pathname.includes('/payment/verify-signature') && req.method === 'POST') {
+      readJsonBody(async (err, data) => {
+        data = data || {};
+        const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = data;
+
+        if (!orderId || !razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Missing required parameters: orderId, razorpay_order_id, razorpay_payment_id, and razorpay_signature are required.'
+          }));
+          return;
+        }
+
+        // Locate order in target restaurant
+        const targetOrder = (restaurant.orders || []).find(o => o.id === orderId);
+        const alreadyCompleted = (restaurant.completedOrders || []).find(o => o.id === orderId);
+
+        if (alreadyCompleted) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            verified: true,
+            alreadySettled: true,
+            order: alreadyCompleted,
+            message: 'Payment already settled'
+          }));
+          return;
+        }
+
+        if (!targetOrder) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Order "${orderId}" not found for this restaurant.` }));
+          return;
+        }
+
+        // Validate local order binds to this razorpay_order_id
+        if (targetOrder.razorpayOrderId && targetOrder.razorpayOrderId !== razorpay_order_id) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Order mismatch: razorpay_order_id does not match the server-created order.'
+          }));
+          return;
+        }
+
+        // Resolve Key Secret
+        const keySecret = restaurant.paymentConfig?.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
+        if (!keySecret) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Server configuration error: Razorpay key secret is not configured.' }));
+          return;
+        }
+
+        // Verify cryptographic signature
+        const isSignatureValid = verifyRazorpayCheckoutSignature(
+          razorpay_order_id,
+          razorpay_payment_id,
+          razorpay_signature,
+          keySecret
+        );
+
+        if (!isSignatureValid) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Invalid payment signature: Payment could not be verified by provider signature.'
+          }));
+          return;
+        }
+
+        // Settle payment through shared atomic service
+        const settlement = await settleOrderPaymentShared({
+          res,
+          restaurantId: restaurant.id,
+          orderId: targetOrder.id,
+          paymentId: razorpay_payment_id,
+          settlementMethod: 'razorpay_checkout',
+          provider: 'Razorpay Checkout (Verified Signature)',
+          amountPaise: Math.round(Number(targetOrder.total || 0) * 100),
+          currency: 'INR',
+          paymentDetailsExtra: {
+            gateway: 'razorpay',
+            razorpayOrderId: razorpay_order_id,
+            razorpayPaymentId: razorpay_payment_id
+          },
+          actorId: 'CLIENT_CHECKOUT:verified_signature',
+          actorRole: 'customer_checkout',
+          reason: 'Razorpay Checkout signature verified'
+        });
+
+        if (!settlement.success) {
+          res.writeHead(settlement.statusCode || 500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: settlement.error }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          verified: true,
+          order: settlement.order,
+          paymentDetails: settlement.paymentDetails,
+          message: 'Payment verified and settled successfully!'
         }));
       });
       return;
