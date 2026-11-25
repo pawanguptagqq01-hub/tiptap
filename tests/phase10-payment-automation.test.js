@@ -156,6 +156,29 @@ async function runPhase10Tests() {
     const localOrder = (stateCheck.data.orders || []).find(o => o.id === orderId);
     assert(localOrder && localOrder.razorpayOrderId === rzpOrderId, 'Local order document securely binds razorpayOrderId');
 
+    // 1b. Order-Binding Persistence Failure Hardening
+    console.log('\n--- 1b. ORDER-BINDING PERSISTENCE FAILURE SIMULATION ---');
+    const orderFailPersistRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 6,
+      tableName: 'Table 6',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const failOrderId = orderFailPersistRes.data.id;
+
+    // Attempt to create payment order with simulated persistence failure
+    const persistFailRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, {
+      orderId: failOrderId,
+      simulatePersistFailure: true
+    });
+    assert(persistFailRes.statusCode === 500, 'Database persistence failure returns HTTP 500');
+    assert(persistFailRes.data.code === 'PERSISTENCE_FAILED', 'Persistence failure returns code "PERSISTENCE_FAILED"');
+    assert(!persistFailRes.data.razorpayOrderId, 'Never returns a usable razorpayOrderId to client on persistence failure');
+
+    // Verify order remains unbound in memory and state
+    const checkUnboundState = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${failOrderId}`);
+    const unboundOrdDoc = (checkUnboundState.data.orders || []).find(o => o.id === failOrderId);
+    assert(unboundOrdDoc && !unboundOrdDoc.razorpayOrderId, 'Failed order persistence rolls back and leaves order unbound without razorpayOrderId');
+
     // ----------------------------------------------------
     // SECTION 2: FAIL-CLOSED ORDER CREATION IN PRODUCTION
     // ----------------------------------------------------
@@ -398,74 +421,234 @@ async function runPhase10Tests() {
     assert(ord3Doc && ord3Doc.isPaid === false, 'Failed payment event does NOT mark order paid (isPaid: false)');
 
     // ----------------------------------------------------
-    // SECTION 7: CHECKOUT SIGNATURE & PROVIDER STATUS VERIFICATION
+    // SECTION 7: MANDATORY PROVIDER FIELD VALIDATION & NEGATIVE TESTS
     // ----------------------------------------------------
-    console.log('\n--- 7. CHECKOUT SIGNATURE & PROVIDER STATUS VERIFICATION ---');
+    console.log('\n--- 7. MANDATORY PROVIDER FIELD VALIDATION & COMPREHENSIVE NEGATIVE TESTS ---');
 
-    // 7a. Forged checkout signature rejected
+    // Create a dedicated order to test all provider field negative scenarios
+    const orderNegRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 7,
+      tableName: 'Table 7',
+      customerPhone: '9876543210',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // 294
+    });
+    const orderNegId = orderNegRes.data.id;
+    const payOrderNeg = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderNegId });
+    const rzpOrderNegId = payOrderNeg.data.razorpayOrderId;
+
+    // Check initial customer spend before negative tests
+    const custStateBeforeNeg = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custBeforeNeg = (custStateBeforeNeg.data.customers || []).find(c => c.phone === '9876543210');
+    const spentBeforeNeg = custBeforeNeg ? custBeforeNeg.totalSpent || 0 : 0;
+
+    // 7a. Unbound Order Rejection: Client-supplied order ID without server binding rejected
+    const orderUnboundRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 8,
+      tableName: 'Table 8',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const unboundOrderId = orderUnboundRes.data.id;
+    const fakeClientOrderId = 'order_fake_client_unbound_999';
+    const fakeClientPayId = `pay_fake_${Date.now()}`;
+    const unboundRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: unboundOrderId,
+      razorpay_order_id: fakeClientOrderId,
+      razorpay_payment_id: fakeClientPayId,
+      razorpay_signature: computeCheckoutSignature(fakeClientOrderId, fakeClientPayId)
+    });
+    assert(unboundRes.statusCode === 400, 'Unbound order rejected with HTTP 400 (client-supplied order ID not accepted)');
+
+    // 7b. Forged client checkout signature rejected
     const paymentId3 = `pay_checkout_${Date.now()}`;
     const forgedCheckout = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
-      orderId: order3Id,
-      razorpay_order_id: rzpOrder3Id,
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
       razorpay_payment_id: paymentId3,
       razorpay_signature: 'fake_forged_client_signature_hex'
     });
     assert(forgedCheckout.statusCode === 400, 'Forged client checkout signature rejected with HTTP 400 Bad Request');
 
-    // 7b. Mismatched order ID rejected
-    const validCheckoutSig = computeCheckoutSignature(rzpOrder3Id, paymentId3);
+    // 7c. Mismatched razorpay_order_id rejected
+    const validCheckoutSig = computeCheckoutSignature(rzpOrderNegId, paymentId3);
     const mismatchedCheckout = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
-      orderId: order3Id,
+      orderId: orderNegId,
       razorpay_order_id: 'order_DIFFERENT_MISMATCHED',
       razorpay_payment_id: paymentId3,
       razorpay_signature: validCheckoutSig
     });
     assert(mismatchedCheckout.statusCode === 400, 'Mismatched razorpay_order_id rejected with HTTP 400 Bad Request');
 
-    // 7c. Authorized-only payment status rejected
+    // 7d. Malformed provider payment response rejected
+    const malformedPayId = `pay_test_malformed_${Date.now()}`;
+    const malformedSig = computeCheckoutSignature(rzpOrderNegId, malformedPayId);
+    const malformedRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: malformedPayId,
+      razorpay_signature: malformedSig
+    });
+    assert(malformedRes.statusCode === 400, 'Malformed provider payment response rejected with HTTP 400');
+
+    // 7e. Missing payment ID rejected
+    const missingIdPayId = `pay_test_missing_id_${Date.now()}`;
+    const missingIdSig = computeCheckoutSignature(rzpOrderNegId, missingIdPayId);
+    const missingIdRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: missingIdPayId,
+      razorpay_signature: missingIdSig
+    });
+    assert(missingIdRes.statusCode === 400, 'Provider response missing payment ID rejected with HTTP 400');
+
+    // 7f. Wrong payment ID rejected
+    const wrongIdPayId = `pay_test_wrong_id_${Date.now()}`;
+    const wrongIdSig = computeCheckoutSignature(rzpOrderNegId, wrongIdPayId);
+    const wrongIdRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: wrongIdPayId,
+      razorpay_signature: wrongIdSig
+    });
+    assert(wrongIdRes.statusCode === 400, 'Provider response wrong payment ID rejected with HTTP 400');
+
+    // 7g. Missing order_id rejected
+    const missingOrdPayId = `pay_test_missing_order_id_${Date.now()}`;
+    const missingOrdSig = computeCheckoutSignature(rzpOrderNegId, missingOrdPayId);
+    const missingOrdRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: missingOrdPayId,
+      razorpay_signature: missingOrdSig
+    });
+    assert(missingOrdRes.statusCode === 400, 'Provider response missing order_id rejected with HTTP 400');
+
+    // 7h. Wrong order_id rejected
+    const wrongOrdPayId = `pay_test_wrong_order_id_${Date.now()}`;
+    const wrongOrdSig = computeCheckoutSignature(rzpOrderNegId, wrongOrdPayId);
+    const wrongOrdRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: wrongOrdPayId,
+      razorpay_signature: wrongOrdSig
+    });
+    assert(wrongOrdRes.statusCode === 400, 'Provider response wrong order_id rejected with HTTP 400');
+
+    // 7i. Missing amount rejected
+    const missingAmtPayId = `pay_test_missing_amount_${Date.now()}`;
+    const missingAmtSig = computeCheckoutSignature(rzpOrderNegId, missingAmtPayId);
+    const missingAmtRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: missingAmtPayId,
+      razorpay_signature: missingAmtSig
+    });
+    assert(missingAmtRes.statusCode === 400, 'Provider response missing amount rejected with HTTP 400');
+
+    // 7j. Incorrect amount rejected
+    const wrongAmtPayId = `pay_test_wrong_amount_${Date.now()}`;
+    const wrongAmtSig = computeCheckoutSignature(rzpOrderNegId, wrongAmtPayId);
+    const wrongAmtRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: wrongAmtPayId,
+      razorpay_signature: wrongAmtSig
+    });
+    assert(wrongAmtRes.statusCode === 400, 'Provider response incorrect amount rejected with HTTP 400');
+
+    // 7k. Missing currency rejected
+    const missingCurrPayId = `pay_test_missing_currency_${Date.now()}`;
+    const missingCurrSig = computeCheckoutSignature(rzpOrderNegId, missingCurrPayId);
+    const missingCurrRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: missingCurrPayId,
+      razorpay_signature: missingCurrSig
+    });
+    assert(missingCurrRes.statusCode === 400, 'Provider response missing currency rejected with HTTP 400');
+
+    // 7l. Incorrect currency rejected
+    const wrongCurrPayId = `pay_test_wrong_currency_${Date.now()}`;
+    const wrongCurrSig = computeCheckoutSignature(rzpOrderNegId, wrongCurrPayId);
+    const wrongCurrRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: wrongCurrPayId,
+      razorpay_signature: wrongCurrSig
+    });
+    assert(wrongCurrRes.statusCode === 400, 'Provider response incorrect currency rejected with HTTP 400');
+
+    // 7m. Missing status rejected
+    const missingStatusPayId = `pay_test_missing_status_${Date.now()}`;
+    const missingStatusSig = computeCheckoutSignature(rzpOrderNegId, missingStatusPayId);
+    const missingStatusRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: missingStatusPayId,
+      razorpay_signature: missingStatusSig
+    });
+    assert(missingStatusRes.statusCode === 400, 'Provider response missing status rejected with HTTP 400');
+
+    // 7n. Authorized-only payment status rejected
     const authOnlyPaymentId = `pay_auth_only_${Date.now()}`;
-    const authOnlySig = computeCheckoutSignature(rzpOrder3Id, authOnlyPaymentId);
+    const authOnlySig = computeCheckoutSignature(rzpOrderNegId, authOnlyPaymentId);
     const authOnlyRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
-      orderId: order3Id,
-      razorpay_order_id: rzpOrder3Id,
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
       razorpay_payment_id: authOnlyPaymentId,
       razorpay_signature: authOnlySig
     });
     assert(authOnlyRes.statusCode === 400, 'Authorized-only payment rejected with HTTP 400 Bad Request');
     assert(authOnlyRes.data.status === 'authorized', 'Rejection reports provider status is authorized');
 
-    // Verify order remains unpaid after authorized-only payment attempt
-    const checkAuthOnlyState = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${order3Id}`);
-    const authOnlyOrd = (checkAuthOnlyState.data.orders || []).find(o => o.id === order3Id);
-    assert(authOnlyOrd && authOnlyOrd.isPaid === false, 'Order remains unpaid after authorized-only payment rejection');
-
-    // 7d. Failed status payment rejected
+    // 7o. Failed status payment rejected
     const failedStatusPaymentId = `pay_failed_status_${Date.now()}`;
-    const failedStatusSig = computeCheckoutSignature(rzpOrder3Id, failedStatusPaymentId);
+    const failedStatusSig = computeCheckoutSignature(rzpOrderNegId, failedStatusPaymentId);
     const failedStatusRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
-      orderId: order3Id,
-      razorpay_order_id: rzpOrder3Id,
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
       razorpay_payment_id: failedStatusPaymentId,
       razorpay_signature: failedStatusSig
     });
     assert(failedStatusRes.statusCode === 400, 'Failed provider status rejected with HTTP 400 Bad Request');
 
-    // 7e. Provider timeout / error leaves order unpaid with pending status
+    // 7p. Provider timeout returns safe non-settlement pending status
     const timeoutPaymentId = `pay_provider_timeout_${Date.now()}`;
-    const timeoutSig = computeCheckoutSignature(rzpOrder3Id, timeoutPaymentId);
+    const timeoutSig = computeCheckoutSignature(rzpOrderNegId, timeoutPaymentId);
     const timeoutRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
-      orderId: order3Id,
-      razorpay_order_id: rzpOrder3Id,
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
       razorpay_payment_id: timeoutPaymentId,
       razorpay_signature: timeoutSig
     });
-    assert(timeoutRes.statusCode === 502 || timeoutRes.statusCode === 504 || timeoutRes.statusCode === 400, 'Provider timeout/error returns safe non-settlement status');
-    assert(timeoutRes.data.status === 'pending_verification', 'Returns pending_verification status');
+    assert(timeoutRes.statusCode === 502 || timeoutRes.statusCode === 504 || timeoutRes.statusCode === 400, 'Provider timeout returns safe non-settlement status');
+    assert(timeoutRes.data.status === 'pending_verification', 'Returns pending_verification status on timeout');
 
-    // 7f. Authentic signature with captured status settles order
+    // 7q. Provider API error returns safe non-settlement pending status
+    const errorPaymentId = `pay_provider_error_${Date.now()}`;
+    const errorSig = computeCheckoutSignature(rzpOrderNegId, errorPaymentId);
+    const errorRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: errorPaymentId,
+      razorpay_signature: errorSig
+    });
+    assert(errorRes.statusCode === 502 || errorRes.statusCode === 504 || errorRes.statusCode === 400, 'Provider API error returns safe non-settlement status');
+    assert(errorRes.data.status === 'pending_verification', 'Returns pending_verification status on provider API error');
+
+    // PROOF: Verify orderNeg remained unpaid and zero customer spend was incremented
+    const checkNegState = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${orderNegId}`);
+    const negOrdDoc = (checkNegState.data.orders || []).find(o => o.id === orderNegId);
+    assert(negOrdDoc && negOrdDoc.isPaid === false, 'Negative test order remains unpaid (isPaid: false)');
+
+    const custStateAfterNeg = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custAfterNeg = (custStateAfterNeg.data.customers || []).find(c => c.phone === '9876543210');
+    const spentAfterNeg = custAfterNeg ? custAfterNeg.totalSpent || 0 : 0;
+    assert(spentAfterNeg === spentBeforeNeg, 'Zero customer spend incremented during all negative tests');
+
+    // 7r. Authentic signature with captured status settles order
     const validCheckout = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
-      orderId: order3Id,
-      razorpay_order_id: rzpOrder3Id,
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
       razorpay_payment_id: paymentId3,
       razorpay_signature: validCheckoutSig
     });
@@ -473,19 +656,19 @@ async function runPhase10Tests() {
     assert(validCheckout.data.verified === true, 'Checkout verification response confirms verified: true');
     assert(validCheckout.data.order.isPaid === true, 'Order marked isPaid: true via verified signature & captured status');
 
-    // 7g. Idempotent re-submission
+    // 7s. Idempotent re-submission
     const repeatCheckout = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
-      orderId: order3Id,
-      razorpay_order_id: rzpOrder3Id,
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
       razorpay_payment_id: paymentId3,
       razorpay_signature: validCheckoutSig
     });
     assert(repeatCheckout.statusCode === 200, 'Repeated client signature submission acknowledged with HTTP 200');
 
     // ----------------------------------------------------
-    // SECTION 8: CROSS-TENANT ORDER BINDING INTEGRITY
+    // SECTION 8: CROSS-TENANT ORDER BINDING INTEGRITY & WEBHOOK TENANT ENFORCEMENT
     // ----------------------------------------------------
-    console.log('\n--- 8. CROSS-TENANT PAYMENT ASSOCIATION INTEGRITY ---');
+    console.log('\n--- 8. CROSS-TENANT PAYMENT ASSOCIATION & WEBHOOK ENFORCEMENT ---');
     const crossRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=sharma-dhaba', {}, {
       orderId: order3Id, // tiptap-bistro order
       razorpay_order_id: rzpOrder3Id,
@@ -493,6 +676,54 @@ async function runPhase10Tests() {
       razorpay_signature: validCheckoutSig
     });
     assert(crossRes.statusCode === 404, 'Cross-tenant order verification rejected with HTTP 404 Not Found');
+
+    // 8b. Cross-tenant webhook query mismatch rejection
+    const crossTenantWebhookPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: `pay_cross_wh_${Date.now()}`,
+            order_id: rzpOrder3Id, // belongs to tiptap-bistro
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const crossTenantSig = computeWebhookSignature(crossTenantWebhookPayload);
+    const crossTenantWhRes = await makeRequest('POST', '/api/payment-webhook?restaurant=sharma-dhaba', {
+      'x-razorpay-signature': crossTenantSig,
+      'x-razorpay-event-id': `evt_cross_${Date.now()}`
+    }, crossTenantWebhookPayload);
+    assert(crossTenantWhRes.statusCode === 403, 'Cross-tenant webhook query mismatch strictly rejected with HTTP 403 Forbidden');
+
+    // 8c. Webhook order.paid without provider payment entity rejected (never fabricate payment ID)
+    const missingPayEntityPayload = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        order: {
+          entity: {
+            id: rzpOrder3Id,
+            amount: 29400,
+            amount_paid: 29400,
+            currency: 'INR',
+            status: 'paid'
+          }
+        }
+        // payment entity completely missing
+      }
+    });
+    const missingEntitySig = computeWebhookSignature(missingPayEntityPayload);
+    const missingEntityRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': missingEntitySig,
+      'x-razorpay-event-id': `evt_missing_entity_${Date.now()}`
+    }, missingPayEntityPayload);
+    assert(missingEntityRes.statusCode === 400, 'Webhook order.paid with missing payment entity rejected with HTTP 400 (never fabricates synthetic payment ID)');
 
     // ----------------------------------------------------
     // SECTION 9: CONCURRENCY & RACE CONDITIONS
@@ -550,6 +781,66 @@ async function runPhase10Tests() {
     const customerAfter = (custStateAfter.data.customers || []).find(c => c.phone === '9876543210');
     const spentAfter = customerAfter ? customerAfter.totalSpent || 0 : 0;
     assert(spentAfter === spentBefore + 294, `Customer lifetime spend incremented exactly once (${spentBefore + 294}), got ${spentAfter}`);
+
+    // 9b. Duplicate Payment Across Multiple Orders Violation Prevention
+    console.log('\n--- 9b. DUPLICATE PAYMENT ACROSS DIFFERENT ORDERS PREVENTION ---');
+    const orderARes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 9,
+      tableName: 'Table 9',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderAId = orderARes.data.id;
+    const payOrderA = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderAId });
+    const rzpOrderAId = payOrderA.data.razorpayOrderId;
+
+    const orderBRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 10,
+      tableName: 'Table 10',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderBId = orderBRes.data.id;
+    const payOrderB = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderBId });
+    const rzpOrderBId = payOrderB.data.razorpayOrderId;
+
+    const sharedPaymentId = `pay_cross_order_${Date.now()}`;
+    const sigA = computeCheckoutSignature(rzpOrderAId, sharedPaymentId);
+    const sigB = computeCheckoutSignature(rzpOrderBId, sharedPaymentId);
+
+    // Settle Order A with sharedPaymentId
+    const settleARes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderAId,
+      razorpay_order_id: rzpOrderAId,
+      razorpay_payment_id: sharedPaymentId,
+      razorpay_signature: sigA
+    });
+    assert(settleARes.statusCode === 200, 'Order A settled successfully with payment ID');
+
+    // Attempt to settle Order B with the SAME payment ID
+    const settleBRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderBId,
+      razorpay_order_id: rzpOrderBId,
+      razorpay_payment_id: sharedPaymentId,
+      razorpay_signature: sigB
+    });
+    assert(settleBRes.statusCode === 400, 'Attempt to settle Order B with already-consumed payment ID strictly rejected with HTTP 400');
+    assert(settleBRes.data.error && settleBRes.data.error.includes('Cannot settle multiple orders'), 'Rejection error confirms payment ID already consumed');
+
+    // Verify Order B remains unpaid
+    const checkOrderBState = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${orderBId}`);
+    const ordBDoc = (checkOrderBState.data.orders || []).find(o => o.id === orderBId);
+    assert(ordBDoc && ordBDoc.isPaid === false, 'Order B remains unpaid after duplicate payment rejection');
+
+    // 9c. Attempt to settle already-paid Order A with a different payment ID
+    const differentPaymentId = `pay_different_${Date.now()}`;
+    const sigADiff = computeCheckoutSignature(rzpOrderAId, differentPaymentId);
+    const settleADiffRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderAId,
+      razorpay_order_id: rzpOrderAId,
+      razorpay_payment_id: differentPaymentId,
+      razorpay_signature: sigADiff
+    });
+    assert(settleADiffRes.statusCode === 400, 'Attempt to settle already-settled Order A with different payment ID rejected with HTTP 400');
+    assert(settleADiffRes.data.error && settleADiffRes.data.error.includes('already settled with payment ID'), 'Rejection error confirms conflicting payment ID rejected');
 
     // ----------------------------------------------------
     // SECTION 10: CUSTOMER UI COMPLETE UTR REMOVAL CHECK

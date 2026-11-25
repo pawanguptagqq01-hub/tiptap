@@ -972,7 +972,8 @@ function verifyRazorpayCheckoutSignature(orderId, paymentId, signature, secret) 
 
 function createRazorpayOrder({ keyId, keySecret, amountPaise, currency = 'INR', receipt, notes = {}, timeoutMs = 10000 }) {
   return new Promise((resolve) => {
-    const isTestEnv = process.env.NODE_ENV === 'test' || process.env.TIPTAP_TEST_MODE === 'true';
+    // Strictly isolate test mode: NEVER allow mock mode in production environment
+    const isTestEnv = (process.env.NODE_ENV === 'test' || process.env.TIPTAP_TEST_MODE === 'true') && process.env.NODE_ENV !== 'production';
 
     // In production or outside test environment, credentials MUST be provided and valid
     if (!keyId || !keySecret) {
@@ -1082,11 +1083,12 @@ function createRazorpayOrder({ keyId, keySecret, amountPaise, currency = 'INR', 
  * Fetches authentic payment status from Razorpay REST API:
  * GET https://api.razorpay.com/v1/payments/{payment_id}
  */
-function fetchRazorpayPayment({ keyId, keySecret, paymentId, timeoutMs = 10000 }) {
+function fetchRazorpayPayment({ keyId, keySecret, paymentId, expectedOrder = null, timeoutMs = 10000 }) {
   return new Promise((resolve) => {
-    const isTestEnv = process.env.NODE_ENV === 'test' || process.env.TIPTAP_TEST_MODE === 'true';
+    // Strictly isolate test mode: NEVER allow mock mode in production environment
+    const isTestEnv = (process.env.NODE_ENV === 'test' || process.env.TIPTAP_TEST_MODE === 'true') && process.env.NODE_ENV !== 'production';
 
-    // In isolated test environment: support simulated scenarios for test suites
+    // In isolated test environment: support comprehensive simulated scenarios for negative tests
     if (isTestEnv) {
       if (paymentId && paymentId.includes('provider_timeout')) {
         resolve({ success: false, statusCode: 504, error: 'Razorpay API request timed out' });
@@ -1096,6 +1098,131 @@ function fetchRazorpayPayment({ keyId, keySecret, paymentId, timeoutMs = 10000 }
         resolve({ success: false, statusCode: 502, error: 'Bad Gateway from Razorpay API' });
         return;
       }
+      if (paymentId && paymentId.includes('malformed')) {
+        resolve({ success: true, statusCode: 200, payment: 'invalid_non_object_string' });
+        return;
+      }
+      if (paymentId && paymentId.includes('missing_id')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
+            currency: 'INR',
+            status: 'captured'
+          }
+        });
+        return;
+      }
+      if (paymentId && paymentId.includes('wrong_id')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: 'pay_wrong_different_999',
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
+            currency: 'INR',
+            status: 'captured'
+          }
+        });
+        return;
+      }
+      if (paymentId && paymentId.includes('missing_order_id')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: paymentId,
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
+            currency: 'INR',
+            status: 'captured'
+          }
+        });
+        return;
+      }
+      if (paymentId && paymentId.includes('wrong_order_id')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: paymentId,
+            order_id: 'order_wrong_different_999',
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
+            currency: 'INR',
+            status: 'captured'
+          }
+        });
+        return;
+      }
+      if (paymentId && paymentId.includes('missing_amount')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: paymentId,
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            currency: 'INR',
+            status: 'captured'
+          }
+        });
+        return;
+      }
+      if (paymentId && paymentId.includes('wrong_amount')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: paymentId,
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            amount: 100, // 1 Rupee instead of expected order total
+            currency: 'INR',
+            status: 'captured'
+          }
+        });
+        return;
+      }
+      if (paymentId && paymentId.includes('missing_currency')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: paymentId,
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
+            status: 'captured'
+          }
+        });
+        return;
+      }
+      if (paymentId && paymentId.includes('wrong_currency')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: paymentId,
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
+            currency: 'USD',
+            status: 'captured'
+          }
+        });
+        return;
+      }
+      if (paymentId && paymentId.includes('missing_status')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: paymentId,
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
+            currency: 'INR'
+          }
+        });
+        return;
+      }
       if (paymentId && paymentId.includes('auth_only')) {
         resolve({
           success: true,
@@ -1103,6 +1230,8 @@ function fetchRazorpayPayment({ keyId, keySecret, paymentId, timeoutMs = 10000 }
           payment: {
             id: paymentId,
             entity: 'payment',
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
             currency: 'INR',
             status: 'authorized',
             method: 'upi'
@@ -1117,6 +1246,8 @@ function fetchRazorpayPayment({ keyId, keySecret, paymentId, timeoutMs = 10000 }
           payment: {
             id: paymentId,
             entity: 'payment',
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
             currency: 'INR',
             status: 'failed',
             method: 'upi'
@@ -1124,7 +1255,8 @@ function fetchRazorpayPayment({ keyId, keySecret, paymentId, timeoutMs = 10000 }
         });
         return;
       }
-      // If mock test payment or keys are test mock keys
+
+      // If mock test payment or keys are test mock keys: return COMPLETE provider-shaped response
       if (!keySecret || keyId === 'rzp_test_TipTapPOS99' || process.env.TIPTAP_MOCK_PAYMENTS === 'true' || paymentId.startsWith('pay_')) {
         resolve({
           success: true,
@@ -1133,9 +1265,12 @@ function fetchRazorpayPayment({ keyId, keySecret, paymentId, timeoutMs = 10000 }
           payment: {
             id: paymentId,
             entity: 'payment',
-            status: 'captured',
+            order_id: expectedOrder?.razorpayOrderId || 'order_mock_123',
+            amount: expectedOrder ? Math.round(Number(expectedOrder.total || 0) * 100) : 58800,
             currency: 'INR',
-            method: 'upi'
+            status: 'captured',
+            method: 'upi',
+            created_at: Math.floor(Date.now() / 1000)
           }
         });
         return;
@@ -1215,35 +1350,7 @@ async function settleOrderPaymentShared({
     return { success: false, statusCode: 404, error: `Restaurant "${restaurantId}" not found.` };
   }
 
-  // 1. Replay & Duplicate Webhook Event ID Check (Persistent Storage)
-  if (eventId) {
-    db.processedWebhookEvents = db.processedWebhookEvents || {};
-    if (db.processedWebhookEvents[eventId]) {
-      return {
-        success: true,
-        statusCode: 200,
-        alreadyProcessed: true,
-        message: 'Webhook event ID already processed (idempotent)',
-        eventId
-      };
-    }
-  }
-
-  // 2. Replay & Duplicate Payment ID Check
-  if (paymentId) {
-    db.processedPayments = db.processedPayments || {};
-    if (db.processedPayments[paymentId]) {
-      return {
-        success: true,
-        statusCode: 200,
-        alreadyProcessed: true,
-        message: 'Payment ID already settled (idempotent)',
-        paymentId
-      };
-    }
-  }
-
-  // 3. Locate Order (Active or Completed)
+  // 1. Locate Order (Active or Completed)
   let targetOrder = (restaurant.orders || []).find(o => o.id === orderId || (orderId && o.razorpayOrderId === orderId));
   const alreadyCompleted = (restaurant.completedOrders || []).find(o => o.id === orderId || (orderId && o.razorpayOrderId === orderId));
 
@@ -1267,6 +1374,53 @@ async function settleOrderPaymentShared({
 
   if (!targetOrder) {
     return { success: false, statusCode: 404, error: `Order "${orderId}" not found for restaurant "${restaurantId}".` };
+  }
+
+  // 2. Replay & Duplicate Webhook Event ID Check (Persistent Storage)
+  if (eventId) {
+    db.processedWebhookEvents = db.processedWebhookEvents || {};
+    if (db.processedWebhookEvents[eventId]) {
+      return {
+        success: true,
+        statusCode: 200,
+        alreadyProcessed: true,
+        message: 'Webhook event ID already processed (idempotent)',
+        eventId
+      };
+    }
+  }
+
+  // 3. Replay & Duplicate Payment ID Check
+  if (paymentId) {
+    db.processedPayments = db.processedPayments || {};
+    if (db.processedPayments[paymentId]) {
+      const existing = db.processedPayments[paymentId];
+      if (existing.orderId && existing.orderId !== targetOrder.id) {
+        return {
+          success: false,
+          statusCode: 400,
+          error: `Payment ID "${paymentId}" was already consumed by order "${existing.orderId}". Cannot settle multiple orders with same payment.`
+        };
+      }
+      return {
+        success: true,
+        statusCode: 200,
+        alreadyProcessed: true,
+        message: 'Payment ID already settled (idempotent)',
+        paymentId
+      };
+    }
+  }
+
+  // Ensure two different payments cannot settle the same order
+  if (targetOrder.isPaid || targetOrder.paymentStatus === 'paid') {
+    if (paymentId && targetOrder.txnId && targetOrder.txnId !== paymentId && targetOrder.paymentDetails?.paymentId !== paymentId) {
+      return {
+        success: false,
+        statusCode: 400,
+        error: `Order "${targetOrder.id}" is already settled with payment ID "${targetOrder.txnId}". Cannot apply different payment "${paymentId}".`
+      };
+    }
   }
 
   // 4. Validate Currency & Captured Amount
@@ -1296,6 +1450,14 @@ async function settleOrderPaymentShared({
 
     // Replay & concurrency check inside persistent transaction:
     if (paymentId && currentDb.processedPayments && currentDb.processedPayments[paymentId]) {
+      const existing = currentDb.processedPayments[paymentId];
+      if (existing.orderId && existing.orderId !== targetOrder.id) {
+        return {
+          skipSave: true,
+          duplicatePaymentViolation: true,
+          error: `Payment ID "${paymentId}" was already consumed by order "${existing.orderId}". Cannot settle multiple orders with same payment.`
+        };
+      }
       settledOrderCopy = JSON.parse(JSON.stringify(activeOrder || targetOrder));
       return { skipSave: true, alreadySettled: true };
     }
@@ -1304,6 +1466,13 @@ async function settleOrderPaymentShared({
       return { skipSave: true, alreadyProcessed: true };
     }
     if (activeOrder.isPaid || activeOrder.paymentStatus === 'paid') {
+      if (paymentId && activeOrder.txnId && activeOrder.txnId !== paymentId && activeOrder.paymentDetails?.paymentId !== paymentId) {
+        return {
+          skipSave: true,
+          duplicatePaymentViolation: true,
+          error: `Order "${activeOrder.id}" is already settled with payment ID "${activeOrder.txnId}". Cannot apply different payment "${paymentId}".`
+        };
+      }
       settledOrderCopy = JSON.parse(JSON.stringify(activeOrder));
       return { skipSave: true, alreadySettled: true };
     }
@@ -1407,6 +1576,15 @@ async function settleOrderPaymentShared({
 
   if (!persisted.success) {
     return { success: false, statusCode: 500, error: 'Database mutation failed during settlement' };
+  }
+
+  // Reject duplicate payment cross-order or order-payment mismatches detected in transaction
+  if (persisted.data && persisted.data.duplicatePaymentViolation) {
+    return {
+      success: false,
+      statusCode: 400,
+      error: persisted.data.error || 'Duplicate payment violation'
+    };
   }
 
   // Handle idempotent completion if a concurrent request already settled this order/payment
@@ -2929,14 +3107,29 @@ const server = http.createServer(async (req, res) => {
         const razorpayOrderId = rzpResult.order.id;
 
         // Bind razorpayOrderId to the local order and persist
-        order.razorpayOrderId = razorpayOrderId;
-        await persistDbChange(null, async (currentDb) => {
+        const persistResult = await persistDbChange(null, async (currentDb) => {
+          if (process.env.NODE_ENV === 'test' && (order.id.includes('fail_persist') || (data && data.simulatePersistFailure))) {
+            throw new Error('Simulated database write failure during order binding');
+          }
           const activeRest = (currentDb && currentDb.restaurants && currentDb.restaurants[restaurant.id]) || restaurant;
           const activeOrder = (activeRest.orders || []).find(o => o.id === order.id);
           if (activeOrder) {
             activeOrder.razorpayOrderId = razorpayOrderId;
           }
         });
+
+        if (!persistResult || !persistResult.success) {
+          delete order.razorpayOrderId;
+          console.error(`🚨 [Razorpay Order Binding Failed]: Database persistence failed for order "${order.id}". Gateway order "${razorpayOrderId}" remains unbound.`);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Failed to securely bind payment order to local order. Please retry.',
+            code: 'PERSISTENCE_FAILED'
+          }));
+          return;
+        }
+
+        order.razorpayOrderId = razorpayOrderId;
 
         const txnId = `TXN_${Date.now()}_${Math.floor(Math.random() * 9000 + 1000)}`;
         const merchantVpa = restaurant.paymentConfig?.upiVpa || 'tiptap.merchant@icici';
@@ -3118,23 +3311,11 @@ const server = http.createServer(async (req, res) => {
         const signature = (req.headers && req.headers['x-razorpay-signature']) || '';
         const eventId = (req.headers && req.headers['x-razorpay-event-id']) || '';
 
-        // Webhook secret resolution: restaurant specific if present, else global environment variable
-        const webhookSecret = restaurant?.paymentConfig?.razorpayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET;
-
-        if (!signature || !webhookSecret) {
+        // Fail-closed authentication: unverified webhooks without signature header strictly rejected
+        if (!signature) {
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
-            error: 'Unauthorized: Webhook signature verification failed. Missing signature header or webhook secret configuration.'
-          }));
-          return;
-        }
-
-        // Verify HMAC-SHA256 signature using unparsed raw request bytes
-        const isSignatureValid = verifyRazorpayWebhookSignature(req.rawBody || rawBody, signature, webhookSecret);
-        if (!isSignatureValid) {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            error: 'Unauthorized: Webhook signature verification failed. Invalid signature.'
+            error: 'Unauthorized: Webhook signature verification failed. Missing x-razorpay-signature header.'
           }));
           return;
         }
@@ -3152,7 +3333,13 @@ const server = http.createServer(async (req, res) => {
           const orderEntity = data.payload?.order?.entity;
           const paymentEntity = data.payload?.payment?.entity;
           rzpOrderId = orderEntity?.id || paymentEntity?.order_id;
-          rzpPaymentId = paymentEntity?.id || (orderEntity && `PAY_${orderEntity.id}`);
+          rzpPaymentId = paymentEntity?.id;
+          // Security Requirement 5: Never fabricate payment ID when provider entity is missing
+          if (!rzpPaymentId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Webhook payload missing required provider payment ID entity.' }));
+            return;
+          }
           capturedAmount = paymentEntity?.amount || orderEntity?.amount_paid;
           currency = paymentEntity?.currency || orderEntity?.currency || 'INR';
           paymentMethod = paymentEntity?.method || 'upi';
@@ -3168,6 +3355,11 @@ const server = http.createServer(async (req, res) => {
           const paymentEntity = data.payload?.payment?.entity;
           rzpOrderId = paymentEntity?.order_id;
           rzpPaymentId = paymentEntity?.id;
+          if (!rzpPaymentId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Webhook payload missing required provider payment ID entity.' }));
+            return;
+          }
           capturedAmount = paymentEntity?.amount;
           currency = paymentEntity?.currency || 'INR';
           paymentMethod = paymentEntity?.method || 'upi';
@@ -3192,25 +3384,25 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        if (!rzpOrderId && !rzpPaymentId) {
+        if (!rzpOrderId || !rzpPaymentId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Webhook payload missing order_id or payment id' }));
+          res.end(JSON.stringify({ error: 'Webhook payload missing order_id or payment ID' }));
           return;
         }
 
-        // Locate target restaurant and order
-        // Architecture Rule 9: Do not rely on payment notes alone. First look for server-stored order.razorpayOrderId
+        // Security Requirement 5: Do not trust client query parameters for tenant ownership.
+        // Locate internal order across all restaurants in server-stored database records.
         let matchedRestId = null;
         let matchedOrder = null;
 
         for (const [rId, rObj] of Object.entries(db.restaurants || {})) {
-          const found = (rObj.orders || []).find(o => o.razorpayOrderId === rzpOrderId || o.id === rzpOrderId);
+          const found = (rObj.orders || []).find(o => o.razorpayOrderId === rzpOrderId);
           if (found) {
             matchedRestId = rId;
             matchedOrder = found;
             break;
           }
-          const foundCompleted = (rObj.completedOrders || []).find(o => o.razorpayOrderId === rzpOrderId || o.id === rzpOrderId);
+          const foundCompleted = (rObj.completedOrders || []).find(o => o.razorpayOrderId === rzpOrderId);
           if (foundCompleted) {
             matchedRestId = rId;
             matchedOrder = foundCompleted;
@@ -3218,22 +3410,48 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // Fallback: check targetRestId or notes
-        if (!matchedOrder) {
-          const notes = data.payload?.payment?.entity?.notes || data.payload?.order?.entity?.notes || {};
-          const noteRestId = notes.restaurantId || targetRestId;
-          const noteOrderId = notes.orderId;
-          const noteRest = db.restaurants && db.restaurants[noteRestId];
-          if (noteRest && noteOrderId) {
-            matchedOrder = (noteRest.orders || []).find(o => o.id === noteOrderId) ||
-                           (noteRest.completedOrders || []).find(o => o.id === noteOrderId);
-            if (matchedOrder) matchedRestId = noteRestId;
-          }
-        }
-
         if (!matchedOrder || !matchedRestId) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `No local order found matching Razorpay Order "${rzpOrderId}".` }));
+          res.end(JSON.stringify({ error: `No local order found bound to Razorpay Order "${rzpOrderId}".` }));
+          return;
+        }
+
+        // Cross-Tenant query parameter rejection
+        const queryRestId = (searchParams.get('restaurant') || '').trim();
+        if (queryRestId && queryRestId !== matchedRestId) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: `Cross-tenant webhook rejected: Order "${matchedOrder.id}" belongs to "${matchedRestId}", not "${queryRestId}".`
+          }));
+          return;
+        }
+
+        // Webhook secret resolution: restaurant specific if present, else global environment variable
+        const matchedRestaurant = db.restaurants && db.restaurants[matchedRestId];
+        const webhookSecret = matchedRestaurant?.paymentConfig?.razorpayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET;
+
+        if (!signature || !webhookSecret) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Unauthorized: Webhook signature verification failed. Missing signature header or webhook secret configuration.'
+          }));
+          return;
+        }
+
+        // Verify HMAC-SHA256 signature using unparsed raw request bytes
+        const isSignatureValid = verifyRazorpayWebhookSignature(req.rawBody || rawBody, signature, webhookSecret);
+        if (!isSignatureValid) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Unauthorized: Webhook signature verification failed. Invalid signature.'
+          }));
+          return;
+        }
+
+        // Validate captured amount
+        if (!capturedAmount || Number(capturedAmount) <= 0) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Webhook payload missing valid captured amount' }));
           return;
         }
 
@@ -3302,8 +3520,16 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Validate local order binds to this razorpay_order_id
-        if (targetOrder.razorpayOrderId && targetOrder.razorpayOrderId !== razorpay_order_id) {
+        // Security Requirement 1: Validate local order has an authoritative server-bound razorpayOrderId
+        if (!targetOrder.razorpayOrderId || typeof targetOrder.razorpayOrderId !== 'string' || !targetOrder.razorpayOrderId.trim()) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Order configuration error: No Razorpay order ID is bound to this server order. Client-supplied order IDs are not accepted.'
+          }));
+          return;
+        }
+
+        if (targetOrder.razorpayOrderId !== razorpay_order_id) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             error: 'Order mismatch: razorpay_order_id does not match the server-created order.'
@@ -3340,7 +3566,8 @@ const server = http.createServer(async (req, res) => {
         const fetchResult = await fetchRazorpayPayment({
           keyId,
           keySecret,
-          paymentId: razorpay_payment_id
+          paymentId: razorpay_payment_id,
+          expectedOrder: targetOrder
         });
 
         if (!fetchResult.success || !fetchResult.payment) {
@@ -3358,22 +3585,43 @@ const server = http.createServer(async (req, res) => {
 
         const providerPayment = fetchResult.payment;
 
-        // 3. Verify returned payment fields
-        // a. Payment ID exact match
-        if (providerPayment.id && providerPayment.id !== razorpay_payment_id) {
+        // Security Requirement 1: Require every single Razorpay provider field - missing fields must fail closed
+        if (!providerPayment || typeof providerPayment !== 'object') {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Payment ID mismatch: Provider returned a different payment ID.' }));
+          res.end(JSON.stringify({ error: 'Malformed provider payment response: Expected payment object from Razorpay.' }));
           return;
         }
 
-        // b. Order ID exact match
-        if (providerPayment.order_id && providerPayment.order_id !== (targetOrder.razorpayOrderId || razorpay_order_id)) {
+        // a. Mandatory Payment ID exact match
+        if (!providerPayment.id || typeof providerPayment.id !== 'string') {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Order ID mismatch: Payment does not belong to expected Razorpay order.' }));
+          res.end(JSON.stringify({ error: 'Validation failed: Missing payment ID in provider payment record.' }));
+          return;
+        }
+        if (providerPayment.id !== razorpay_payment_id) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Payment ID mismatch: Provider returned "${providerPayment.id}", expected "${razorpay_payment_id}".` }));
           return;
         }
 
-        // c. Payment status MUST be exactly 'captured'
+        // b. Mandatory Order ID exact match
+        if (!providerPayment.order_id || typeof providerPayment.order_id !== 'string') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Validation failed: Missing order_id in provider payment record.' }));
+          return;
+        }
+        if (providerPayment.order_id !== targetOrder.razorpayOrderId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Order ID mismatch: Payment belongs to "${providerPayment.order_id}", expected "${targetOrder.razorpayOrderId}".` }));
+          return;
+        }
+
+        // c. Mandatory Payment status MUST be exactly 'captured'
+        if (!providerPayment.status || typeof providerPayment.status !== 'string') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Validation failed: Missing status in provider payment record.' }));
+          return;
+        }
         if (providerPayment.status !== 'captured') {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
@@ -3383,9 +3631,14 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // d. Amount in paise exact match against server-stored order total
+        // d. Mandatory Amount in paise exact match against server-stored order total
         const expectedPaise = Math.round(Number(targetOrder.total || 0) * 100);
-        if (providerPayment.amount !== undefined && Number(providerPayment.amount) !== expectedPaise) {
+        if (providerPayment.amount === undefined || providerPayment.amount === null || typeof Number(providerPayment.amount) !== 'number' || isNaN(Number(providerPayment.amount))) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Validation failed: Missing or invalid amount in provider payment record.' }));
+          return;
+        }
+        if (Number(providerPayment.amount) !== expectedPaise) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             error: `Amount mismatch: Provider captured ${providerPayment.amount} paise, expected ${expectedPaise} paise.`
@@ -3393,8 +3646,13 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // e. Currency exact match (INR)
-        if (providerPayment.currency && providerPayment.currency.toUpperCase() !== 'INR') {
+        // e. Mandatory Currency exact match (INR)
+        if (!providerPayment.currency || typeof providerPayment.currency !== 'string') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Validation failed: Missing currency in provider payment record.' }));
+          return;
+        }
+        if (providerPayment.currency.toUpperCase() !== 'INR') {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: `Currency mismatch: Expected INR, got ${providerPayment.currency}.` }));
           return;
