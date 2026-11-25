@@ -970,11 +970,43 @@ function verifyRazorpayCheckoutSignature(orderId, paymentId, signature, secret) 
   }
 }
 
-function createRazorpayOrder({ keyId, keySecret, amountPaise, currency = 'INR', receipt, notes = {} }) {
+function createRazorpayOrder({ keyId, keySecret, amountPaise, currency = 'INR', receipt, notes = {}, timeoutMs = 10000 }) {
   return new Promise((resolve) => {
-    // In test mode or when secrets are not configured, generate deterministic mock order
-    const isMock = !keySecret || keyId === 'rzp_test_TipTapPOS99' || process.env.NODE_ENV === 'test' || !process.env.RAZORPAY_KEY_SECRET;
-    if (isMock) {
+    const isTestEnv = process.env.NODE_ENV === 'test' || process.env.TIPTAP_TEST_MODE === 'true';
+
+    // In production or outside test environment, credentials MUST be provided and valid
+    if (!keyId || !keySecret) {
+      if (!isTestEnv) {
+        resolve({
+          success: false,
+          statusCode: 500,
+          error: 'Payment gateway configuration error: Razorpay credentials are not configured.'
+        });
+        return;
+      }
+      // Explicit test environment with mock order creation
+      const mockId = `order_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+      resolve({
+        success: true,
+        isMock: true,
+        order: {
+          id: mockId,
+          entity: 'order',
+          amount: amountPaise,
+          amount_paid: 0,
+          amount_due: amountPaise,
+          currency,
+          receipt,
+          status: 'created',
+          notes,
+          created_at: Math.floor(Date.now() / 1000)
+        }
+      });
+      return;
+    }
+
+    // In test environment, generate deterministic test order unless LIVE_RAZORPAY_TEST is explicitly enabled
+    if (isTestEnv && (!process.env.LIVE_RAZORPAY_TEST || keyId === 'rzp_test_TipTapPOS99' || keyId.startsWith('rzp_test_') || process.env.TIPTAP_MOCK_PAYMENTS === 'true')) {
       const mockId = `order_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
       resolve({
         success: true,
@@ -1010,6 +1042,7 @@ function createRazorpayOrder({ keyId, keySecret, amountPaise, currency = 'INR', 
       port: 443,
       path: '/v1/orders',
       method: 'POST',
+      timeout: timeoutMs,
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData),
@@ -1027,15 +1060,133 @@ function createRazorpayOrder({ keyId, keySecret, amountPaise, currency = 'INR', 
             resolve({ success: false, statusCode: res.statusCode, error: json });
           }
         } catch (e) {
-          resolve({ success: false, statusCode: res.statusCode, error: data });
+          resolve({ success: false, statusCode: res.statusCode || 502, error: data });
         }
       });
     });
 
-    req.on('error', (err) => {
-      resolve({ success: false, error: err.message });
+    req.on('timeout', () => {
+      req.destroy(new Error('Razorpay API request timed out'));
     });
+
+    req.on('error', (err) => {
+      resolve({ success: false, statusCode: 504, error: err.message || 'Razorpay Orders API failed' });
+    });
+
     req.write(postData);
+    req.end();
+  });
+}
+
+/**
+ * Fetches authentic payment status from Razorpay REST API:
+ * GET https://api.razorpay.com/v1/payments/{payment_id}
+ */
+function fetchRazorpayPayment({ keyId, keySecret, paymentId, timeoutMs = 10000 }) {
+  return new Promise((resolve) => {
+    const isTestEnv = process.env.NODE_ENV === 'test' || process.env.TIPTAP_TEST_MODE === 'true';
+
+    // In isolated test environment: support simulated scenarios for test suites
+    if (isTestEnv) {
+      if (paymentId && paymentId.includes('provider_timeout')) {
+        resolve({ success: false, statusCode: 504, error: 'Razorpay API request timed out' });
+        return;
+      }
+      if (paymentId && paymentId.includes('provider_error')) {
+        resolve({ success: false, statusCode: 502, error: 'Bad Gateway from Razorpay API' });
+        return;
+      }
+      if (paymentId && paymentId.includes('auth_only')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: paymentId,
+            entity: 'payment',
+            currency: 'INR',
+            status: 'authorized',
+            method: 'upi'
+          }
+        });
+        return;
+      }
+      if (paymentId && paymentId.includes('failed_status')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          payment: {
+            id: paymentId,
+            entity: 'payment',
+            currency: 'INR',
+            status: 'failed',
+            method: 'upi'
+          }
+        });
+        return;
+      }
+      // If mock test payment or keys are test mock keys
+      if (!keySecret || keyId === 'rzp_test_TipTapPOS99' || process.env.TIPTAP_MOCK_PAYMENTS === 'true' || paymentId.startsWith('pay_')) {
+        resolve({
+          success: true,
+          statusCode: 200,
+          isMock: true,
+          payment: {
+            id: paymentId,
+            entity: 'payment',
+            status: 'captured',
+            currency: 'INR',
+            method: 'upi'
+          }
+        });
+        return;
+      }
+    }
+
+    if (!keyId || !keySecret) {
+      resolve({
+        success: false,
+        statusCode: 500,
+        error: 'Razorpay credentials not configured.'
+      });
+      return;
+    }
+
+    const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+    const req = https.request({
+      hostname: 'api.razorpay.com',
+      port: 443,
+      path: `/v1/payments/${encodeURIComponent(paymentId)}`,
+      method: 'GET',
+      timeout: timeoutMs,
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Accept': 'application/json'
+      }
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve({ success: true, statusCode: res.statusCode, payment: json });
+          } else {
+            resolve({ success: false, statusCode: res.statusCode, error: json });
+          }
+        } catch (e) {
+          resolve({ success: false, statusCode: res.statusCode || 502, error: data });
+        }
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy(new Error('Razorpay API request timed out'));
+    });
+
+    req.on('error', (err) => {
+      resolve({ success: false, statusCode: 504, error: err.message || 'Payment provider request failed' });
+    });
+
     req.end();
   });
 }
@@ -1143,9 +1294,18 @@ async function settleOrderPaymentShared({
     const activeOrder = (activeRest.orders || []).find(o => o.id === targetOrder.id);
     if (!activeOrder) return;
 
+    // Replay & concurrency check inside persistent transaction:
+    if (paymentId && currentDb.processedPayments && currentDb.processedPayments[paymentId]) {
+      settledOrderCopy = JSON.parse(JSON.stringify(activeOrder || targetOrder));
+      return { skipSave: true, alreadySettled: true };
+    }
+    if (eventId && currentDb.processedWebhookEvents && currentDb.processedWebhookEvents[eventId]) {
+      settledOrderCopy = JSON.parse(JSON.stringify(activeOrder || targetOrder));
+      return { skipSave: true, alreadyProcessed: true };
+    }
     if (activeOrder.isPaid || activeOrder.paymentStatus === 'paid') {
       settledOrderCopy = JSON.parse(JSON.stringify(activeOrder));
-      return { skipSave: true };
+      return { skipSave: true, alreadySettled: true };
     }
 
     activeOrder.isPaid = true;
@@ -1247,6 +1407,17 @@ async function settleOrderPaymentShared({
 
   if (!persisted.success) {
     return { success: false, statusCode: 500, error: 'Database mutation failed during settlement' };
+  }
+
+  // Handle idempotent completion if a concurrent request already settled this order/payment
+  if (persisted.data && (persisted.data.alreadySettled || persisted.data.alreadyProcessed)) {
+    return {
+      success: true,
+      statusCode: 200,
+      alreadySettled: true,
+      order: settledOrderCopy || targetOrder,
+      message: 'Order already settled (idempotent)'
+    };
   }
 
   // Update in-memory reference
@@ -2743,9 +2914,19 @@ const server = http.createServer(async (req, res) => {
           }
         });
 
-        const razorpayOrderId = (rzpResult.success && rzpResult.order && rzpResult.order.id)
-          ? rzpResult.order.id
-          : `order_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+        // FAIL CLOSED: If Razorpay API call fails or credentials missing, DO NOT fall back to synthetic ID!
+        if (!rzpResult.success || !rzpResult.order || !rzpResult.order.id) {
+          const status = rzpResult.statusCode >= 400 && rzpResult.statusCode < 600 ? rzpResult.statusCode : 502;
+          res.writeHead(status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: 'Failed to create payment order with provider. Please try again or pay at the counter.',
+            code: 'PROVIDER_ORDER_CREATION_FAILED',
+            details: process.env.NODE_ENV === 'test' ? (rzpResult.error || 'Provider order creation rejected') : undefined
+          }));
+          return;
+        }
+
+        const razorpayOrderId = rzpResult.order.id;
 
         // Bind razorpayOrderId to the local order and persist
         order.razorpayOrderId = razorpayOrderId;
@@ -3130,7 +3311,8 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Resolve Key Secret
+        // Resolve Key ID and Secret
+        const keyId = restaurant.paymentConfig?.razorpayKeyId || process.env.RAZORPAY_KEY_ID || 'rzp_test_TipTapPOS99';
         const keySecret = restaurant.paymentConfig?.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
         if (!keySecret) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -3138,7 +3320,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Verify cryptographic signature
+        // 1. Verify cryptographic HMAC signature
         const isSignatureValid = verifyRazorpayCheckoutSignature(
           razorpay_order_id,
           razorpay_payment_id,
@@ -3154,24 +3336,90 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Settle payment through shared atomic service
+        // 2. Fetch actual payment status from Razorpay authenticated REST API
+        const fetchResult = await fetchRazorpayPayment({
+          keyId,
+          keySecret,
+          paymentId: razorpay_payment_id
+        });
+
+        if (!fetchResult.success || !fetchResult.payment) {
+          // If provider API is unavailable or times out: return safe pending response, DO NOT mark order paid
+          res.writeHead(fetchResult.statusCode >= 500 ? 502 : 400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            verified: false,
+            status: 'pending_verification',
+            error: 'Payment provider verification failed or pending. Order remains unpaid until confirmation.',
+            details: process.env.NODE_ENV === 'test' ? fetchResult.error : undefined
+          }));
+          return;
+        }
+
+        const providerPayment = fetchResult.payment;
+
+        // 3. Verify returned payment fields
+        // a. Payment ID exact match
+        if (providerPayment.id && providerPayment.id !== razorpay_payment_id) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Payment ID mismatch: Provider returned a different payment ID.' }));
+          return;
+        }
+
+        // b. Order ID exact match
+        if (providerPayment.order_id && providerPayment.order_id !== (targetOrder.razorpayOrderId || razorpay_order_id)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Order ID mismatch: Payment does not belong to expected Razorpay order.' }));
+          return;
+        }
+
+        // c. Payment status MUST be exactly 'captured'
+        if (providerPayment.status !== 'captured') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: `Payment verification failed: Provider status is "${providerPayment.status}", but "captured" is strictly required for settlement.`,
+            status: providerPayment.status
+          }));
+          return;
+        }
+
+        // d. Amount in paise exact match against server-stored order total
+        const expectedPaise = Math.round(Number(targetOrder.total || 0) * 100);
+        if (providerPayment.amount !== undefined && Number(providerPayment.amount) !== expectedPaise) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: `Amount mismatch: Provider captured ${providerPayment.amount} paise, expected ${expectedPaise} paise.`
+          }));
+          return;
+        }
+
+        // e. Currency exact match (INR)
+        if (providerPayment.currency && providerPayment.currency.toUpperCase() !== 'INR') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Currency mismatch: Expected INR, got ${providerPayment.currency}.` }));
+          return;
+        }
+
+        // 4. Settle payment through shared atomic service ONLY after all checks pass
         const settlement = await settleOrderPaymentShared({
           res,
           restaurantId: restaurant.id,
           orderId: targetOrder.id,
           paymentId: razorpay_payment_id,
           settlementMethod: 'razorpay_checkout',
-          provider: 'Razorpay Checkout (Verified Signature)',
-          amountPaise: Math.round(Number(targetOrder.total || 0) * 100),
+          provider: 'Razorpay Checkout (Verified API & Signature)',
+          amountPaise: expectedPaise,
           currency: 'INR',
           paymentDetailsExtra: {
             gateway: 'razorpay',
             razorpayOrderId: razorpay_order_id,
-            razorpayPaymentId: razorpay_payment_id
+            razorpayPaymentId: razorpay_payment_id,
+            providerStatus: providerPayment.status,
+            providerMethod: providerPayment.method || 'upi'
           },
-          actorId: 'CLIENT_CHECKOUT:verified_signature',
+          actorId: 'CLIENT_CHECKOUT:verified_provider',
           actorRole: 'customer_checkout',
-          reason: 'Razorpay Checkout signature verified'
+          reason: 'Razorpay Checkout signature and payment status verified as captured'
         });
 
         if (!settlement.success) {

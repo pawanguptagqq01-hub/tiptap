@@ -585,32 +585,32 @@
           </button>
         </div>
 
-        <!-- Tab 1: Direct 1-Tap UPI Apps & Razorpay Checkout -->
+        <!-- Tab 1: UPI Apps & Razorpay Checkout -->
         <div id="gwTab-apps" class="space-y-3 pt-1">
-          <p class="text-xs font-bold text-slate-700">Choose your UPI app to pay with zero manual entry:</p>
+          <p class="text-xs font-bold text-slate-700">Pay securely via Razorpay Checkout (UPI, Cards & NetBanking):</p>
           
           <div class="grid grid-cols-2 gap-2.5">
-            <button onclick="launchRazorpayCheckout('google_pay')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white text-left">
+            <button onclick="launchRazorpayCheckout('upi')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white text-left">
               <span class="text-2xl">🟢</span>
               <div>
                 <p class="font-extrabold text-xs text-[#2a1a0e]">Google Pay</p>
-                <p class="text-[10px] text-slate-400">1-Tap Instant UPI</p>
+                <p class="text-[10px] text-slate-400">Via Razorpay UPI</p>
               </div>
             </button>
 
-            <button onclick="launchRazorpayCheckout('phonepe')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white text-left">
+            <button onclick="launchRazorpayCheckout('upi')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white text-left">
               <span class="text-2xl">🟣</span>
               <div>
                 <p class="font-extrabold text-xs text-[#2a1a0e]">PhonePe</p>
-                <p class="text-[10px] text-slate-400">Instant UPI</p>
+                <p class="text-[10px] text-slate-400">Via Razorpay UPI</p>
               </div>
             </button>
 
-            <button onclick="launchRazorpayCheckout('paytm')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white text-left">
+            <button onclick="launchRazorpayCheckout('upi')" class="p-3.5 rounded-2xl border-2 border-slate-200 hover:border-[#d4621a] hover:shadow-md hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-3 bg-white text-left">
               <span class="text-2xl">🔵</span>
               <div>
                 <p class="font-extrabold text-xs text-[#2a1a0e]">Paytm</p>
-                <p class="text-[10px] text-slate-400">UPI & Wallet</p>
+                <p class="text-[10px] text-slate-400">Via Razorpay UPI</p>
               </div>
             </button>
 
@@ -662,16 +662,16 @@
           <div class="flex items-center justify-between text-xs">
             <span class="font-extrabold text-[#2a1a0e] flex items-center gap-1.5" id="gwStatusHeader">
               <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>100% Automatic Bank Verification</span>
+              <span>Automated Gateway Verification</span>
             </span>
             <span class="text-[10px] text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">Zero UTR Required</span>
           </div>
           <p class="text-[11px] text-slate-600" id="gwStatusMessage">
-            Payments are automatically verified by Razorpay and your bank. You never need to enter a UTR or reference number.
+            Payments are automatically verified by Razorpay and updated on your order in real time. You never need to enter a UTR or reference number.
           </p>
           <div id="gwStatusSpinner" class="hidden flex items-center gap-2 pt-1 text-xs text-[#d4621a] font-bold">
             <span class="animate-spin text-base">⏳</span>
-            <span id="gwSpinnerText">Verifying payment with provider...</span>
+            <span id="gwSpinnerText">Verifying payment with payment provider...</span>
           </div>
           <div id="gwRetryBox" class="hidden pt-1">
             <button onclick="launchRazorpayCheckout()" class="w-full py-2.5 px-3 rounded-xl bg-[#d4621a] text-white font-bold text-xs hover:bg-[#b04913] transition shadow-sm">
@@ -680,13 +680,13 @@
           </div>
         </div>
 
-        <!-- Automatic Bank & Counter Sync Status -->
+        <!-- Automatic Sync Status -->
         <div class="p-3.5 rounded-2xl bg-[#fef9f2] border border-[#ede3d8] flex items-center justify-between text-xs">
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span class="font-bold text-slate-800">Auto-Syncing with POS Counter & Bank</span>
+            <span class="font-bold text-slate-800">Auto-Syncing with POS Counter & Kitchen</span>
           </div>
-          <span class="text-[10px] text-[#d4621a] font-extrabold bg-[#fef3e2] border border-[#f4ae52]/40 px-2.5 py-1 rounded-full">NPCI / Bank</span>
+          <span class="text-[10px] text-[#d4621a] font-extrabold bg-[#fef3e2] border border-[#f4ae52]/40 px-2.5 py-1 rounded-full">Razorpay Gateway</span>
         </div>
 
       </div>
@@ -1844,7 +1844,7 @@
         },
         handler: async function (response) {
           // Cryptographically verified by server - never trusted blindly from client
-          setPaymentStateUI('processing', 'Payment captured by provider. Verifying cryptographic signature with server...');
+          setPaymentStateUI('processing', 'Payment submitted to provider. Verifying authentic captured status with server...');
           try {
             const verifyRes = await fetch(`/api/payment/verify-signature?restaurant=${currentRestaurantId}`, {
               method: 'POST',
@@ -1857,7 +1857,7 @@
               })
             });
             const verifyData = await verifyRes.json();
-            if (verifyData.success) {
+            if (verifyData.success && verifyData.verified && verifyData.order && (verifyData.order.isPaid || verifyData.order.paymentStatus === 'paid')) {
               onPaymentVerifiedSuccess({
                 txnId: response.razorpay_payment_id,
                 amount: currentOrder ? currentOrder.total : currentGatewayData.amount,
@@ -1865,11 +1865,12 @@
                 order: verifyData.order
               });
             } else {
-              setPaymentStateUI('pending', 'Payment received by provider. Waiting for automated webhook settlement...');
+              const msg = verifyData.error || 'Payment verification pending provider capture. Checking order status...';
+              setPaymentStateUI('pending', msg);
               startPaymentPolling(response.razorpay_payment_id, currentOrder?.id);
             }
           } catch (e) {
-            setPaymentStateUI('pending', 'Network delay. Background webhook settlement active...');
+            setPaymentStateUI('pending', 'Network delay during verification. Monitoring background webhook confirmation...');
             startPaymentPolling(response.razorpay_payment_id, currentOrder?.id);
           }
         },
