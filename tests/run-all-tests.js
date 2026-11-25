@@ -33,7 +33,8 @@ const testSuites = [
   'tests/security-audit-phase1.test.js',
   'tests/remediation-phase1.test.js',
   'tests/guest-workflows.test.js',
-  'tests/security-remediation-batch1.test.js'
+  'tests/security-remediation-batch1.test.js',
+  'tests/phase8-security-remediation.test.js'
 ];
 
 console.log('================================================================');

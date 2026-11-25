@@ -912,6 +912,11 @@
         });
         if (res.ok) {
           showToast(type === 'water' ? `Drinking water requested for Table ${currentTableId}!` : `Waiter notified for Table ${currentTableId}!`, type === 'water' ? '💧' : '🛎️');
+        } else if (res.status === 429) {
+          const errData = await res.json().catch(() => ({}));
+          showToast(errData.error || `Please wait before sending another request for Table ${currentTableId}.`, '⏳');
+        } else {
+          showToast('Could not request waiter. Please alert staff directly.', '⚠️');
         }
       } catch (err) {
         showToast('Network error, please alert staff directly.', '⚠️');
