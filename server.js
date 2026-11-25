@@ -1355,6 +1355,14 @@ async function settleOrderPaymentShared({
   const alreadyCompleted = (restaurant.completedOrders || []).find(o => o.id === orderId || (orderId && o.razorpayOrderId === orderId));
 
   if (alreadyCompleted) {
+    // Validate payment identity against persisted settlement records
+    if (paymentId && alreadyCompleted.txnId && alreadyCompleted.txnId !== paymentId && alreadyCompleted.paymentDetails?.paymentId !== paymentId) {
+      return {
+        success: false,
+        statusCode: 400,
+        error: `Order "${alreadyCompleted.id}" is already settled with payment ID "${alreadyCompleted.txnId}". Cannot apply different payment "${paymentId}".`
+      };
+    }
     if (eventId) {
       db.processedWebhookEvents = db.processedWebhookEvents || {};
       db.processedWebhookEvents[eventId] = { timestamp: Date.now(), paymentId, orderId: alreadyCompleted.id };
@@ -1423,9 +1431,9 @@ async function settleOrderPaymentShared({
     }
   }
 
-  // 4. Validate Currency & Captured Amount
-  if (currency && currency.toUpperCase() !== 'INR') {
-    return { success: false, statusCode: 400, error: `Invalid currency "${currency}". Only INR is supported.` };
+  // 4. Validate Currency & Captured Amount - mandatory strict INR validation
+  if (!currency || typeof currency !== 'string' || currency.trim().toUpperCase() !== 'INR') {
+    return { success: false, statusCode: 400, error: `Invalid or missing currency "${currency}". INR is strictly required.` };
   }
 
   const expectedAmountPaise = Math.round(Number(targetOrder.total || 0) * 100);
@@ -3325,52 +3333,141 @@ const server = http.createServer(async (req, res) => {
         let rzpOrderId = null;
         let rzpPaymentId = null;
         let capturedAmount = null;
-        let currency = 'INR';
+        let currency = null;
         let paymentMethod = 'upi';
         let paymentDetailsExtra = {};
 
         if (eventType === 'order.paid') {
           const orderEntity = data.payload?.order?.entity;
           const paymentEntity = data.payload?.payment?.entity;
-          rzpOrderId = orderEntity?.id || paymentEntity?.order_id;
-          rzpPaymentId = paymentEntity?.id;
-          // Security Requirement 5: Never fabricate payment ID when provider entity is missing
-          if (!rzpPaymentId) {
+
+          // Requirement 3: Webhook payment validation for order.paid
+          if (!paymentEntity || typeof paymentEntity !== 'object') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Webhook payload missing required provider payment entity.' }));
+            return;
+          }
+
+          rzpOrderId = orderEntity?.id || paymentEntity.order_id;
+          rzpPaymentId = paymentEntity.id;
+
+          if (!rzpOrderId || typeof rzpOrderId !== 'string' || !rzpOrderId.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Webhook payload missing valid order_id.' }));
+            return;
+          }
+
+          if (!rzpPaymentId || typeof rzpPaymentId !== 'string' || !rzpPaymentId.trim()) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Webhook payload missing required provider payment ID entity.' }));
             return;
           }
-          capturedAmount = paymentEntity?.amount || orderEntity?.amount_paid;
-          currency = paymentEntity?.currency || orderEntity?.currency || 'INR';
-          paymentMethod = paymentEntity?.method || 'upi';
+
+          // Requirement 3: Require captured payment status
+          if (!paymentEntity.status || typeof paymentEntity.status !== 'string' || paymentEntity.status !== 'captured') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: `Invalid payment status "${paymentEntity.status}". Status "captured" is strictly required for settlement.`
+            }));
+            return;
+          }
+
+          // Requirement 2: Mandatory webhook currency validation - never assume INR when missing
+          const rawCurrency = paymentEntity.currency;
+          if (!rawCurrency || typeof rawCurrency !== 'string' || rawCurrency.trim().toUpperCase() !== 'INR') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: `Validation failed: Missing or invalid currency. Expected "INR", got "${rawCurrency}". Currency is mandatory and must strictly equal "INR".`
+            }));
+            return;
+          }
+          currency = rawCurrency.trim().toUpperCase();
+
+          if (orderEntity && orderEntity.currency && orderEntity.currency.trim().toUpperCase() !== 'INR') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Order entity currency mismatch: Expected INR, got "${orderEntity.currency}".` }));
+            return;
+          }
+
+          const rawAmount = paymentEntity.amount !== undefined ? paymentEntity.amount : orderEntity?.amount_paid;
+          if (rawAmount === undefined || rawAmount === null || typeof Number(rawAmount) !== 'number' || isNaN(Number(rawAmount)) || Number(rawAmount) <= 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Webhook payload missing valid captured amount.' }));
+            return;
+          }
+          capturedAmount = Number(rawAmount);
+
+          paymentMethod = paymentEntity.method || 'upi';
           paymentDetailsExtra = {
             gateway: 'razorpay',
             eventType,
             orderEntityId: orderEntity?.id,
-            vpa: paymentEntity?.vpa || null,
-            bank: paymentEntity?.bank || null,
-            wallet: paymentEntity?.wallet || null
+            vpa: paymentEntity.vpa || null,
+            bank: paymentEntity.bank || null,
+            wallet: paymentEntity.wallet || null
           };
         } else if (eventType === 'payment.captured') {
           const paymentEntity = data.payload?.payment?.entity;
-          rzpOrderId = paymentEntity?.order_id;
-          rzpPaymentId = paymentEntity?.id;
-          if (!rzpPaymentId) {
+
+          // Requirement 3: Webhook payment validation for payment.captured
+          if (!paymentEntity || typeof paymentEntity !== 'object') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Webhook payload missing required provider payment entity.' }));
+            return;
+          }
+
+          rzpOrderId = paymentEntity.order_id;
+          rzpPaymentId = paymentEntity.id;
+
+          if (!rzpOrderId || typeof rzpOrderId !== 'string' || !rzpOrderId.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Webhook payload missing valid order_id in payment entity.' }));
+            return;
+          }
+
+          if (!rzpPaymentId || typeof rzpPaymentId !== 'string' || !rzpPaymentId.trim()) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Webhook payload missing required provider payment ID entity.' }));
             return;
           }
-          capturedAmount = paymentEntity?.amount;
-          currency = paymentEntity?.currency || 'INR';
-          paymentMethod = paymentEntity?.method || 'upi';
+
+          // Requirement 3: Require captured payment status
+          if (!paymentEntity.status || typeof paymentEntity.status !== 'string' || paymentEntity.status !== 'captured') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: `Invalid payment status "${paymentEntity.status}". Status "captured" is strictly required for settlement.`
+            }));
+            return;
+          }
+
+          // Requirement 2: Mandatory webhook currency validation - never assume INR when missing
+          const rawCurrency = paymentEntity.currency;
+          if (!rawCurrency || typeof rawCurrency !== 'string' || rawCurrency.trim().toUpperCase() !== 'INR') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: `Validation failed: Missing or invalid currency. Expected "INR", got "${rawCurrency}". Currency is mandatory and must strictly equal "INR".`
+            }));
+            return;
+          }
+          currency = rawCurrency.trim().toUpperCase();
+
+          const rawAmount = paymentEntity.amount;
+          if (rawAmount === undefined || rawAmount === null || typeof Number(rawAmount) !== 'number' || isNaN(Number(rawAmount)) || Number(rawAmount) <= 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Webhook payload missing valid captured amount.' }));
+            return;
+          }
+          capturedAmount = Number(rawAmount);
+
+          paymentMethod = paymentEntity.method || 'upi';
           paymentDetailsExtra = {
             gateway: 'razorpay',
             eventType,
-            vpa: paymentEntity?.vpa || null,
-            bank: paymentEntity?.bank || null,
-            wallet: paymentEntity?.wallet || null,
-            cardNetwork: paymentEntity?.card?.network || null,
-            cardLast4: paymentEntity?.card?.last4 || null
+            vpa: paymentEntity.vpa || null,
+            bank: paymentEntity.bank || null,
+            wallet: paymentEntity.wallet || null,
+            cardNetwork: paymentEntity.card?.network || null,
+            cardLast4: paymentEntity.card?.last4 || null
           };
         } else if (eventType === 'payment.failed') {
           const paymentEntity = data.payload?.payment?.entity;
@@ -3448,10 +3545,13 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Validate captured amount
-        if (!capturedAmount || Number(capturedAmount) <= 0) {
+        // Requirement 3: Validate exact amount against server-stored order total before calling settlement
+        const expectedPaise = Math.round(Number(matchedOrder.total || 0) * 100);
+        if (capturedAmount !== expectedPaise) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Webhook payload missing valid captured amount' }));
+          res.end(JSON.stringify({
+            error: `Amount mismatch: Captured amount (${capturedAmount} paise) does not match expected server order total (${expectedPaise} paise).`
+          }));
           return;
         }
 
@@ -3498,30 +3598,19 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Locate order in target restaurant
+        // Locate order in target restaurant (active or completed)
         const targetOrder = (restaurant.orders || []).find(o => o.id === orderId);
         const alreadyCompleted = (restaurant.completedOrders || []).find(o => o.id === orderId);
+        const matchedOrder = targetOrder || alreadyCompleted;
 
-        if (alreadyCompleted) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            success: true,
-            verified: true,
-            alreadySettled: true,
-            order: alreadyCompleted,
-            message: 'Payment already settled'
-          }));
-          return;
-        }
-
-        if (!targetOrder) {
+        if (!matchedOrder) {
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: `Order "${orderId}" not found for this restaurant.` }));
           return;
         }
 
-        // Security Requirement 1: Validate local order has an authoritative server-bound razorpayOrderId
-        if (!targetOrder.razorpayOrderId || typeof targetOrder.razorpayOrderId !== 'string' || !targetOrder.razorpayOrderId.trim()) {
+        // Validate local order has an authoritative server-bound razorpayOrderId
+        if (!matchedOrder.razorpayOrderId || typeof matchedOrder.razorpayOrderId !== 'string' || !matchedOrder.razorpayOrderId.trim()) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             error: 'Order configuration error: No Razorpay order ID is bound to this server order. Client-supplied order IDs are not accepted.'
@@ -3529,7 +3618,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        if (targetOrder.razorpayOrderId !== razorpay_order_id) {
+        if (matchedOrder.razorpayOrderId !== razorpay_order_id) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             error: 'Order mismatch: razorpay_order_id does not match the server-created order.'
@@ -3546,7 +3635,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // 1. Verify cryptographic HMAC signature
+        // 1. Mandatory Cryptographic HMAC signature verification (strictly required for ALL orders, including completed orders)
         const isSignatureValid = verifyRazorpayCheckoutSignature(
           razorpay_order_id,
           razorpay_payment_id,
@@ -3558,6 +3647,43 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
             error: 'Invalid payment signature: Payment could not be verified by provider signature.'
+          }));
+          return;
+        }
+
+        // 2. Finding 1: Completed order verification protection & legitimate idempotent retry
+        if (alreadyCompleted || (targetOrder && (targetOrder.isPaid || targetOrder.paymentStatus === 'paid'))) {
+          const settledOrder = alreadyCompleted || targetOrder;
+          const knownPaymentId = settledOrder.txnId || settledOrder.paymentDetails?.paymentId;
+          const knownInDb = db.processedPayments && db.processedPayments[razorpay_payment_id] && db.processedPayments[razorpay_payment_id].orderId === settledOrder.id;
+
+          // Reject conflicting payment attempts on already-settled orders
+          if (knownPaymentId && knownPaymentId !== razorpay_payment_id && !knownInDb) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: `Order "${settledOrder.id}" was already settled with payment ID "${knownPaymentId}". Cannot verify with conflicting payment ID "${razorpay_payment_id}".`
+            }));
+            return;
+          }
+
+          // Legitimate idempotent retry with matching payment ID:
+          // Return sanitized confirmation without exposing sensitive customer/operational data
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            verified: true,
+            alreadySettled: true,
+            order: {
+              id: settledOrder.id,
+              tableId: settledOrder.tableId,
+              tableName: settledOrder.tableName,
+              total: settledOrder.total,
+              isPaid: true,
+              paymentStatus: 'paid',
+              txnId: settledOrder.txnId || razorpay_payment_id,
+              paidAt: settledOrder.paidAt
+            },
+            message: 'Payment already settled'
           }));
           return;
         }

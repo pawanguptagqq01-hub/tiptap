@@ -388,6 +388,180 @@ async function runPhase10Tests() {
     }, nonInrPayload);
     assert(nonInrRes.statusCode === 400, 'Non-INR currency rejected with HTTP 400 Bad Request');
 
+    // 5c. Finding 2: Missing currency rejected (never assume INR)
+    const whMissingCurrPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: `pay_nocurr_${Date.now()}`,
+            order_id: rzpOrder3Id,
+            amount: 29400,
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whMissingCurrSig = computeWebhookSignature(whMissingCurrPayload);
+    const whMissingCurrRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whMissingCurrSig,
+      'x-razorpay-event-id': `evt_nocurr_${Date.now()}`
+    }, whMissingCurrPayload);
+    assert(whMissingCurrRes.statusCode === 400, 'Webhook with missing currency rejected with HTTP 400 (never assumes INR)');
+
+    // 5d. Finding 2: Null currency rejected
+    const whNullCurrPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: `pay_nullcurr_${Date.now()}`,
+            order_id: rzpOrder3Id,
+            amount: 29400,
+            currency: null,
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whNullCurrSig = computeWebhookSignature(whNullCurrPayload);
+    const whNullCurrRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whNullCurrSig,
+      'x-razorpay-event-id': `evt_nullcurr_${Date.now()}`
+    }, whNullCurrPayload);
+    assert(whNullCurrRes.statusCode === 400, 'Webhook with null currency rejected with HTTP 400');
+
+    // 5e. Finding 2: Empty string currency rejected
+    const whEmptyCurrPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: `pay_emptycurr_${Date.now()}`,
+            order_id: rzpOrder3Id,
+            amount: 29400,
+            currency: '',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whEmptyCurrSig = computeWebhookSignature(whEmptyCurrPayload);
+    const whEmptyCurrRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whEmptyCurrSig,
+      'x-razorpay-event-id': `evt_emptycurr_${Date.now()}`
+    }, whEmptyCurrPayload);
+    assert(whEmptyCurrRes.statusCode === 400, 'Webhook with empty string currency rejected with HTTP 400');
+
+    // 5f. Finding 3: Missing payment status in payment.captured rejected
+    const whNoStatusPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: `pay_nostatus_${Date.now()}`,
+            order_id: rzpOrder3Id,
+            amount: 29400,
+            currency: 'INR',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whNoStatusSig = computeWebhookSignature(whNoStatusPayload);
+    const whNoStatusRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whNoStatusSig,
+      'x-razorpay-event-id': `evt_nostatus_${Date.now()}`
+    }, whNoStatusPayload);
+    assert(whNoStatusRes.statusCode === 400, 'Webhook with missing payment status rejected with HTTP 400');
+
+    // 5g. Finding 3: Non-captured status (authorized) in payment.captured rejected
+    const whAuthStatusPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: `pay_authstatus_${Date.now()}`,
+            order_id: rzpOrder3Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'authorized',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whAuthStatusSig = computeWebhookSignature(whAuthStatusPayload);
+    const whAuthStatusRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whAuthStatusSig,
+      'x-razorpay-event-id': `evt_authstatus_${Date.now()}`
+    }, whAuthStatusPayload);
+    assert(whAuthStatusRes.statusCode === 400, 'Webhook payment with "authorized" status rejected with HTTP 400 (captured strictly required)');
+
+    // 5h. Finding 3: Non-captured status in order.paid event rejected
+    const whOrderPaidAuthPayload = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        order: {
+          entity: {
+            id: rzpOrder3Id,
+            amount: 29400,
+            amount_paid: 29400,
+            currency: 'INR',
+            status: 'paid'
+          }
+        },
+        payment: {
+          entity: {
+            id: `pay_ordpaid_auth_${Date.now()}`,
+            order_id: rzpOrder3Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'authorized',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whOrderPaidAuthSig = computeWebhookSignature(whOrderPaidAuthPayload);
+    const whOrderPaidAuthRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whOrderPaidAuthSig,
+      'x-razorpay-event-id': `evt_ordpaid_auth_${Date.now()}`
+    }, whOrderPaidAuthPayload);
+    assert(whOrderPaidAuthRes.statusCode === 400, 'order.paid webhook with "authorized" payment status rejected with HTTP 400');
+
+    // 5i. Finding 3: Missing order_id in payment entity rejected
+    const whNoOrdIdPayload = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: `pay_noord_${Date.now()}`,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whNoOrdIdSig = computeWebhookSignature(whNoOrdIdPayload);
+    const whNoOrdIdRes = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whNoOrdIdSig,
+      'x-razorpay-event-id': `evt_noord_${Date.now()}`
+    }, whNoOrdIdPayload);
+    assert(whNoOrdIdRes.statusCode === 400, 'Webhook payment entity missing order_id rejected with HTTP 400');
+
     // ----------------------------------------------------
     // SECTION 6: FAILED PAYMENT ACKNOWLEDGEMENT
     // ----------------------------------------------------
@@ -664,6 +838,62 @@ async function runPhase10Tests() {
       razorpay_signature: validCheckoutSig
     });
     assert(repeatCheckout.statusCode === 200, 'Repeated client signature submission acknowledged with HTTP 200');
+
+    // ----------------------------------------------------
+    // 7t. FINDING 1: COMPLETED ORDER VERIFICATION PROTECTION & IDEMPOTENCY
+    // ----------------------------------------------------
+    console.log('\n--- 7t. COMPLETED ORDER VERIFICATION PROTECTION & IDEMPOTENT RETRY ---');
+    // Transition orderNeg to completedOrders by serving food (it is already paid)
+    const serveRes = await makeRequest('PATCH', `/api/orders/${orderNegId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'served',
+      kitchenStatus: 'served',
+      staffPin: '1234'
+    });
+    assert(serveRes.statusCode === 200 || serveRes.statusCode === 204, 'Order transitioned to served status');
+
+    // Verify order is now in completedOrders
+    const compState = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${orderNegId}`);
+    const completedDoc = (compState.data.completedOrders || []).find(o => o.id === orderNegId);
+    assert(Boolean(completedDoc), 'Order successfully archived into completedOrders');
+
+    // 7t-1: Forged cryptographic signature on completed order strictly rejected with HTTP 400
+    const forgedCompRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: paymentId3,
+      razorpay_signature: 'fake_forged_signature_on_completed_order_hex_000000000000'
+    });
+    assert(forgedCompRes.statusCode === 400, 'Forged signature on completed order strictly rejected with HTTP 400 (never returns verified:true)');
+    assert(!forgedCompRes.data.verified, 'Forged signature response does NOT report verified: true');
+
+    // 7t-2: Conflicting payment ID on completed order strictly rejected with HTTP 400
+    const diffPayIdComp = `pay_diff_comp_${Date.now()}`;
+    const diffPayCompSig = computeCheckoutSignature(rzpOrderNegId, diffPayIdComp);
+    const diffPayCompRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: diffPayIdComp,
+      razorpay_signature: diffPayCompSig
+    });
+    assert(diffPayCompRes.statusCode === 400, 'Conflicting payment ID on completed order rejected with HTTP 400');
+    assert(diffPayCompRes.data.error && diffPayCompRes.data.error.includes('already settled with payment ID'), 'Error confirms payment ID mismatch on completed order');
+
+    // 7t-3: Legitimate idempotent retry on completed order with matching payment ID returns HTTP 200
+    const legitCompRetryRes = await makeRequest('POST', '/api/payment/verify-signature?restaurant=tiptap-bistro', {}, {
+      orderId: orderNegId,
+      razorpay_order_id: rzpOrderNegId,
+      razorpay_payment_id: paymentId3,
+      razorpay_signature: validCheckoutSig
+    });
+    assert(legitCompRetryRes.statusCode === 200, 'Legitimate retry on completed order returns HTTP 200 OK');
+    assert(legitCompRetryRes.data.verified === true, 'Legitimate retry confirms verified: true');
+    assert(legitCompRetryRes.data.alreadySettled === true, 'Legitimate retry confirms alreadySettled: true');
+
+    // 7t-4: Verify sensitive fields are NOT leaked in completed order response
+    assert(!legitCompRetryRes.data.order.customerPhone, 'Sanitized completed order does not leak customer phone');
+    assert(!legitCompRetryRes.data.order.serviceRequests, 'Sanitized completed order does not leak service requests');
 
     // ----------------------------------------------------
     // SECTION 8: CROSS-TENANT ORDER BINDING INTEGRITY & WEBHOOK TENANT ENFORCEMENT
