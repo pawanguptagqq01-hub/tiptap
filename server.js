@@ -5299,6 +5299,40 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
+        // Direct client assignment of isPaid or paymentStatus is strictly prohibited
+        // Orders can only transition to paid through authorized settlement workflows (POS table close or gateway webhook)
+        if (data.isPaid !== undefined || data.paymentStatus !== undefined) {
+          if (!isExplicitTestCorruption) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: 'Direct client assignment of isPaid or paymentStatus is not permitted. Orders must be settled through the authorized settlement workflow.'
+            }));
+            return;
+          }
+        }
+
+        // Validate manual settlement workflow when data.status === 'paid'
+        if (data.status === 'paid' && !orderIsAlreadyPaid) {
+          const rawMethod = data.paymentMethod ? data.paymentMethod.toLowerCase().trim() : null;
+          if (rawMethod === 'razorpay' || rawMethod === 'online') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Manual settlement with paymentMethod "razorpay" is not permitted. Razorpay payments must be verified through the payment gateway.' }));
+            return;
+          }
+          const ALLOWED_MANUAL_METHODS = ['cash', 'card', 'pos_terminal', 'upi_qr', 'other'];
+          if (!rawMethod || !ALLOWED_MANUAL_METHODS.includes(rawMethod)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Valid manual paymentMethod (cash, card, pos_terminal, upi_qr, other) is required for manual settlement' }));
+            return;
+          }
+          const isFoodServed = order.kitchenStatus === 'served';
+          if (!data.closeTable && !isFoodServed) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Manual settlement requires closing the table or order must be served' }));
+            return;
+          }
+        }
+
         // Protect txnId and paymentDetails from unauthorized modification
         if (data.txnId !== undefined || data.paymentDetails !== undefined) {
           if (!isExplicitTestCorruption) {
@@ -5319,17 +5353,9 @@ const server = http.createServer(async (req, res) => {
           if (data.paymentMethod) {
             order.paymentMethod = data.paymentMethod.toLowerCase().trim();
           }
-          if (data.isPaid !== undefined) {
-            if (data.isPaid === true || isExplicitTestCorruption) {
-              order.isPaid = data.isPaid;
-            }
-          }
-          if (data.paymentStatus) {
-            if (data.paymentStatus === 'paid' || isExplicitTestCorruption) {
-              order.paymentStatus = data.paymentStatus;
-            }
-          }
           if (isExplicitTestCorruption) {
+            if (data.isPaid !== undefined) order.isPaid = data.isPaid;
+            if (data.paymentStatus !== undefined) order.paymentStatus = data.paymentStatus;
             if (data.txnId !== undefined) order.txnId = data.txnId;
             if (data.paymentDetails !== undefined) order.paymentDetails = data.paymentDetails;
           }
@@ -5340,7 +5366,7 @@ const server = http.createServer(async (req, res) => {
               actorId: actor.actorId,
               actorRole: actor.actorRole,
               restaurantId: restaurant.id,
-              action: (data.status === 'paid' || order.status === 'paid' || data.isPaid === true) ? 'ORDER_PAYMENT_SETTLED' : 'ORDER_FINANCIAL_UPDATED',
+              action: (data.status === 'paid' || order.status === 'paid') ? 'ORDER_PAYMENT_SETTLED' : 'ORDER_FINANCIAL_UPDATED',
               entityType: 'order',
               entityId: orderId,
               diff: {

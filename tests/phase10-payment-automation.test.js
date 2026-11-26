@@ -91,9 +91,9 @@ async function runPhase10Tests() {
   const { tempDbPath, cleanup, getInitialRaw } = createIsolatedTestDb('phase10-payment');
   const initialHash = crypto.createHash('sha256').update(getInitialRaw()).digest('hex');
 
-  // Seed dedicated test tables 91-100 for Section 9k and Section 11 in isolated temporary database
+  // Seed dedicated test tables 91-105 for Section 9k, Section 11, and Section 12 in isolated temporary database
   const tempDbObj = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
-  for (let tid = 91; tid <= 100; tid++) {
+  for (let tid = 91; tid <= 105; tid++) {
     if (!tempDbObj.restaurants['tiptap-bistro'].tables.find(t => t.id === tid)) {
       tempDbObj.restaurants['tiptap-bistro'].tables.push({
         id: tid,
@@ -5467,6 +5467,186 @@ async function runPhase10Tests() {
     const cust100After = (stateAfterCash.data.customers || []).find(c => c.phone === '9876543100');
     assert(cust100After && cust100After.totalSpent === 294, 'Section 11: Customer spend updated exactly once for cash payment (294)');
     assert(cust100After && cust100After.loyaltyPoints === 29, 'Section 11: Customer loyalty updated exactly once for cash payment (29)');
+
+    // ----------------------------------------------------
+    // SECTION 12: PAID-STATE DIRECT ASSIGNMENT BYPASS MITIGATION
+    // ----------------------------------------------------
+    console.log('\n--- 12. PAID-STATE DIRECT ASSIGNMENT BYPASS MITIGATION ---');
+
+    // Setup fresh unpaid test order on Table 101
+    const orderSec12Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 101,
+      tableName: 'Table 101',
+      customerPhone: '9876543101',
+      customerName: 'Sec12 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    assert(orderSec12Res.statusCode === 201, 'Section 12: Setup order placed on Table 101');
+    const orderSec12Id = orderSec12Res.data.id;
+
+    // Snapshot before bypass attempts
+    const dbSnapBefore12 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateBefore12 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderBefore12 = (stateBefore12.data.orders || []).find(o => o.id === orderSec12Id);
+    const tableBefore12 = (stateBefore12.data.tables || []).find(t => t.id === 101);
+    const custBefore12 = (stateBefore12.data.customers || []).find(c => c.phone === '9876543101');
+    const payCountBefore12 = Object.keys(dbSnapBefore12.processedPayments || {}).length;
+    const evtCountBefore12 = Object.keys(dbSnapBefore12.processedWebhookEvents || {}).length;
+
+    // 12.1: Counter PIN + { isPaid: true } alone cannot settle an unpaid order
+    console.log('  [TEST 12.1]: Counter PIN + { isPaid: true } alone rejected');
+    const bypassRes1 = await makeRequest('PATCH', `/api/orders/${orderSec12Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      isPaid: true,
+      staffPin: '1234'
+    });
+    assert(bypassRes1.statusCode === 400, 'Section 12: Counter PIN + { isPaid: true } alone strictly rejected with HTTP 400');
+    assert(bypassRes1.data.error && bypassRes1.data.error.includes('Direct client assignment of isPaid or paymentStatus is not permitted'), 'Section 12: Error confirms direct assignment not permitted');
+
+    // 12.2: Counter PIN + { paymentStatus: "paid" } alone cannot settle an unpaid order
+    console.log('  [TEST 12.2]: Counter PIN + { paymentStatus: "paid" } alone rejected');
+    const bypassRes2 = await makeRequest('PATCH', `/api/orders/${orderSec12Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentStatus: 'paid',
+      staffPin: '1234'
+    });
+    assert(bypassRes2.statusCode === 400, 'Section 12: Counter PIN + { paymentStatus: "paid" } alone strictly rejected with HTTP 400');
+    assert(bypassRes2.data.error && bypassRes2.data.error.includes('Direct client assignment of isPaid or paymentStatus is not permitted'), 'Section 12: Error confirms direct assignment not permitted');
+
+    // 12.3: Counter PIN + both fields together cannot bypass approved settlement workflow
+    console.log('  [TEST 12.3]: Counter PIN + both fields together rejected');
+    const bypassRes3 = await makeRequest('PATCH', `/api/orders/${orderSec12Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      isPaid: true,
+      paymentStatus: 'paid',
+      staffPin: '1234'
+    });
+    assert(bypassRes3.statusCode === 400, 'Section 12: Counter PIN + both fields together strictly rejected with HTTP 400');
+    assert(bypassRes3.data.error && bypassRes3.data.error.includes('Direct client assignment of isPaid or paymentStatus is not permitted'), 'Section 12: Error confirms direct assignment not permitted');
+
+    // 12.4: Ordinary staff request cannot claim Razorpay payment without provider verification
+    console.log('  [TEST 12.4]: Ordinary staff cannot claim Razorpay payment without provider verification');
+    const bypassRes4 = await makeRequest('PATCH', `/api/orders/${orderSec12Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'razorpay',
+      staffPin: '1234'
+    });
+    assert(bypassRes4.statusCode === 400, 'Section 12: Staff manual settlement claiming Razorpay without gateway rejected with HTTP 400');
+    assert(bypassRes4.data.error && bypassRes4.data.error.includes('Manual settlement with paymentMethod "razorpay" is not permitted'), 'Section 12: Error confirms Razorpay gateway verification required');
+
+    // Also test paymentMethod: 'online'
+    const bypassRes4b = await makeRequest('PATCH', `/api/orders/${orderSec12Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'online',
+      staffPin: '1234'
+    });
+    assert(bypassRes4b.statusCode === 400, 'Section 12: Staff manual settlement claiming online payment rejected with HTTP 400');
+
+    // 12.5: Verify ZERO side effects on rejected bypass requests
+    console.log('  [TEST 12.5]: Zero side effects across order, tables, customers, and payment maps');
+    const dbSnapAfterBypass = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterBypass = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderAfterBypass = (stateAfterBypass.data.orders || []).find(o => o.id === orderSec12Id);
+    const tableAfterBypass = (stateAfterBypass.data.tables || []).find(t => t.id === 101);
+    const custAfterBypass = (stateAfterBypass.data.customers || []).find(c => c.phone === '9876543101');
+
+    assert(orderAfterBypass && orderAfterBypass.isPaid === false, 'Section 12: Order isPaid remains strictly false');
+    assert(orderAfterBypass && orderAfterBypass.paymentStatus === 'unpaid', 'Section 12: Order paymentStatus remains strictly unpaid');
+    assert(!orderAfterBypass.txnId, 'Section 12: Order txnId remains unbound');
+    assert(!orderAfterBypass.paymentDetails, 'Section 12: Order paymentDetails remains unbound');
+    assert(tableAfterBypass && tableAfterBypass.status === 'occupied', 'Section 12: Table 101 status unchanged (occupied)');
+    assert(tableAfterBypass && tableAfterBypass.currentOrderId === orderSec12Id, 'Section 12: Table 101 currentOrderId unchanged');
+    assert(custAfterBypass && custAfterBypass.totalSpent === custBefore12.totalSpent, 'Section 12: Customer totalSpent unchanged');
+    assert(custAfterBypass && custAfterBypass.loyaltyPoints === custBefore12.loyaltyPoints, 'Section 12: Customer loyaltyPoints unchanged');
+    assert(Object.keys(dbSnapAfterBypass.processedPayments || {}).length === payCountBefore12, 'Section 12: processedPayments count unchanged');
+    assert(Object.keys(dbSnapAfterBypass.processedWebhookEvents || {}).length === evtCountBefore12, 'Section 12: processedWebhookEvents count unchanged');
+
+    // 12.6: Legitimate authorized cash settlement continues to work
+    console.log('  [TEST 12.6]: Legitimate authorized cash settlement workflow continues to work');
+    const orderCash12Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 102,
+      tableName: 'Table 102',
+      customerPhone: '9876543102',
+      customerName: 'Cash12 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    assert(orderCash12Res.statusCode === 201, 'Section 12: Cash test order placed on Table 102');
+    const orderCash12Id = orderCash12Res.data.id;
+
+    const cashSettle12Res = await makeRequest('PATCH', `/api/orders/${orderCash12Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(cashSettle12Res.statusCode === 200, 'Section 12: Authorized manual cash settlement succeeds with HTTP 200');
+    assert(cashSettle12Res.data.order && cashSettle12Res.data.order.isPaid === true, 'Section 12: Cash settled order isPaid is true');
+    assert(cashSettle12Res.data.order && cashSettle12Res.data.order.paymentStatus === 'paid', 'Section 12: Cash settled order paymentStatus is paid');
+    assert(cashSettle12Res.data.order && cashSettle12Res.data.order.paymentMethod === 'cash', 'Section 12: Cash settled order paymentMethod is cash');
+
+    const stateAfterCash12 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const table102After = (stateAfterCash12.data.tables || []).find(t => t.id === 102);
+    assert(table102After && table102After.status === 'cleaning', 'Section 12: Table 102 transitioned to cleaning');
+    assert(table102After && table102After.currentOrderId === null, 'Section 12: Table 102 currentOrderId cleared');
+
+    // 12.7: Valid Razorpay webhook settlement continues to work
+    console.log('  [TEST 12.7]: Valid Razorpay webhook settlement continues to work');
+    const orderRzp12Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 103,
+      tableName: 'Table 103',
+      customerPhone: '9876543103',
+      customerName: 'Rzp12 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    assert(orderRzp12Res.statusCode === 201, 'Section 12: Razorpay test order placed on Table 103');
+    const orderRzp12Id = orderRzp12Res.data.id;
+
+    const payOrder12Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderRzp12Id });
+    assert(payOrder12Res.statusCode === 200, 'Section 12: Razorpay order created');
+    const rzpOrder12Id = payOrder12Res.data.razorpayOrderId;
+    const paymentId12 = `pay_sec12_${Date.now()}`;
+    const eventId12 = `evt_sec12_${Date.now()}`;
+
+    const whPayload12 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId12,
+            order_id: rzpOrder12Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig12 = computeWebhookSignature(whPayload12);
+    const whRes12 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig12,
+      'x-razorpay-event-id': eventId12
+    }, whPayload12);
+    assert(whRes12.statusCode === 200, 'Section 12: Valid Razorpay webhook accepted with HTTP 200');
+    assert(whRes12.data.settled === true, 'Section 12: Razorpay webhook confirms settled: true');
+
+    const stateAfterRzp12 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderAfterRzp12 = (stateAfterRzp12.data.orders || []).find(o => o.id === orderRzp12Id);
+    assert(orderAfterRzp12 && orderAfterRzp12.isPaid === true, 'Section 12: Razorpay settled order isPaid is true');
+    assert(orderAfterRzp12 && orderAfterRzp12.paymentStatus === 'paid', 'Section 12: Razorpay settled order paymentStatus is paid');
+    assert(orderAfterRzp12 && orderAfterRzp12.txnId === paymentId12, 'Section 12: Razorpay settled order txnId bound');
 
     console.log('\n================================================================');
     console.log(`🏁 PHASE 10 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
