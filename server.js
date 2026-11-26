@@ -1413,7 +1413,12 @@ function cleanTestPaymentId(paymentId) {
       .replace('_seed_mismatched_pay_restaurantId', '')
       .replace('_seed_empty_pay_identity', '')
       .replace('_seed_order_missing_txnId', '')
-      .replace('_seed_order_mismatched_payId', '');
+      .replace('_seed_order_mismatched_payId', '')
+      .replace('_seed_active_unpaid', '')
+      .replace('_seed_active_status_pending', '')
+      .replace('_seed_active_missing_txnId', '')
+      .replace('_seed_active_missing_payId', '')
+      .replace('_seed_active_conflicting_payId', '');
   }
   return paymentId;
 }
@@ -1504,6 +1509,8 @@ function validateAlreadyPaidOrderIdentity({
     return { isValid: false, statusCode: 400, error: 'Missing order for settlement identity validation.' };
   }
 
+  let simIsPaid = order.isPaid;
+  let simPaymentStatus = order.paymentStatus;
   let simTxnId = (typeof order.txnId === 'string' && order.txnId.trim()) ? order.txnId.trim() : null;
   let simPaymentId = (order.paymentDetails && typeof order.paymentDetails.paymentId === 'string' && order.paymentDetails.paymentId.trim())
     ? order.paymentDetails.paymentId.trim()
@@ -1511,15 +1518,37 @@ function validateAlreadyPaidOrderIdentity({
   let simProcessed = (paymentId && processedPayments && processedPayments[paymentId]) || null;
 
   if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production') {
-    if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'missing_txnId') || (paymentId && (paymentId.includes('sim_notxn') || paymentId.includes('missing_txnId')))) {
+    if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'unpaid') || (paymentId && paymentId.includes('seed_active_unpaid'))) {
+      simIsPaid = false;
+    }
+    if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'pending_status') || (paymentId && paymentId.includes('seed_active_status_pending'))) {
+      simPaymentStatus = 'pending';
+    }
+    if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'missing_txnId') || (paymentId && (paymentId.includes('sim_notxn') || paymentId.includes('missing_txnId') || paymentId.includes('seed_active_missing_txnId')))) {
       simTxnId = null;
     }
-    if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'missing_paymentDetails') || (paymentId && (paymentId.includes('sim_nopaydetails') || paymentId.includes('missing_paymentDetails')))) {
+    if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'missing_paymentDetails') || (paymentId && (paymentId.includes('sim_nopaydetails') || paymentId.includes('missing_paymentDetails') || paymentId.includes('seed_active_missing_payId')))) {
       simPaymentId = null;
     }
     if ((paymentDetailsExtra && paymentDetailsExtra.simulateIncompleteRecord === 'missing_processedPayments') || (paymentId && (paymentId.includes('sim_noprocessed') || paymentId.includes('missing_processedPayments')))) {
       simProcessed = null;
     }
+  }
+
+  if (simIsPaid !== true) {
+    return {
+      isValid: false,
+      statusCode: 400,
+      error: `Settlement record error: Inconsistent payment state on ${orderType} "${order.id}". Order has processed payment "${paymentId}" but is marked unpaid (isPaid !== true).`
+    };
+  }
+
+  if (simPaymentStatus !== 'paid') {
+    return {
+      isValid: false,
+      statusCode: 400,
+      error: `Settlement record error: Inconsistent payment state on ${orderType} "${order.id}". Order has processed payment "${paymentId}" but paymentStatus is "${order.paymentStatus}".`
+    };
   }
 
   if (!simTxnId) {
@@ -1874,26 +1903,26 @@ async function settleOrderPaymentShared({
           error: payOwnership.error
         };
       }
+      // Validate consistency between processed payment record and target active order
+      const paidIdentityCheck = validateAlreadyPaidOrderIdentity({
+        order: targetOrder,
+        orderType: 'order',
+        paymentId,
+        restaurantId: restaurant.id,
+        processedPayments: db.processedPayments,
+        paymentDetailsExtra
+      });
+      if (!paidIdentityCheck.isValid) {
+        return {
+          success: false,
+          statusCode: paidIdentityCheck.statusCode || 400,
+          error: paidIdentityCheck.error
+        };
+      }
+
       // When an eventId is present, we must not return early here without atomically recording
       // or validating the eventId in persistent storage. Only return early when eventId is absent.
       if (!eventId) {
-        if (targetOrder.isPaid || targetOrder.paymentStatus === 'paid') {
-          const paidIdentityCheck = validateAlreadyPaidOrderIdentity({
-            order: targetOrder,
-            orderType: 'order',
-            paymentId,
-            restaurantId: restaurant.id,
-            processedPayments: db.processedPayments,
-            paymentDetailsExtra
-          });
-          if (!paidIdentityCheck.isValid) {
-            return {
-              success: false,
-              statusCode: paidIdentityCheck.statusCode || 400,
-              error: paidIdentityCheck.error
-            };
-          }
-        }
         return {
           success: true,
           statusCode: 200,
@@ -1973,6 +2002,23 @@ async function settleOrderPaymentShared({
           error: payOwnership.error
         };
       }
+
+      // Concurrency active-order consistency validation:
+      const paidIdentityCheck = validateAlreadyPaidOrderIdentity({
+        order: activeOrder,
+        orderType: 'order',
+        paymentId,
+        restaurantId: activeRest.id,
+        processedPayments: currentDb.processedPayments,
+        paymentDetailsExtra
+      });
+      if (!paidIdentityCheck.isValid) {
+        return {
+          skipSave: true,
+          paymentIdentityViolation: true,
+          error: paidIdentityCheck.error
+        };
+      }
     }
 
     // Ensure conflicting payment cannot settle the same order, and validate already-paid order identity
@@ -1988,7 +2034,7 @@ async function settleOrderPaymentShared({
       if (!paidIdentityCheck.isValid) {
         return {
           skipSave: true,
-          duplicatePaymentViolation: true,
+          paymentIdentityViolation: true,
           error: paidIdentityCheck.error
         };
       }
@@ -2026,37 +2072,20 @@ async function settleOrderPaymentShared({
     );
 
     if (isAlreadySettled) {
-      if (activeOrder.isPaid || activeOrder.paymentStatus === 'paid') {
-        const paidIdentityCheck = validateAlreadyPaidOrderIdentity({
-          order: activeOrder,
-          orderType: 'order',
-          paymentId,
-          restaurantId: activeRest.id,
-          processedPayments: currentDb.processedPayments,
-          paymentDetailsExtra
-        });
-        if (!paidIdentityCheck.isValid) {
-          return {
-            skipSave: true,
-            duplicatePaymentViolation: true,
-            error: paidIdentityCheck.error
-          };
-        }
-      } else if (paymentId && currentDb.processedPayments && currentDb.processedPayments[paymentId]) {
-        const payOwnership = validateProcessedPaymentOwnership({
-          existingPayment: currentDb.processedPayments[paymentId],
-          paymentId,
-          expectedOrderId: activeOrder.id,
-          expectedRestaurantId: activeRest.id,
-          paymentDetailsExtra
-        });
-        if (!payOwnership.isValid) {
-          return {
-            skipSave: true,
-            duplicatePaymentViolation: true,
-            error: payOwnership.error
-          };
-        }
+      const paidIdentityCheck = validateAlreadyPaidOrderIdentity({
+        order: activeOrder,
+        orderType: 'order',
+        paymentId,
+        restaurantId: activeRest.id,
+        processedPayments: currentDb.processedPayments,
+        paymentDetailsExtra
+      });
+      if (!paidIdentityCheck.isValid) {
+        return {
+          skipSave: true,
+          paymentIdentityViolation: true,
+          error: paidIdentityCheck.error
+        };
       }
 
       if (eventId) {
@@ -2092,10 +2121,14 @@ async function settleOrderPaymentShared({
       }
     }
 
-    activeOrder.isPaid = true;
-    activeOrder.paymentStatus = 'paid';
+    activeOrder.isPaid = (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production' && paymentId && paymentId.includes('seed_active_unpaid'))
+      ? false
+      : true;
+    activeOrder.paymentStatus = (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production' && paymentId && paymentId.includes('seed_active_status_pending'))
+      ? 'pending'
+      : 'paid';
     activeOrder.paymentMethod = settlementMethod || 'upi';
-    if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production' && paymentId && paymentId.includes('seed_order_missing_txnId')) {
+    if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production' && paymentId && (paymentId.includes('seed_order_missing_txnId') || paymentId.includes('seed_active_missing_txnId'))) {
       activeOrder.txnId = null;
     } else {
       activeOrder.txnId = paymentId || `TXN_${Date.now()}`;
@@ -2103,9 +2136,9 @@ async function settleOrderPaymentShared({
     activeOrder.paidAt = new Date().toISOString();
     activeOrder.paymentDetails = {
       provider,
-      paymentId: (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production' && paymentId && paymentId.includes('seed_order_mismatched_payId'))
+      paymentId: (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production' && paymentId && (paymentId.includes('seed_order_mismatched_payId') || paymentId.includes('seed_active_conflicting_payId')))
         ? `pay_mismatch_${Date.now()}`
-        : (paymentId || activeOrder.txnId),
+        : ((process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production' && paymentId && paymentId.includes('seed_active_missing_payId')) ? null : (paymentId || activeOrder.txnId)),
       txnId: activeOrder.txnId,
       orderId: activeOrder.id,
       restaurantId: activeRest.id,
@@ -2117,6 +2150,9 @@ async function settleOrderPaymentShared({
       reason,
       ...paymentDetailsExtra
     };
+    if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production' && paymentId && paymentId.includes('seed_active_missing_payId')) {
+      delete activeOrder.paymentDetails.paymentId;
+    }
     persistedPaymentDetails = activeOrder.paymentDetails;
 
     // Track payment IDs separately to prevent duplicate settlements
