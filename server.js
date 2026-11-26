@@ -5181,7 +5181,7 @@ const server = http.createServer(async (req, res) => {
         // Enforce Role-Based Authorization on Order Updates:
         const isFinancialAction = Boolean(
           data.status === 'paid' ||
-          data.closeTable === true ||
+          data.closeTable !== undefined ||
           data.isPaid !== undefined ||
           data.paymentStatus !== undefined ||
           data.paymentMethod !== undefined ||
@@ -5223,6 +5223,12 @@ const server = http.createServer(async (req, res) => {
 
         const order = restaurant.orders.find(o => o.id === orderId);
         if (!order) {
+          const alreadyCompleted = (restaurant.completedOrders || []).find(o => o.id === orderId);
+          if (alreadyCompleted) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Order is already settled and completed. Repeated settlement is not permitted.' }));
+            return;
+          }
           res.writeHead(404, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Order not found' }));
           return;
@@ -5277,6 +5283,13 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
+        // Strict validation of closeTable if supplied
+        if (data.closeTable !== undefined && typeof data.closeTable !== 'boolean') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid closeTable: must be a boolean' }));
+          return;
+        }
+
         // Strict protection against reversing already settled/paid orders
         const orderIsAlreadyPaid = Boolean(order.isPaid || order.paymentStatus === 'paid');
         const isAttemptingReversal = orderIsAlreadyPaid && (
@@ -5311,12 +5324,34 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
+        // Strict protection against duplicate settlement of already settled/paid orders
+        if (orderIsAlreadyPaid) {
+          if (data.status === 'paid' || data.paymentMethod !== undefined) {
+            if (!isExplicitTestCorruption) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Order is already settled. Repeated settlement is not permitted.' }));
+              return;
+            }
+          }
+        }
+
+        // Standalone paymentMethod modification without authorized settlement is strictly prohibited
+        if (data.paymentMethod !== undefined && data.status !== 'paid') {
+          if (!isExplicitTestCorruption) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              error: 'Standalone paymentMethod modification is not permitted. Payment method can only be set during authorized settlement.'
+            }));
+            return;
+          }
+        }
+
         // Validate manual settlement workflow when data.status === 'paid'
         if (data.status === 'paid' && !orderIsAlreadyPaid) {
           const rawMethod = data.paymentMethod ? data.paymentMethod.toLowerCase().trim() : null;
           if (rawMethod === 'razorpay' || rawMethod === 'online') {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Manual settlement with paymentMethod "razorpay" is not permitted. Razorpay payments must be verified through the payment gateway.' }));
+            res.end(JSON.stringify({ error: `Manual settlement with paymentMethod "${rawMethod}" is not permitted. Razorpay payments must be verified through the payment gateway.` }));
             return;
           }
           const ALLOWED_MANUAL_METHODS = ['cash', 'card', 'pos_terminal', 'upi_qr', 'other'];
@@ -5326,9 +5361,10 @@ const server = http.createServer(async (req, res) => {
             return;
           }
           const isFoodServed = order.kitchenStatus === 'served';
-          if (!data.closeTable && !isFoodServed) {
+          const canCloseTable = data.closeTable === true || isFoodServed;
+          if (!canCloseTable) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Manual settlement requires closing the table or order must be served' }));
+            res.end(JSON.stringify({ error: 'Manual settlement requires closing the table (closeTable: true) or order must be served' }));
             return;
           }
         }
@@ -5350,7 +5386,7 @@ const server = http.createServer(async (req, res) => {
           if (data.kitchenStatus) {
             order.kitchenStatus = data.kitchenStatus;
           }
-          if (data.paymentMethod) {
+          if ((data.status === 'paid' || isExplicitTestCorruption) && data.paymentMethod) {
             order.paymentMethod = data.paymentMethod.toLowerCase().trim();
           }
           if (isExplicitTestCorruption) {

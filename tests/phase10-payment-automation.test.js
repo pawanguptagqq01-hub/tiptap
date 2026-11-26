@@ -91,9 +91,9 @@ async function runPhase10Tests() {
   const { tempDbPath, cleanup, getInitialRaw } = createIsolatedTestDb('phase10-payment');
   const initialHash = crypto.createHash('sha256').update(getInitialRaw()).digest('hex');
 
-  // Seed dedicated test tables 91-105 for Section 9k, Section 11, and Section 12 in isolated temporary database
+  // Seed dedicated test tables 91-125 for Section 9k, Section 11, Section 12, Section 13, Section 14, and Section 15 in isolated temporary database
   const tempDbObj = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
-  for (let tid = 91; tid <= 105; tid++) {
+  for (let tid = 91; tid <= 125; tid++) {
     if (!tempDbObj.restaurants['tiptap-bistro'].tables.find(t => t.id === tid)) {
       tempDbObj.restaurants['tiptap-bistro'].tables.push({
         id: tid,
@@ -5647,6 +5647,671 @@ async function runPhase10Tests() {
     assert(orderAfterRzp12 && orderAfterRzp12.isPaid === true, 'Section 12: Razorpay settled order isPaid is true');
     assert(orderAfterRzp12 && orderAfterRzp12.paymentStatus === 'paid', 'Section 12: Razorpay settled order paymentStatus is paid');
     assert(orderAfterRzp12 && orderAfterRzp12.txnId === paymentId12, 'Section 12: Razorpay settled order txnId bound');
+
+    // ----------------------------------------------------
+    // SECTION 13: STRICT CLOSETABLE VALIDATION & WORKFLOW INTEGRITY
+    // ----------------------------------------------------
+    console.log('\n--- 13. STRICT CLOSETABLE VALIDATION & WORKFLOW INTEGRITY ---');
+
+    // Setup order on Table 104 (unserved dine-in order)
+    const orderSec13Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 104,
+      tableName: 'Table 104',
+      customerPhone: '9876543104',
+      customerName: 'Sec13 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    assert(orderSec13Res.statusCode === 201, 'Section 13: Setup order placed on Table 104');
+    const orderSec13Id = orderSec13Res.data.id;
+
+    // Snapshot before invalid closeTable attempts
+    const dbSnapBefore13 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateBefore13 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderBefore13 = (stateBefore13.data.orders || []).find(o => o.id === orderSec13Id);
+    const tableBefore13 = (stateBefore13.data.tables || []).find(t => t.id === 104);
+    const custBefore13 = (stateBefore13.data.customers || []).find(c => c.phone === '9876543104');
+    const payCountBefore13 = Object.keys(dbSnapBefore13.processedPayments || {}).length;
+    const evtCountBefore13 = Object.keys(dbSnapBefore13.processedWebhookEvents || {}).length;
+
+    // 13.1: Reject non-boolean string "false" for closeTable
+    console.log('  [TEST 13.1]: closeTable: "false" (string) strictly rejected with HTTP 400');
+    const closeTableStringFalseRes = await makeRequest('PATCH', `/api/orders/${orderSec13Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: 'false',
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(closeTableStringFalseRes.statusCode === 400, 'Section 13: closeTable: "false" rejected with HTTP 400');
+    assert(closeTableStringFalseRes.data.error === 'Invalid closeTable: must be a boolean', 'Section 13: Error confirms closeTable must be a boolean');
+
+    // 13.2: Reject non-boolean string "true" for closeTable
+    console.log('  [TEST 13.2]: closeTable: "true" (string) strictly rejected with HTTP 400');
+    const closeTableStringTrueRes = await makeRequest('PATCH', `/api/orders/${orderSec13Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: 'true',
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(closeTableStringTrueRes.statusCode === 400, 'Section 13: closeTable: "true" rejected with HTTP 400');
+    assert(closeTableStringTrueRes.data.error === 'Invalid closeTable: must be a boolean', 'Section 13: Error confirms closeTable must be a boolean');
+
+    // 13.3: Reject non-boolean numeric 1 for closeTable
+    console.log('  [TEST 13.3]: closeTable: 1 (number) strictly rejected with HTTP 400');
+    const closeTableNumRes = await makeRequest('PATCH', `/api/orders/${orderSec13Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: 1,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(closeTableNumRes.statusCode === 400, 'Section 13: closeTable: 1 rejected with HTTP 400');
+    assert(closeTableNumRes.data.error === 'Invalid closeTable: must be a boolean', 'Section 13: Error confirms closeTable must be a boolean');
+
+    // 13.4: Reject closeTable: false on unserved order
+    console.log('  [TEST 13.4]: closeTable: false on unserved order rejected with HTTP 400');
+    const closeTableFalseUnservedRes = await makeRequest('PATCH', `/api/orders/${orderSec13Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: false,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(closeTableFalseUnservedRes.statusCode === 400, 'Section 13: closeTable: false on unserved order rejected with HTTP 400');
+    assert(closeTableFalseUnservedRes.data.error && closeTableFalseUnservedRes.data.error.includes('Manual settlement requires closing the table (closeTable: true) or order must be served'), 'Section 13: Error confirms table must be closed or food served');
+
+    // 13.5: Verify ZERO side effects across order, tables, customers, and payment maps
+    console.log('  [TEST 13.5]: Zero side effects across rejected closeTable requests');
+    const dbSnapAfterInvalid13 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterInvalid13 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderAfterInvalid13 = (stateAfterInvalid13.data.orders || []).find(o => o.id === orderSec13Id);
+    const tableAfterInvalid13 = (stateAfterInvalid13.data.tables || []).find(t => t.id === 104);
+    const custAfterInvalid13 = (stateAfterInvalid13.data.customers || []).find(c => c.phone === '9876543104');
+
+    assert(orderAfterInvalid13 && orderAfterInvalid13.isPaid === false, 'Section 13: Order isPaid remains strictly false');
+    assert(orderAfterInvalid13 && orderAfterInvalid13.paymentStatus === 'unpaid', 'Section 13: Order paymentStatus remains strictly unpaid');
+    assert(!orderAfterInvalid13.txnId, 'Section 13: Order txnId remains unbound');
+    assert(!orderAfterInvalid13.paymentDetails, 'Section 13: Order paymentDetails remains unbound');
+    assert(tableAfterInvalid13 && tableAfterInvalid13.status === 'occupied', 'Section 13: Table 104 status unchanged (occupied)');
+    assert(tableAfterInvalid13 && tableAfterInvalid13.currentOrderId === orderSec13Id, 'Section 13: Table 104 currentOrderId unchanged');
+    assert(custAfterInvalid13 && custAfterInvalid13.totalSpent === (custBefore13 ? custBefore13.totalSpent : 0), 'Section 13: Customer totalSpent unchanged');
+    assert(custAfterInvalid13 && custAfterInvalid13.loyaltyPoints === (custBefore13 ? custBefore13.loyaltyPoints : 0), 'Section 13: Customer loyaltyPoints unchanged');
+    assert(Object.keys(dbSnapAfterInvalid13.processedPayments || {}).length === payCountBefore13, 'Section 13: processedPayments count unchanged');
+    assert(Object.keys(dbSnapAfterInvalid13.processedWebhookEvents || {}).length === evtCountBefore13, 'Section 13: processedWebhookEvents count unchanged');
+
+    // 13.6: Successful manual settlement with closeTable: true on unserved order
+    console.log('  [TEST 13.6]: closeTable: true on unserved order succeeds with HTTP 200');
+    const closeTableTrueRes = await makeRequest('PATCH', `/api/orders/${orderSec13Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(closeTableTrueRes.statusCode === 200, 'Section 13: closeTable: true succeeds with HTTP 200');
+    assert(closeTableTrueRes.data.order && closeTableTrueRes.data.order.isPaid === true, 'Section 13: Settled order isPaid is true');
+    assert(closeTableTrueRes.data.order && closeTableTrueRes.data.order.paymentStatus === 'paid', 'Section 13: Settled order paymentStatus is paid');
+    assert(closeTableTrueRes.data.order && closeTableTrueRes.data.order.status === 'completed', 'Section 13: Settled order status is completed');
+    assert(closeTableTrueRes.data.order && closeTableTrueRes.data.order.paymentMethod === 'cash', 'Section 13: Settled order paymentMethod is cash');
+
+    const stateAfterCloseTrue = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const table104After = (stateAfterCloseTrue.data.tables || []).find(t => t.id === 104);
+    const cust104After = (stateAfterCloseTrue.data.customers || []).find(c => c.phone === '9876543104');
+    assert(table104After && table104After.status === 'cleaning', 'Section 13: Table 104 transitioned to cleaning');
+    assert(table104After && table104After.currentOrderId === null, 'Section 13: Table 104 currentOrderId cleared');
+    assert(cust104After && cust104After.totalSpent === 294, 'Section 13: Customer totalSpent correctly updated (294)');
+    assert(cust104After && cust104After.loyaltyPoints === 29, 'Section 13: Customer loyaltyPoints correctly updated (29)');
+
+    // 13.7: Served-order settlement without closeTable succeeds with HTTP 200
+    console.log('  [TEST 13.7]: Served-order settlement without closeTable succeeds with HTTP 200');
+    const orderSec13ServedRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 105,
+      tableName: 'Table 105',
+      customerPhone: '9876543105',
+      customerName: 'Sec13 Served User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    assert(orderSec13ServedRes.statusCode === 201, 'Section 13: Setup order placed on Table 105');
+    const orderSec13ServedId = orderSec13ServedRes.data.id;
+
+    // Mark served via kitchen status update
+    const markServedRes = await makeRequest('PATCH', `/api/orders/${orderSec13ServedId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      kitchenStatus: 'served',
+      status: 'served',
+      staffPin: '1234'
+    });
+    assert(markServedRes.statusCode === 200, 'Section 13: Order marked served with HTTP 200');
+
+    // Settle without closeTable parameter
+    const settleServedNoCloseRes = await makeRequest('PATCH', `/api/orders/${orderSec13ServedId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(settleServedNoCloseRes.statusCode === 200, 'Section 13: Served order settlement without closeTable succeeds with HTTP 200');
+    assert(settleServedNoCloseRes.data.order && settleServedNoCloseRes.data.order.isPaid === true, 'Section 13: Served settled order isPaid is true');
+    assert(settleServedNoCloseRes.data.order && settleServedNoCloseRes.data.order.paymentStatus === 'paid', 'Section 13: Served settled order paymentStatus is paid');
+    assert(settleServedNoCloseRes.data.order && settleServedNoCloseRes.data.order.status === 'completed', 'Section 13: Served settled order status is completed');
+
+    const stateAfterServedSettle = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const table105After = (stateAfterServedSettle.data.tables || []).find(t => t.id === 105);
+    assert(table105After && table105After.status === 'cleaning', 'Section 13: Table 105 transitioned to cleaning');
+    assert(table105After && table105After.currentOrderId === null, 'Section 13: Table 105 currentOrderId cleared');
+
+    // 13.8: Unauthorized kitchen PIN attempting manual settlement rejected with HTTP 401
+    console.log('  [TEST 13.8]: Unauthorized kitchen PIN attempting manual settlement rejected with HTTP 401');
+    const orderSec13KitchenRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 106,
+      tableName: 'Table 106',
+      customerPhone: '9876543106',
+      customerName: 'Sec13 Kitchen User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    assert(orderSec13KitchenRes.statusCode === 201, 'Section 13: Setup order placed on Table 106');
+    const orderSec13KitchenId = orderSec13KitchenRes.data.id;
+
+    const dbSnapBeforeKitchen = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const payCountBeforeKitchen = Object.keys(dbSnapBeforeKitchen.processedPayments || {}).length;
+    const evtCountBeforeKitchen = Object.keys(dbSnapBeforeKitchen.processedWebhookEvents || {}).length;
+
+    // Kitchen PIN (5678) attempting manual settlement with status: 'paid'
+    const kitchenSettleRes1 = await makeRequest('PATCH', `/api/orders/${orderSec13KitchenId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '5678'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'cash',
+      staffPin: '5678'
+    });
+    assert(kitchenSettleRes1.statusCode === 401, 'Section 13: Kitchen PIN attempting status: paid rejected with HTTP 401');
+    assert(kitchenSettleRes1.data.error && kitchenSettleRes1.data.error.includes('Cashier / Manager PIN required'), 'Section 13: Error confirms cashier authorization required');
+
+    // Kitchen PIN (5678) attempting financial action with closeTable: true
+    const kitchenSettleRes2 = await makeRequest('PATCH', `/api/orders/${orderSec13KitchenId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '5678'
+    }, {
+      closeTable: true,
+      staffPin: '5678'
+    });
+    assert(kitchenSettleRes2.statusCode === 401, 'Section 13: Kitchen PIN attempting closeTable: true rejected with HTTP 401');
+    assert(kitchenSettleRes2.data.error && kitchenSettleRes2.data.error.includes('Cashier / Manager PIN required'), 'Section 13: Error confirms cashier authorization required');
+
+    // Verify zero side effects after rejected kitchen PIN attempts
+    const dbSnapAfterKitchen = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterKitchen = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderAfterKitchen = (stateAfterKitchen.data.orders || []).find(o => o.id === orderSec13KitchenId);
+    const tableAfterKitchen = (stateAfterKitchen.data.tables || []).find(t => t.id === 106);
+    const custAfterKitchen = (stateAfterKitchen.data.customers || []).find(c => c.phone === '9876543106');
+
+    assert(orderAfterKitchen && orderAfterKitchen.isPaid === false, 'Section 13: Table 106 order isPaid remains false');
+    assert(orderAfterKitchen && orderAfterKitchen.paymentStatus === 'unpaid', 'Section 13: Table 106 order paymentStatus remains unpaid');
+    assert(tableAfterKitchen && tableAfterKitchen.status === 'occupied', 'Section 13: Table 106 remains occupied');
+    assert(tableAfterKitchen && tableAfterKitchen.currentOrderId === orderSec13KitchenId, 'Section 13: Table 106 currentOrderId unchanged');
+    assert(custAfterKitchen && custAfterKitchen.totalSpent === 0, 'Section 13: Customer totalSpent remains 0');
+    assert(custAfterKitchen && custAfterKitchen.loyaltyPoints === 0, 'Section 13: Customer loyaltyPoints remains 0');
+    assert(Object.keys(dbSnapAfterKitchen.processedPayments || {}).length === payCountBeforeKitchen, 'Section 13: processedPayments count unchanged');
+    assert(Object.keys(dbSnapAfterKitchen.processedWebhookEvents || {}).length === evtCountBeforeKitchen, 'Section 13: processedWebhookEvents count unchanged');
+
+    // ----------------------------------------------------
+    // SECTION 14: DUPLICATE SETTLEMENT PREVENTION & WORKFLOW INTEGRITY
+    // ----------------------------------------------------
+    console.log('\n--- 14. DUPLICATE SETTLEMENT PREVENTION & WORKFLOW INTEGRITY ---');
+
+    // 14.1: First legitimate manual settlement succeeds (Table 107)
+    console.log('  [TEST 14.1]: First legitimate manual settlement succeeds');
+    const orderSec14Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 107,
+      tableName: 'Table 107',
+      customerPhone: '9876543107',
+      customerName: 'Sec14 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    assert(orderSec14Res.statusCode === 201, 'Section 14: Setup order placed on Table 107');
+    const orderSec14Id = orderSec14Res.data.id;
+
+    const firstSettleRes = await makeRequest('PATCH', `/api/orders/${orderSec14Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(firstSettleRes.statusCode === 200, 'Section 14: First legitimate manual settlement succeeds with HTTP 200');
+    assert(firstSettleRes.data.order && firstSettleRes.data.order.isPaid === true, 'Section 14: First settlement marks isPaid: true');
+    assert(firstSettleRes.data.order && firstSettleRes.data.order.status === 'completed', 'Section 14: First settlement marks status: completed');
+
+    // Snapshot after first settlement
+    const dbSnapAfterFirstSettle = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterFirstSettle = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const cust107AfterFirst = (stateAfterFirstSettle.data.customers || []).find(c => c.phone === '9876543107');
+    const completedOrdersAfterFirst = (stateAfterFirstSettle.data.completedOrders || []).filter(o => o.id === orderSec14Id);
+    const table107AfterFirst = (stateAfterFirstSettle.data.tables || []).find(t => t.id === 107);
+    const payCountAfterFirst = Object.keys(dbSnapAfterFirstSettle.processedPayments || {}).length;
+    const evtCountAfterFirst = Object.keys(dbSnapAfterFirstSettle.processedWebhookEvents || {}).length;
+
+    assert(completedOrdersAfterFirst.length === 1, 'Section 14: Order archived into completedOrders exactly once');
+    assert(cust107AfterFirst && cust107AfterFirst.totalSpent === 294, 'Section 14: Customer totalSpent incremented to 294');
+    assert(cust107AfterFirst && cust107AfterFirst.loyaltyPoints === 29, 'Section 14: Customer loyaltyPoints incremented to 29');
+    assert(table107AfterFirst && table107AfterFirst.status === 'cleaning', 'Section 14: Table 107 status is cleaning');
+
+    // 14.2: Repeated settlement on completed order is rejected safely
+    console.log('  [TEST 14.2]: Repeated settlement on completed order is rejected safely');
+    const repeatSettleRes1 = await makeRequest('PATCH', `/api/orders/${orderSec14Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(repeatSettleRes1.statusCode === 400, 'Section 14: Repeated manual settlement rejected with HTTP 400');
+    assert(repeatSettleRes1.data.error && repeatSettleRes1.data.error.includes('Repeated settlement is not permitted'), 'Section 14: Error confirms repeated settlement not permitted');
+
+    // 14.3: Repeated settlement with different payment method on completed order is also rejected
+    console.log('  [TEST 14.3]: Repeated settlement with different payment method rejected');
+    const repeatSettleRes2 = await makeRequest('PATCH', `/api/orders/${orderSec14Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'card',
+      staffPin: '1234'
+    });
+    assert(repeatSettleRes2.statusCode === 400, 'Section 14: Repeated settlement with different method rejected with HTTP 400');
+
+    // 14.4: Verify zero side effects after rejected duplicate settlements on completed order
+    console.log('  [TEST 14.4]: Zero side effects across rejected repeated settlements');
+    const dbSnapAfterRepeat = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterRepeat = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const cust107AfterRepeat = (stateAfterRepeat.data.customers || []).find(c => c.phone === '9876543107');
+    const completedOrdersAfterRepeat = (stateAfterRepeat.data.completedOrders || []).filter(o => o.id === orderSec14Id);
+    const table107AfterRepeat = (stateAfterRepeat.data.tables || []).find(t => t.id === 107);
+
+    assert(completedOrdersAfterRepeat.length === 1, 'Section 14: completedOrders does NOT get duplicate entries (length remains 1)');
+    assert(cust107AfterRepeat && cust107AfterRepeat.totalSpent === 294, 'Section 14: Customer totalSpent does NOT increase again (remains 294)');
+    assert(cust107AfterRepeat && cust107AfterRepeat.loyaltyPoints === 29, 'Section 14: Customer loyaltyPoints does NOT increase again (remains 29)');
+    assert(table107AfterRepeat && table107AfterRepeat.status === 'cleaning', 'Section 14: Table 107 state is not incorrectly changed');
+    assert(completedOrdersAfterRepeat[0].paymentMethod === 'cash', 'Section 14: Payment identity method remains cash');
+    assert(completedOrdersAfterRepeat[0].isPaid === true, 'Section 14: Payment identity isPaid remains true');
+    assert(Object.keys(dbSnapAfterRepeat.processedPayments || {}).length === payCountAfterFirst, 'Section 14: processedPayments count unchanged');
+    assert(Object.keys(dbSnapAfterRepeat.processedWebhookEvents || {}).length === evtCountAfterFirst, 'Section 14: processedWebhookEvents count unchanged');
+
+    // 14.5: Online payment settlement on active order (Table 108)
+    console.log('  [TEST 14.5]: Online payment settlement on active order');
+    const orderOnline14Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 108,
+      tableName: 'Table 108',
+      customerPhone: '9876543108',
+      customerName: 'Sec14 Online User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    assert(orderOnline14Res.statusCode === 201, 'Section 14: Setup online order placed on Table 108');
+    const orderOnline14Id = orderOnline14Res.data.id;
+
+    const payOrder14Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderOnline14Id });
+    assert(payOrder14Res.statusCode === 200, 'Section 14: Razorpay payment order created');
+    const rzpOrder14Id = payOrder14Res.data.razorpayOrderId;
+    const paymentId14 = `pay_sec14_online_${Date.now()}`;
+    const eventId14 = `evt_sec14_online_${Date.now()}`;
+
+    const whPayload14 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId14,
+            order_id: rzpOrder14Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig14 = computeWebhookSignature(whPayload14);
+    const whRes14 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig14,
+      'x-razorpay-event-id': eventId14
+    }, whPayload14);
+    assert(whRes14.statusCode === 200, 'Section 14: Online webhook accepted with HTTP 200');
+    assert(whRes14.data.settled === true, 'Section 14: Online webhook confirms settled: true');
+
+    const stateAfterOnline14 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderOnlineActive = (stateAfterOnline14.data.orders || []).find(o => o.id === orderOnline14Id);
+    assert(orderOnlineActive && orderOnlineActive.isPaid === true, 'Section 14: Active online order isPaid is true');
+    assert(orderOnlineActive && orderOnlineActive.paymentStatus === 'paid', 'Section 14: Active online order paymentStatus is paid');
+    assert(orderOnlineActive && orderOnlineActive.paymentMethod === 'upi', 'Section 14: Active online order paymentMethod is upi');
+    assert(orderOnlineActive && orderOnlineActive.txnId === paymentId14, 'Section 14: Active online order txnId bound');
+
+    // 14.6: Duplicate manual settlement attempt on active already-paid online order is rejected
+    console.log('  [TEST 14.6]: Duplicate manual settlement on active already-paid order is rejected');
+    const dupManualOnOnlineRes = await makeRequest('PATCH', `/api/orders/${orderOnline14Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(dupManualOnOnlineRes.statusCode === 400, 'Section 14: Duplicate manual settlement on active paid order rejected with HTTP 400');
+    assert(dupManualOnOnlineRes.data.error && dupManualOnOnlineRes.data.error.includes('Repeated settlement is not permitted'), 'Section 14: Error confirms repeated settlement not permitted');
+
+    // 14.7: Attempt to modify paymentMethod on active already-paid order is rejected
+    console.log('  [TEST 14.7]: Modifying paymentMethod on active already-paid order is rejected');
+    const dupMethodOnOnlineRes = await makeRequest('PATCH', `/api/orders/${orderOnline14Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(dupMethodOnOnlineRes.statusCode === 400, 'Section 14: Modifying paymentMethod on active paid order rejected with HTTP 400');
+
+    // 14.8: Verify zero side effects on active online order
+    console.log('  [TEST 14.8]: Zero side effects on active online order');
+    const stateAfterDupOnline = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderOnlineStillActive = (stateAfterDupOnline.data.orders || []).find(o => o.id === orderOnline14Id);
+    const cust108AfterDup = (stateAfterDupOnline.data.customers || []).find(c => c.phone === '9876543108');
+    const table108AfterDup = (stateAfterDupOnline.data.tables || []).find(t => t.id === 108);
+
+    assert(orderOnlineStillActive && orderOnlineStillActive.isPaid === true, 'Section 14: Order isPaid remains true');
+    assert(orderOnlineStillActive && orderOnlineStillActive.paymentMethod === 'upi', 'Section 14: Order paymentMethod remains upi (not overwritten)');
+    assert(orderOnlineStillActive && orderOnlineStillActive.txnId === paymentId14, 'Section 14: Order txnId remains paymentId14');
+    assert(table108AfterDup && table108AfterDup.status === 'occupied', 'Section 14: Table 108 remains occupied');
+    assert(cust108AfterDup && cust108AfterDup.totalSpent === 294, 'Section 14: Customer totalSpent remains 294');
+    assert(cust108AfterDup && cust108AfterDup.loyaltyPoints === 29, 'Section 14: Customer loyaltyPoints remains 29');
+
+    // 14.9: Legitimate already-paid online order completes intended workflow when food is served
+    console.log('  [TEST 14.9]: Legitimate already-paid online order completes workflow when food is served');
+    const serveOnline14Res = await makeRequest('PATCH', `/api/orders/${orderOnline14Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'served',
+      kitchenStatus: 'served',
+      staffPin: '1234'
+    });
+    assert(serveOnline14Res.statusCode === 200, 'Section 14: Serving already-paid online order succeeds with HTTP 200');
+
+    const stateAfterServe14 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const activeOrderAfterServe = (stateAfterServe14.data.orders || []).find(o => o.id === orderOnline14Id);
+    const completedOrderAfterServe = (stateAfterServe14.data.completedOrders || []).find(o => o.id === orderOnline14Id);
+    const table108AfterServe = (stateAfterServe14.data.tables || []).find(t => t.id === 108);
+    const cust108AfterServe = (stateAfterServe14.data.customers || []).find(c => c.phone === '9876543108');
+
+    assert(!activeOrderAfterServe, 'Section 14: Order removed from active orders');
+    assert(completedOrderAfterServe && completedOrderAfterServe.status === 'completed', 'Section 14: Order archived to completedOrders with status completed');
+    assert(completedOrderAfterServe && completedOrderAfterServe.isPaid === true, 'Section 14: Completed order isPaid is true');
+    assert(completedOrderAfterServe && completedOrderAfterServe.paymentMethod === 'upi', 'Section 14: Completed order paymentMethod is upi');
+    assert(table108AfterServe && table108AfterServe.status === 'cleaning', 'Section 14: Table 108 transitioned to cleaning');
+    assert(table108AfterServe && table108AfterServe.currentOrderId === null, 'Section 14: Table 108 currentOrderId cleared');
+    assert(cust108AfterServe && cust108AfterServe.totalSpent === 294, 'Section 14: Customer totalSpent not double-counted (remains 294)');
+    assert(cust108AfterServe && cust108AfterServe.loyaltyPoints === 29, 'Section 14: Customer loyaltyPoints not double-counted (remains 29)');
+
+    // 14.10: Repeated settlement on now-completed online order is rejected
+    console.log('  [TEST 14.10]: Repeated settlement on completed online order is rejected');
+    const repeatAfterServeRes = await makeRequest('PATCH', `/api/orders/${orderOnline14Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(repeatAfterServeRes.statusCode === 400, 'Section 14: Repeated settlement on completed online order rejected with HTTP 400');
+    assert(repeatAfterServeRes.data.error && repeatAfterServeRes.data.error.includes('Repeated settlement is not permitted'), 'Section 14: Error confirms repeated settlement not permitted');
+
+    // =================================================================
+    // SECTION 15: PAYMENT METHOD INTEGRITY & STANDALONE ASSIGNMENT PREVENTION
+    // =================================================================
+    console.log('\n--- 15. PAYMENT METHOD INTEGRITY & STANDALONE ASSIGNMENT PREVENTION ---');
+
+    // 15.1: Create fresh unpaid order on Table 109
+    const order15Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 109,
+      customerName: 'Payment Method Auditor',
+      customerPhone: '9876543109',
+      orderType: 'dinein',
+      items: [{ id: 'tiptap-bistro_m1', name: 'Paneer Butter Masala', price: 280, qty: 1 }]
+    });
+    assert(order15Res.statusCode === 201, 'Section 15: Order created on Table 109');
+    const order15Id = order15Res.data.id;
+
+    // Verify initial baseline state of Table 109 and order
+    const initial15State = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const order15Initial = (initial15State.data.orders || []).find(o => o.id === order15Id);
+    const table109Initial = (initial15State.data.tables || []).find(t => t.id === 109);
+    const cust109Initial = (initial15State.data.customers || []).find(c => c.phone === '9876543109');
+    assert(order15Initial && order15Initial.isPaid === false, 'Section 15: Initial order is unpaid');
+    assert(order15Initial && order15Initial.paymentStatus === 'unpaid', 'Section 15: Initial paymentStatus is unpaid');
+    assert(order15Initial && order15Initial.paymentMethod === null, 'Section 15: Initial paymentMethod is null');
+    assert(table109Initial && table109Initial.status === 'occupied', 'Section 15: Table 109 is occupied');
+    const cust109InitialSpend = cust109Initial ? cust109Initial.totalSpent || 0 : 0;
+    const cust109InitialPoints = cust109Initial ? cust109Initial.loyaltyPoints || 0 : 0;
+
+    // 15.2: Unpaid order + standalone paymentMethod: 'razorpay' only is rejected with HTTP 400
+    console.log('  [TEST 15.1]: Standalone paymentMethod: razorpay without settlement rejected with HTTP 400');
+    const standaloneRzpRes = await makeRequest('PATCH', `/api/orders/${order15Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentMethod: 'razorpay',
+      staffPin: '1234'
+    });
+    assert(standaloneRzpRes.statusCode === 400, 'Section 15: Standalone paymentMethod: razorpay strictly rejected with HTTP 400');
+    assert(standaloneRzpRes.data.error && standaloneRzpRes.data.error.includes('Standalone paymentMethod modification is not permitted'), 'Section 15: Error confirms standalone paymentMethod rejected');
+
+    // 15.3: Unpaid order + standalone paymentMethod: 'online' only is rejected with HTTP 400
+    console.log('  [TEST 15.2]: Standalone paymentMethod: online without settlement rejected with HTTP 400');
+    const standaloneOnlineRes = await makeRequest('PATCH', `/api/orders/${order15Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentMethod: 'online',
+      staffPin: '1234'
+    });
+    assert(standaloneOnlineRes.statusCode === 400, 'Section 15: Standalone paymentMethod: online strictly rejected with HTTP 400');
+    assert(standaloneOnlineRes.data.error && standaloneOnlineRes.data.error.includes('Standalone paymentMethod modification is not permitted'), 'Section 15: Error confirms standalone paymentMethod rejected');
+
+    // 15.4: Unpaid order + standalone paymentMethod: 'cash' only without status: 'paid' is rejected with HTTP 400
+    console.log('  [TEST 15.3]: Standalone paymentMethod: cash without status: paid rejected with HTTP 400');
+    const standaloneCashRes = await makeRequest('PATCH', `/api/orders/${order15Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(standaloneCashRes.statusCode === 400, 'Section 15: Standalone paymentMethod: cash without status: paid rejected with HTTP 400');
+    assert(standaloneCashRes.data.error && standaloneCashRes.data.error.includes('Standalone paymentMethod modification is not permitted'), 'Section 15: Error confirms standalone paymentMethod rejected');
+
+    // 15.5: Verify ZERO side effects after standalone paymentMethod attempts (Tests 15.1 - 15.3)
+    console.log('  [TEST 15.4]: Zero side effects across rejected standalone paymentMethod requests');
+    const stateAfterStandalone15 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const order15AfterStandalone = (stateAfterStandalone15.data.orders || []).find(o => o.id === order15Id);
+    const table109AfterStandalone = (stateAfterStandalone15.data.tables || []).find(t => t.id === 109);
+    const cust109AfterStandalone = (stateAfterStandalone15.data.customers || []).find(c => c.phone === '9876543109');
+    const completed15AfterStandalone = (stateAfterStandalone15.data.completedOrders || []).find(o => o.id === order15Id);
+
+    assert(order15AfterStandalone && order15AfterStandalone.isPaid === false, 'Section 15: Order remains strictly unpaid');
+    assert(order15AfterStandalone && order15AfterStandalone.paymentStatus === 'unpaid', 'Section 15: PaymentStatus remains strictly unpaid');
+    assert(order15AfterStandalone && order15AfterStandalone.paymentMethod === null, 'Section 15: PaymentMethod remains null (not modified)');
+    assert(order15AfterStandalone && !order15AfterStandalone.txnId, 'Section 15: txnId remains undefined');
+    assert(!completed15AfterStandalone, 'Section 15: Order not archived to completedOrders');
+    assert(table109AfterStandalone && table109AfterStandalone.status === 'occupied', 'Section 15: Table 109 remains occupied');
+    assert(table109AfterStandalone && table109AfterStandalone.currentOrderId === order15Id, 'Section 15: Table 109 currentOrderId unchanged');
+    const cust109CurrentSpend = cust109AfterStandalone ? cust109AfterStandalone.totalSpent || 0 : 0;
+    const cust109CurrentPoints = cust109AfterStandalone ? cust109AfterStandalone.loyaltyPoints || 0 : 0;
+    assert(cust109CurrentSpend === cust109InitialSpend, 'Section 15: Customer totalSpent unchanged');
+    assert(cust109CurrentPoints === cust109InitialPoints, 'Section 15: Customer loyaltyPoints unchanged');
+
+    // 15.6: Valid manual cash settlement succeeds with HTTP 200
+    console.log('  [TEST 15.5]: Valid manual cash settlement succeeds with HTTP 200');
+    const validCashSettle15Res = await makeRequest('PATCH', `/api/orders/${order15Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(validCashSettle15Res.statusCode === 200, 'Section 15: Valid manual cash settlement succeeds with HTTP 200');
+
+    const stateAfterCashSettle15 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const completedOrder15A = (stateAfterCashSettle15.data.completedOrders || []).find(o => o.id === order15Id);
+    const table109AfterSettle = (stateAfterCashSettle15.data.tables || []).find(t => t.id === 109);
+    const cust109AfterSettle = (stateAfterCashSettle15.data.customers || []).find(c => c.phone === '9876543109');
+
+    assert(completedOrder15A && completedOrder15A.status === 'completed', 'Section 15: Order archived to completedOrders');
+    assert(completedOrder15A && completedOrder15A.isPaid === true, 'Section 15: Order isPaid is true');
+    assert(completedOrder15A && completedOrder15A.paymentStatus === 'paid', 'Section 15: Order paymentStatus is paid');
+    assert(completedOrder15A && completedOrder15A.paymentMethod === 'cash', 'Section 15: Order paymentMethod is cash');
+    assert(table109AfterSettle && table109AfterSettle.status === 'cleaning', 'Section 15: Table 109 transitioned to cleaning');
+    assert(table109AfterSettle && table109AfterSettle.currentOrderId === null, 'Section 15: Table 109 currentOrderId cleared');
+    assert(cust109AfterSettle && cust109AfterSettle.totalSpent === 294, 'Section 15: Customer totalSpent credited (280 + 5% tax = 294)');
+    assert(cust109AfterSettle && cust109AfterSettle.loyaltyPoints === 29, 'Section 15: Customer loyaltyPoints credited (29 points)');
+
+    // 15.7: Valid Razorpay webhook settlement on Table 110 succeeds with HTTP 200
+    console.log('  [TEST 15.6]: Valid Razorpay webhook settlement on Table 110 succeeds with HTTP 200');
+    const order15BRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 110,
+      customerName: 'Webhook Method Auditor',
+      customerPhone: '9876543110',
+      orderType: 'dinein',
+      items: [{ id: 'tiptap-bistro_m1', name: 'Paneer Butter Masala', price: 280, qty: 1 }]
+    });
+    assert(order15BRes.statusCode === 201, 'Section 15: Order created on Table 110');
+    const order15BId = order15BRes.data.id;
+
+    // Create Razorpay payment order
+    const payOrder15BRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, {
+      orderId: order15BId
+    });
+    assert(payOrder15BRes.statusCode === 200, 'Section 15: Razorpay payment order created');
+    const rzpOrder15BId = payOrder15BRes.data.razorpayOrderId;
+    const paymentId15B = `pay_sec15_webhook_${Date.now()}`;
+    const eventId15B = `evt_sec15_webhook_${Date.now()}`;
+
+    const whPayload15B = JSON.stringify({
+      entity: 'event',
+      account_id: 'acc_TipTapPhase10Sec15',
+      event: 'order.paid',
+      contains: ['payment', 'order'],
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId15B,
+            order_id: rzpOrder15BId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        },
+        order: {
+          entity: {
+            id: rzpOrder15BId,
+            amount: 29400,
+            status: 'paid'
+          }
+        }
+      }
+    });
+
+    const whSig15B = crypto.createHmac('sha256', TEST_RAZORPAY_WEBHOOK_SECRET).update(whPayload15B).digest('hex');
+    const whRes15B = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig15B,
+      'x-razorpay-event-id': eventId15B
+    }, whPayload15B);
+    assert(whRes15B.statusCode === 200, 'Section 15: Valid Razorpay webhook accepted with HTTP 200');
+
+    // Verify online order state
+    const stateAfterWh15B = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderOnline15B = (stateAfterWh15B.data.orders || []).find(o => o.id === order15BId);
+    assert(orderOnline15B && orderOnline15B.isPaid === true, 'Section 15: Active online order isPaid is true');
+    assert(orderOnline15B && orderOnline15B.paymentStatus === 'paid', 'Section 15: Active online order paymentStatus is paid');
+    assert(orderOnline15B && orderOnline15B.paymentMethod === 'upi', 'Section 15: Active online order paymentMethod assigned upi via gateway');
+    assert(orderOnline15B && orderOnline15B.txnId === paymentId15B, 'Section 15: Active online order txnId bound');
+
+    // 15.8: Attempt to modify paymentMethod on already-paid order is rejected with HTTP 400
+    console.log('  [TEST 15.7]: Modifying paymentMethod on active already-paid order is rejected with HTTP 400');
+    const modPaidMethodRes = await makeRequest('PATCH', `/api/orders/${order15BId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentMethod: 'card',
+      staffPin: '1234'
+    });
+    assert(modPaidMethodRes.statusCode === 400, 'Section 15: Modifying paymentMethod on already-paid order strictly rejected with HTTP 400');
+    assert(modPaidMethodRes.data.error && modPaidMethodRes.data.error.includes('Repeated settlement is not permitted'), 'Section 15: Error confirms repeated settlement/modification not permitted');
+
+    // Verify zero side effects on already-paid order
+    const stateAfterModAttempt = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const order15BStillOnline = (stateAfterModAttempt.data.orders || []).find(o => o.id === order15BId);
+    const cust110AfterMod = (stateAfterModAttempt.data.customers || []).find(c => c.phone === '9876543110');
+    const table110AfterMod = (stateAfterModAttempt.data.tables || []).find(t => t.id === 110);
+
+    assert(order15BStillOnline && order15BStillOnline.isPaid === true, 'Section 15: Order isPaid remains true');
+    assert(order15BStillOnline && order15BStillOnline.paymentStatus === 'paid', 'Section 15: Order paymentStatus remains paid');
+    assert(order15BStillOnline && order15BStillOnline.paymentMethod === 'upi', 'Section 15: Order paymentMethod remains upi (NOT overwritten to card)');
+    assert(order15BStillOnline && order15BStillOnline.txnId === paymentId15B, 'Section 15: Order txnId remains paymentId15B');
+    assert(table110AfterMod && table110AfterMod.status === 'occupied', 'Section 15: Table 110 remains occupied');
+    assert(cust110AfterMod && cust110AfterMod.totalSpent === 294, 'Section 15: Customer totalSpent remains 294 (not incremented)');
+    assert(cust110AfterMod && cust110AfterMod.loyaltyPoints === 29, 'Section 15: Customer loyaltyPoints remains 29 (not incremented)');
+
+    // 15.9: Manual settlement rejecting razorpay and online payment methods
+    console.log('  [TEST 15.8]: Manual settlement strictly rejects razorpay and online paymentMethod');
+    const order15CRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 111,
+      customerName: 'Gateway Method Spoofer',
+      customerPhone: '9876543111',
+      orderType: 'dinein',
+      items: [{ id: 'tiptap-bistro_m1', name: 'Paneer Butter Masala', price: 280, qty: 1 }]
+    });
+    assert(order15CRes.statusCode === 201, 'Section 15: Order created on Table 111');
+    const order15CId = order15CRes.data.id;
+
+    // Manual settlement with razorpay
+    const manualRzpRes = await makeRequest('PATCH', `/api/orders/${order15CId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'razorpay',
+      staffPin: '1234'
+    });
+    assert(manualRzpRes.statusCode === 400, 'Section 15: Manual settlement with razorpay strictly rejected with HTTP 400');
+    assert(manualRzpRes.data.error && manualRzpRes.data.error.includes('Manual settlement with paymentMethod "razorpay" is not permitted'), 'Section 15: Error confirms razorpay requires gateway verification');
+
+    // Manual settlement with online
+    const manualOnlineRes = await makeRequest('PATCH', `/api/orders/${order15CId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'online',
+      staffPin: '1234'
+    });
+    assert(manualOnlineRes.statusCode === 400, 'Section 15: Manual settlement with online strictly rejected with HTTP 400');
+    assert(manualOnlineRes.data.error && manualOnlineRes.data.error.includes('Manual settlement with paymentMethod "online" is not permitted'), 'Section 15: Error confirms online requires gateway verification');
+
+    // Verify zero side effects on Table 111 after rejected manual razorpay/online attempts
+    const stateAfter15C = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const order15CState = (stateAfter15C.data.orders || []).find(o => o.id === order15CId);
+    const table111State = (stateAfter15C.data.tables || []).find(t => t.id === 111);
+    const cust111State = (stateAfter15C.data.customers || []).find(c => c.phone === '9876543111');
+    assert(order15CState && order15CState.isPaid === false, 'Section 15: Table 111 order remains unpaid');
+    assert(order15CState && order15CState.paymentStatus === 'unpaid', 'Section 15: Table 111 order paymentStatus remains unpaid');
+    assert(order15CState && order15CState.paymentMethod === null, 'Section 15: Table 111 order paymentMethod remains null');
+    assert(table111State && table111State.status === 'occupied', 'Section 15: Table 111 remains occupied');
+    assert(cust111State && (cust111State.totalSpent || 0) === 0, 'Section 15: Customer 111 totalSpent remains 0');
 
     console.log('\n================================================================');
     console.log(`🏁 PHASE 10 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
