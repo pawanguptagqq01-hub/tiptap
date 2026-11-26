@@ -1853,7 +1853,7 @@ async function settleOrderPaymentShared({
     return { success: false, statusCode: 404, error: `Order "${orderId}" not found for restaurant "${restaurantId}".` };
   }
 
-  // 2. Replay & Duplicate Webhook Event ID Check (Persistent Storage) with Ownership Validation
+  // 2. Replay & Duplicate Webhook Event ID Check (Persistent Storage) with Ownership & Payment Consistency Validation
   if (eventId && db.processedWebhookEvents && db.processedWebhookEvents[eventId]) {
     const existingEvt = db.processedWebhookEvents[eventId];
     const ownershipCheck = validateProcessedWebhookEventOwnership({
@@ -1873,10 +1873,45 @@ async function settleOrderPaymentShared({
       };
     }
 
+    // If processedPayments entry exists, strictly validate ownership
+    if (paymentId && db.processedPayments && db.processedPayments[paymentId]) {
+      const payOwnership = validateProcessedPaymentOwnership({
+        existingPayment: db.processedPayments[paymentId],
+        paymentId,
+        expectedOrderId: targetOrder.id,
+        expectedRestaurantId: restaurant.id,
+        paymentDetailsExtra
+      });
+      if (!payOwnership.isValid) {
+        return {
+          success: false,
+          statusCode: payOwnership.statusCode || 400,
+          error: payOwnership.error
+        };
+      }
+    }
+
+    // Validate target active order's persisted payment identity
+    const paidIdentityCheck = validateAlreadyPaidOrderIdentity({
+      order: targetOrder,
+      orderType: 'order',
+      paymentId,
+      restaurantId: restaurant.id,
+      processedPayments: db.processedPayments,
+      paymentDetailsExtra
+    });
+    if (!paidIdentityCheck.isValid) {
+      return {
+        success: false,
+        statusCode: paidIdentityCheck.statusCode || 400,
+        error: paidIdentityCheck.error
+      };
+    }
+
     return {
       success: true,
       statusCode: 200,
-      alreadySettled: Boolean(targetOrder.isPaid || targetOrder.paymentStatus === 'paid'),
+      alreadySettled: true,
       alreadyProcessed: true,
       order: targetOrder,
       message: 'Webhook event ID already processed (idempotent)',
@@ -2040,7 +2075,7 @@ async function settleOrderPaymentShared({
       }
     }
 
-    // Validate incoming eventId against persistent ownership if it was already processed
+    // Validate incoming eventId against persistent ownership & payment consistency if it was already processed
     if (eventId && currentDb.processedWebhookEvents && currentDb.processedWebhookEvents[eventId]) {
       const existingEvt = currentDb.processedWebhookEvents[eventId];
       const ownershipCheck = validateProcessedWebhookEventOwnership({
@@ -2060,8 +2095,41 @@ async function settleOrderPaymentShared({
         };
       }
 
+      if (paymentId && currentDb.processedPayments && currentDb.processedPayments[paymentId]) {
+        const payOwnership = validateProcessedPaymentOwnership({
+          existingPayment: currentDb.processedPayments[paymentId],
+          paymentId,
+          expectedOrderId: activeOrder.id,
+          expectedRestaurantId: activeRest.id,
+          paymentDetailsExtra
+        });
+        if (!payOwnership.isValid) {
+          return {
+            skipSave: true,
+            duplicatePaymentViolation: true,
+            error: payOwnership.error
+          };
+        }
+      }
+
+      const paidIdentityCheck = validateAlreadyPaidOrderIdentity({
+        order: activeOrder,
+        orderType: 'order',
+        paymentId,
+        restaurantId: activeRest.id,
+        processedPayments: currentDb.processedPayments,
+        paymentDetailsExtra
+      });
+      if (!paidIdentityCheck.isValid) {
+        return {
+          skipSave: true,
+          paymentIdentityViolation: true,
+          error: paidIdentityCheck.error
+        };
+      }
+
       settledOrderCopy = JSON.parse(JSON.stringify(activeOrder || targetOrder));
-      return { skipSave: true, alreadyProcessed: true, alreadySettled: Boolean(activeOrder.isPaid || activeOrder.paymentStatus === 'paid') };
+      return { skipSave: true, alreadyProcessed: true, alreadySettled: true };
     }
 
     // If order or payment was already settled:
@@ -5151,6 +5219,10 @@ const server = http.createServer(async (req, res) => {
           if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
           if (data.isPaid !== undefined) order.isPaid = data.isPaid;
           if (data.paymentStatus) order.paymentStatus = data.paymentStatus;
+          if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production') {
+            if (data.txnId !== undefined) order.txnId = data.txnId;
+            if (data.paymentDetails !== undefined) order.paymentDetails = data.paymentDetails;
+          }
 
           if (order.status === 'cancelled') {
             restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);

@@ -4527,6 +4527,456 @@ async function runPhase10Tests() {
     assert(!dbSnapJK.processedWebhookEvents[eventIdJKClash], 'Test J (9j): No event ID recorded for cross-order rejection');
 
     // ----------------------------------------------------
+    // SECTION 9k: SAME EVENT-ID REPLAY PAYMENT CONSISTENCY (TESTS K THROUGH O)
+    // ----------------------------------------------------
+    console.log('\n--- 9k. SAME EVENT-ID REPLAY PAYMENT CONSISTENCY (TESTS K THROUGH O) ---');
+
+    // TEST K: Existing event ID, order later becomes unpaid -> HTTP 400
+    console.log('\n  [TEST K]: Replay with same event ID when order becomes unpaid rejection');
+    const order9kKRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 91,
+      tableName: 'Table 91',
+      customerPhone: '9876543401',
+      customerName: 'K User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const order9kKId = order9kKRes.data.id;
+    const payOrder9kKRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: order9kKId });
+    const rzpOrder9kKId = payOrder9kKRes.data.razorpayOrderId;
+    const paymentId9kK = `pay_9kk_${Date.now()}`;
+    const eventId9kK = `evt_9kk_${Date.now()}`;
+
+    // Settle Order K initially (normal settlement)
+    const whPayload9kK = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId9kK,
+            order_id: rzpOrder9kKId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig9kK = computeWebhookSignature(whPayload9kK);
+    const whRes9kK1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kK,
+      'x-razorpay-event-id': eventId9kK
+    }, whPayload9kK);
+    assert(whRes9kK1.statusCode === 200, 'Test K (9k): Order K initial settlement succeeded');
+
+    // Confirm payment and event records exist
+    const dbSnap9kK1 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(dbSnap9kK1.processedPayments[paymentId9kK], 'Test K (9k): processedPayments entry exists');
+    assert(dbSnap9kK1.processedWebhookEvents[eventId9kK], 'Test K (9k): processedWebhookEvents entry exists');
+    const cust9kK1Check = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const cust9kK1 = (cust9kK1Check.data.customers || []).find(c => c.phone === '9876543401');
+    assert(cust9kK1 && cust9kK1.totalSpent === 294, 'Test K (9k): Customer initial spend is 294');
+
+    // Change order state to isPaid: false via authorized counter PATCH
+    const patch9kKRes = await makeRequest('PATCH', `/api/orders/${order9kKId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      isPaid: false,
+      staffPin: '1234'
+    });
+    assert(patch9kKRes.statusCode === 200, 'Test K (9k): Order isPaid set to false via authorized PATCH');
+
+    // Replay the exact same event ID and payment ID -> must fail closed with HTTP 400
+    const whRes9kKRetry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kK,
+      'x-razorpay-event-id': eventId9kK
+    }, whPayload9kK);
+    assert(whRes9kKRetry.statusCode === 400, 'Test K (9k): Same event ID replay on unpaid order rejected with HTTP 400');
+    assert(whRes9kKRetry.data.error && whRes9kKRetry.data.error.includes('marked unpaid'), 'Test K (9k): Error confirms unpaid state rejected');
+
+    // Assert zero side effects
+    const dbSnap9kK2 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(dbSnap9kK2.processedPayments[paymentId9kK], 'Test K (9k): Existing payment record preserved');
+    assert(dbSnap9kK2.processedWebhookEvents[eventId9kK], 'Test K (9k): Existing event record preserved');
+    const cust9kK2Check = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const cust9kK2 = (cust9kK2Check.data.customers || []).find(c => c.phone === '9876543401');
+    assert(cust9kK2 && cust9kK2.totalSpent === 294, 'Test K (9k): Zero duplicate spend increment on rejection');
+    assert(cust9kK2 && cust9kK2.loyaltyPoints === 29, 'Test K (9k): Zero duplicate loyalty increment on rejection');
+
+    // TEST L: Existing event ID, paymentStatus becomes pending -> HTTP 400
+    console.log('\n  [TEST L]: Replay with same event ID when paymentStatus is pending rejection');
+    const order9kLRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 92,
+      tableName: 'Table 92',
+      customerPhone: '9876543402',
+      customerName: 'L User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const order9kLId = order9kLRes.data.id;
+    const payOrder9kLRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: order9kLId });
+    const rzpOrder9kLId = payOrder9kLRes.data.razorpayOrderId;
+    const paymentId9kL = `pay_9kl_${Date.now()}`;
+    const eventId9kL = `evt_9kl_${Date.now()}`;
+
+    const whPayload9kL = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId9kL,
+            order_id: rzpOrder9kLId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig9kL = computeWebhookSignature(whPayload9kL);
+    const whRes9kL1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kL,
+      'x-razorpay-event-id': eventId9kL
+    }, whPayload9kL);
+    assert(whRes9kL1.statusCode === 200, 'Test L (9k): Order L initial settlement succeeded');
+
+    // Change paymentStatus to 'pending' via authorized PATCH
+    const patch9kLRes = await makeRequest('PATCH', `/api/orders/${order9kLId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentStatus: 'pending',
+      staffPin: '1234'
+    });
+    assert(patch9kLRes.statusCode === 200, 'Test L (9k): Order paymentStatus set to pending');
+
+    // Replay exact same event ID -> HTTP 400
+    const whRes9kLRetry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kL,
+      'x-razorpay-event-id': eventId9kL
+    }, whPayload9kL);
+    assert(whRes9kLRetry.statusCode === 400, 'Test L (9k): Same event ID replay with pending paymentStatus rejected with HTTP 400');
+    assert(whRes9kLRetry.data.error && whRes9kLRetry.data.error.includes('paymentStatus is'), 'Test L (9k): Error confirms pending paymentStatus rejected');
+
+    const cust9kLCheck = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const cust9kL = (cust9kLCheck.data.customers || []).find(c => c.phone === '9876543402');
+    assert(cust9kL && cust9kL.totalSpent === 294, 'Test L (9k): Zero duplicate spend on rejected replay');
+
+    // TEST M: Existing event ID, txnId or paymentDetails.paymentId becomes inconsistent -> HTTP 400
+    console.log('\n  [TEST M]: Replay with same event ID with inconsistent txnId or paymentDetails rejection');
+    // M1: Missing txnId
+    const order9kM1Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 93,
+      tableName: 'Table 93',
+      customerPhone: '9876543403',
+      customerName: 'M1 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const order9kM1Id = order9kM1Res.data.id;
+    const payOrder9kM1Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: order9kM1Id });
+    const rzpOrder9kM1Id = payOrder9kM1Res.data.razorpayOrderId;
+    const paymentId9kM1 = `pay_9km1_${Date.now()}`;
+    const eventId9kM1 = `evt_9km1_${Date.now()}`;
+
+    const whPayload9kM1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId9kM1,
+            order_id: rzpOrder9kM1Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig9kM1 = computeWebhookSignature(whPayload9kM1);
+    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kM1,
+      'x-razorpay-event-id': eventId9kM1
+    }, whPayload9kM1);
+
+    // Set txnId to null
+    await makeRequest('PATCH', `/api/orders/${order9kM1Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, { txnId: null, staffPin: '1234' });
+
+    // Replay exact same event ID -> HTTP 400
+    const whRes9kM1Retry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kM1,
+      'x-razorpay-event-id': eventId9kM1
+    }, whPayload9kM1);
+    assert(whRes9kM1Retry.statusCode === 400, 'Test M1 (9k): Same event ID replay with missing txnId rejected with HTTP 400');
+    assert(whRes9kM1Retry.data.error && whRes9kM1Retry.data.error.includes('Missing persisted txnId'), 'Test M1 (9k): Error confirms missing txnId rejected');
+
+    // M2: Missing paymentDetails.paymentId
+    const order9kM2Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 94,
+      tableName: 'Table 94',
+      customerPhone: '9876543404',
+      customerName: 'M2 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const order9kM2Id = order9kM2Res.data.id;
+    const payOrder9kM2Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: order9kM2Id });
+    const rzpOrder9kM2Id = payOrder9kM2Res.data.razorpayOrderId;
+    const paymentId9kM2 = `pay_9km2_${Date.now()}`;
+    const eventId9kM2 = `evt_9km2_${Date.now()}`;
+
+    const whPayload9kM2 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId9kM2,
+            order_id: rzpOrder9kM2Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig9kM2 = computeWebhookSignature(whPayload9kM2);
+    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kM2,
+      'x-razorpay-event-id': eventId9kM2
+    }, whPayload9kM2);
+
+    // Set paymentDetails without paymentId
+    await makeRequest('PATCH', `/api/orders/${order9kM2Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, {
+      paymentDetails: { provider: 'test', txnId: paymentId9kM2 },
+      staffPin: '1234'
+    });
+
+    // Replay exact same event ID -> HTTP 400
+    const whRes9kM2Retry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kM2,
+      'x-razorpay-event-id': eventId9kM2
+    }, whPayload9kM2);
+    assert(whRes9kM2Retry.statusCode === 400, 'Test M2 (9k): Same event ID replay with missing paymentDetails.paymentId rejected with HTTP 400');
+    assert(whRes9kM2Retry.data.error && whRes9kM2Retry.data.error.includes('Missing persisted paymentDetails.paymentId'), 'Test M2 (9k): Error confirms missing paymentDetails.paymentId rejected');
+
+    // M3: Conflicting paymentDetails.paymentId
+    const order9kM3Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 95,
+      tableName: 'Table 95',
+      customerPhone: '9876543405',
+      customerName: 'M3 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const order9kM3Id = order9kM3Res.data.id;
+    const payOrder9kM3Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: order9kM3Id });
+    const rzpOrder9kM3Id = payOrder9kM3Res.data.razorpayOrderId;
+    const paymentId9kM3 = `pay_9km3_${Date.now()}`;
+    const eventId9kM3 = `evt_9km3_${Date.now()}`;
+
+    const whPayload9kM3 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId9kM3,
+            order_id: rzpOrder9kM3Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig9kM3 = computeWebhookSignature(whPayload9kM3);
+    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kM3,
+      'x-razorpay-event-id': eventId9kM3
+    }, whPayload9kM3);
+
+    // Set conflicting paymentDetails.paymentId
+    await makeRequest('PATCH', `/api/orders/${order9kM3Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, {
+      paymentDetails: { provider: 'test', paymentId: `pay_conflict_${Date.now()}`, txnId: paymentId9kM3 },
+      staffPin: '1234'
+    });
+
+    // Replay exact same event ID -> HTTP 400
+    const whRes9kM3Retry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kM3,
+      'x-razorpay-event-id': eventId9kM3
+    }, whPayload9kM3);
+    assert(whRes9kM3Retry.statusCode === 400, 'Test M3 (9k): Same event ID replay with conflicting paymentDetails.paymentId rejected with HTTP 400');
+    assert(whRes9kM3Retry.data.error && (whRes9kM3Retry.data.error.includes('Inconsistent persisted payment identity') || whRes9kM3Retry.data.error.includes('already settled with payment ID')), 'Test M3 (9k): Error confirms conflicting payment identity rejected');
+
+    // TEST N: Legitimate same-event retry remains HTTP 200
+    console.log('\n  [TEST N]: Legitimate matching same-event retry returns HTTP 200');
+    const order9kNRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 96,
+      tableName: 'Table 96',
+      customerPhone: '9876543406',
+      customerName: 'N User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const order9kNId = order9kNRes.data.id;
+    const payOrder9kNRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: order9kNId });
+    const rzpOrder9kNId = payOrder9kNRes.data.razorpayOrderId;
+    const paymentId9kN = `pay_9kn_${Date.now()}`;
+    const eventId9kN = `evt_9kn_${Date.now()}`;
+
+    const whPayload9kN = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId9kN,
+            order_id: rzpOrder9kNId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig9kN = computeWebhookSignature(whPayload9kN);
+    const whRes9kN1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kN,
+      'x-razorpay-event-id': eventId9kN
+    }, whPayload9kN);
+    assert(whRes9kN1.statusCode === 200, 'Test N (9k): Order N initial settlement succeeded');
+
+    // Replay with exact same event ID -> HTTP 200
+    const whRes9kNRetry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kN,
+      'x-razorpay-event-id': eventId9kN
+    }, whPayload9kN);
+    assert(whRes9kNRetry.statusCode === 200, 'Test N (9k): Same event ID retry returns HTTP 200');
+    assert(whRes9kNRetry.data.alreadyProcessed === true, 'Test N (9k): Response confirms alreadyProcessed: true');
+    assert(whRes9kNRetry.data.alreadySettled === true, 'Test N (9k): Response confirms alreadySettled: true');
+
+    const cust9kNCheck = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const cust9kN = (cust9kNCheck.data.customers || []).find(c => c.phone === '9876543406');
+    assert(cust9kN && cust9kN.totalSpent === 294, 'Test N (9k): Customer N spend remains strictly 294 after same-event retry');
+    assert(cust9kN && cust9kN.loyaltyPoints === 29, 'Test N (9k): Customer N loyalty points remain strictly 29 after same-event retry');
+
+    // TEST O: Cross-order and cross-tenant regressions with same event ID
+    console.log('\n  [TEST O]: Cross-order and cross-tenant same event ID regressions');
+    // Order O1 (settled)
+    const order9kO1Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 97,
+      tableName: 'Table 97',
+      customerPhone: '9876543407',
+      customerName: 'O1 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const order9kO1Id = order9kO1Res.data.id;
+    const payOrder9kO1Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: order9kO1Id });
+    const rzpOrder9kO1Id = payOrder9kO1Res.data.razorpayOrderId;
+    const paymentId9kO1 = `pay_9ko1_${Date.now()}`;
+    const eventId9kO1 = `evt_9ko1_${Date.now()}`;
+
+    const whPayload9kO1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId9kO1,
+            order_id: rzpOrder9kO1Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig9kO1 = computeWebhookSignature(whPayload9kO1);
+    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kO1,
+      'x-razorpay-event-id': eventId9kO1
+    }, whPayload9kO1);
+
+    // Order O2 (unpaid)
+    const order9kO2Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 98,
+      tableName: 'Table 98',
+      customerPhone: '9876543408',
+      customerName: 'O2 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const order9kO2Id = order9kO2Res.data.id;
+    const payOrder9kO2Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: order9kO2Id });
+    const rzpOrder9kO2Id = payOrder9kO2Res.data.razorpayOrderId;
+
+    // Attempt to replay eventId9kO1 (bound to order O1) on order O2 -> reject with HTTP 400
+    const whPayload9kO1Clash = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentId9kO1,
+            order_id: rzpOrder9kO2Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig9kO1Clash = computeWebhookSignature(whPayload9kO1Clash);
+    const whRes9kO1Clash = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSig9kO1Clash,
+      'x-razorpay-event-id': eventId9kO1
+    }, whPayload9kO1Clash);
+    assert(whRes9kO1Clash.statusCode === 400, 'Test O1 (9k): Replaying existing event ID on different order rejected with HTTP 400');
+    assert(whRes9kO1Clash.data.error && (whRes9kO1Clash.data.error.includes('already processed for order') || whRes9kO1Clash.data.error.includes('mismatch')), 'Test O1 (9k): Error confirms cross-order event ID rejection');
+
+    // Order O2 on sharma-dhaba (different tenant)
+    const order9kO2CrossRes = await makeRequest('POST', '/api/orders?restaurant=sharma-dhaba', {}, {
+      tableId: 5,
+      tableName: 'Table 5',
+      customerPhone: '9876543409',
+      customerName: 'O2 Sharma User',
+      items: [{ id: 'sharma-dhaba_m1', qty: 1 }]
+    });
+    const order9kO2CrossId = order9kO2CrossRes.data.id;
+    const payOrder9kO2CrossRes = await makeRequest('POST', '/api/create-payment-order?restaurant=sharma-dhaba', {}, { orderId: order9kO2CrossId });
+    const rzpOrder9kO2CrossId = payOrder9kO2CrossRes.data.razorpayOrderId;
+
+    // Attempt to replay eventId9kO1 (from tiptap-bistro) on sharma-dhaba -> reject with HTTP 400/403
+    const whPayload9kO2Cross = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: `pay_9ko2_cross_${Date.now()}`,
+            order_id: rzpOrder9kO2CrossId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSig9kO2Cross = computeWebhookSignature(whPayload9kO2Cross);
+    const whRes9kO2CrossTenant = await makeRequest('POST', '/api/payment-webhook?restaurant=sharma-dhaba', {
+      'x-razorpay-signature': whSig9kO2Cross,
+      'x-razorpay-event-id': eventId9kO1
+    }, whPayload9kO2Cross);
+    assert(whRes9kO2CrossTenant.statusCode === 403 || whRes9kO2CrossTenant.statusCode === 400, 'Test O2 (9k): Replaying event on different tenant rejected');
+    assert(whRes9kO2CrossTenant.data.error && (whRes9kO2CrossTenant.data.error.includes('mismatch') || whRes9kO2CrossTenant.data.error.includes('Cross-tenant')), 'Test O2 (9k): Error confirms cross-tenant event rejection');
+
+    // ----------------------------------------------------
     // SECTION 10: CUSTOMER UI COMPLETE UTR REMOVAL CHECK
     // ----------------------------------------------------
     console.log('\n--- 10. CUSTOMER UI (ZERO MANUAL UTR INPUT) VERIFICATION ---');
