@@ -2959,10 +2959,9 @@ async function runPhase10Tests() {
     console.log('\n  [TEST D]: Concurrent already-processed payment vs different order claiming same event ID');
     // Clear tables 3 and 4
     const stateBeforeD = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
-    const ordT3 = (stateBeforeD.data.orders || []).find(o => o.tableId === 3 && !o.isPaid);
-    if (ordT3) await makeRequest('DELETE', `/api/orders/${ordT3.id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' });
-    const ordT4 = (stateBeforeD.data.orders || []).find(o => o.tableId === 4 && !o.isPaid);
-    if (ordT4) await makeRequest('DELETE', `/api/orders/${ordT4.id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' });
+    for (const ord of (stateBeforeD.data.orders || []).filter(o => o.tableId === 3 || o.tableId === 4)) {
+      await makeRequest('DELETE', `/api/orders/${ord.id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' });
+    }
 
     // Setup Order M4 (will be pre-settled)
     const orderM4Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
@@ -3117,6 +3116,766 @@ async function runPhase10Tests() {
     const custM1Final = (custM1CheckFinal.data.customers || []).find(c => c.phone === '9876543270');
     assert(custM1Final && custM1Final.totalSpent === 294, 'Test F (9h): Customer M1 spend remains strictly 294 after retry');
     assert(custM1Final && custM1Final.loyaltyPoints === 29, 'Test F (9h): Customer M1 loyalty points remain strictly 29 after retry');
+
+    // ----------------------------------------------------
+    // SECTION 9i: STRICT PROCESSED PAYMENT & ALREADY-PAID ORDER IDENTITY (TESTS A THROUGH J)
+    // ----------------------------------------------------
+    console.log('\n--- 9i. STRICT PROCESSED PAYMENT & ALREADY-PAID ORDER IDENTITY (TESTS A THROUGH J) ---');
+
+    // TEST A: Active order processed payment record missing orderId -> HTTP 400
+    console.log('\n  [TEST A]: Active order processed payment record missing orderId rejection');
+    const orderPARes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 61,
+      tableName: 'Table 61',
+      customerPhone: '9876543281',
+      customerName: 'PA User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderPAId = orderPARes.data.id;
+    const payOrderPARes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPAId });
+    const rzpOrderPAId = payOrderPARes.data.razorpayOrderId;
+    const paymentIdPA = `pay_pa_${Date.now()}_seed_missing_pay_orderId`;
+    const eventIdPA1 = `evt_pa1_${Date.now()}`;
+
+    // Settle Order PA (seeded with missing orderId in processedPayments)
+    const whPayloadPA1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPA,
+            order_id: rzpOrderPAId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPA1 = computeWebhookSignature(whPayloadPA1);
+    const whResPA1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPA1,
+      'x-razorpay-event-id': eventIdPA1
+    }, whPayloadPA1);
+    assert(whResPA1.statusCode === 200, 'Test A (9i): Order PA initial settlement succeeded');
+
+    // Second webhook with new event ID on the corrupted processedPayment record -> reject with HTTP 400
+    const eventIdPA2 = `evt_pa2_${Date.now()}`;
+    const whPayloadPA2 = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPA,
+            order_id: rzpOrderPAId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPA2 = computeWebhookSignature(whPayloadPA2);
+    const whResPA2 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPA2,
+      'x-razorpay-event-id': eventIdPA2
+    }, whPayloadPA2);
+    assert(whResPA2.statusCode === 400, 'Test A (9i): Processed payment missing orderId rejected with HTTP 400');
+    assert(whResPA2.data.error && whResPA2.data.error.includes('Missing persisted orderId'), 'Test A (9i): Error confirms missing orderId rejected');
+
+    // Verify zero side effects
+    const dbSnapPA = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(!dbSnapPA.processedWebhookEvents[eventIdPA2], 'Test A (9i): No new webhook event record created for rejected request');
+    const custPACheck = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custPA = (custPACheck.data.customers || []).find(c => c.phone === '9876543281');
+    assert(custPA && custPA.totalSpent === 294, 'Test A (9i): Zero duplicate spend increment (294)');
+    assert(custPA && custPA.loyaltyPoints === 29, 'Test A (9i): Zero duplicate loyalty increment (29)');
+
+    // TEST B: Active order processed payment record missing restaurantId -> HTTP 400
+    console.log('\n  [TEST B]: Active order processed payment record missing restaurantId rejection');
+    const orderPBRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 62,
+      tableName: 'Table 62',
+      customerPhone: '9876543282',
+      customerName: 'PB User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPBId = orderPBRes.data.id;
+    const payOrderPBRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPBId });
+    const rzpOrderPBId = payOrderPBRes.data.razorpayOrderId;
+    const paymentIdPB = `pay_pb_${Date.now()}_seed_missing_pay_restaurantId`;
+    const eventIdPB1 = `evt_pb1_${Date.now()}`;
+
+    // Settle Order PB (seeded with missing restaurantId in processedPayments)
+    const whPayloadPB1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPB,
+            order_id: rzpOrderPBId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPB1 = computeWebhookSignature(whPayloadPB1);
+    const whResPB1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPB1,
+      'x-razorpay-event-id': eventIdPB1
+    }, whPayloadPB1);
+    assert(whResPB1.statusCode === 200, 'Test B (9i): Order PB initial settlement succeeded');
+
+    // Second webhook with new event ID -> reject with HTTP 400
+    const eventIdPB2 = `evt_pb2_${Date.now()}`;
+    const whPayloadPB2 = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPB,
+            order_id: rzpOrderPBId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPB2 = computeWebhookSignature(whPayloadPB2);
+    const whResPB2 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPB2,
+      'x-razorpay-event-id': eventIdPB2
+    }, whPayloadPB2);
+    assert(whResPB2.statusCode === 400, 'Test B (9i): Processed payment missing restaurantId rejected with HTTP 400');
+    assert(whResPB2.data.error && whResPB2.data.error.includes('Missing persisted restaurantId'), 'Test B (9i): Error confirms missing restaurantId rejected');
+
+    const dbSnapPB = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(!dbSnapPB.processedWebhookEvents[eventIdPB2], 'Test B (9i): No new webhook event record created');
+    const custPBCheck = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custPB = (custPBCheck.data.customers || []).find(c => c.phone === '9876543282');
+    assert(custPB && custPB.totalSpent === 294, 'Test B (9i): Zero duplicate spend increment (294)');
+
+    // TEST C: Active order processed payment record with empty identity values -> HTTP 400
+    console.log('\n  [TEST C]: Active order processed payment record with empty identity values rejection');
+    const orderPCRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 63,
+      tableName: 'Table 63',
+      customerPhone: '9876543283',
+      customerName: 'PC User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPCId = orderPCRes.data.id;
+    const payOrderPCRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPCId });
+    const rzpOrderPCId = payOrderPCRes.data.razorpayOrderId;
+    const paymentIdPC = `pay_pc_${Date.now()}_seed_empty_pay_identity`;
+    const eventIdPC1 = `evt_pc1_${Date.now()}`;
+
+    // Settle Order PC (seeded with empty identity strings in processedPayments)
+    const whPayloadPC1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPC,
+            order_id: rzpOrderPCId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPC1 = computeWebhookSignature(whPayloadPC1);
+    const whResPC1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPC1,
+      'x-razorpay-event-id': eventIdPC1
+    }, whPayloadPC1);
+    assert(whResPC1.statusCode === 200, 'Test C (9i): Order PC initial settlement succeeded');
+
+    // Second webhook with new event ID -> reject with HTTP 400
+    const eventIdPC2 = `evt_pc2_${Date.now()}`;
+    const whPayloadPC2 = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPC,
+            order_id: rzpOrderPCId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPC2 = computeWebhookSignature(whPayloadPC2);
+    const whResPC2 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPC2,
+      'x-razorpay-event-id': eventIdPC2
+    }, whPayloadPC2);
+    assert(whResPC2.statusCode === 400, 'Test C (9i): Processed payment with empty identity rejected with HTTP 400');
+    assert(whResPC2.data.error && whResPC2.data.error.includes('Missing persisted orderId'), 'Test C (9i): Error confirms empty/missing identity rejected');
+
+    const dbSnapPC = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(!dbSnapPC.processedWebhookEvents[eventIdPC2], 'Test C (9i): No new webhook event record created');
+
+    // TEST D: Active order already-paid order with missing txnId -> HTTP 400
+    console.log('\n  [TEST D]: Active order already-paid order with missing txnId rejection');
+    const orderPDRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 64,
+      tableName: 'Table 64',
+      customerPhone: '9876543284',
+      customerName: 'PD User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPDId = orderPDRes.data.id;
+    const payOrderPDRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPDId });
+    const rzpOrderPDId = payOrderPDRes.data.razorpayOrderId;
+    const paymentIdPD = `pay_pd_${Date.now()}_seed_order_missing_txnId`;
+    const eventIdPD1 = `evt_pd1_${Date.now()}`;
+
+    // Settle Order PD (seeded with missing txnId on order)
+    const whPayloadPD1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPD,
+            order_id: rzpOrderPDId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPD1 = computeWebhookSignature(whPayloadPD1);
+    const whResPD1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPD1,
+      'x-razorpay-event-id': eventIdPD1
+    }, whPayloadPD1);
+    assert(whResPD1.statusCode === 200, 'Test D (9i): Order PD initial settlement succeeded');
+
+    // Second webhook with new event ID -> reject with HTTP 400 because order.txnId is missing
+    const eventIdPD2 = `evt_pd2_${Date.now()}`;
+    const whPayloadPD2 = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPD,
+            order_id: rzpOrderPDId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPD2 = computeWebhookSignature(whPayloadPD2);
+    const whResPD2 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPD2,
+      'x-razorpay-event-id': eventIdPD2
+    }, whPayloadPD2);
+    assert(whResPD2.statusCode === 400, 'Test D (9i): Order with missing txnId rejected with HTTP 400');
+    assert(whResPD2.data.error && whResPD2.data.error.includes('Missing persisted txnId'), 'Test D (9i): Error confirms missing txnId rejected');
+
+    const dbSnapPD = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(!dbSnapPD.processedWebhookEvents[eventIdPD2], 'Test D (9i): No new webhook event record created');
+
+    // TEST E: Active order already-paid order with mismatched paymentDetails.paymentId -> HTTP 400
+    console.log('\n  [TEST E]: Active order already-paid order with mismatched paymentDetails.paymentId rejection');
+    const orderPERes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 65,
+      tableName: 'Table 65',
+      customerPhone: '9876543285',
+      customerName: 'PE User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPEId = orderPERes.data.id;
+    const payOrderPERes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPEId });
+    const rzpOrderPEId = payOrderPERes.data.razorpayOrderId;
+    const paymentIdPE = `pay_pe_${Date.now()}_seed_order_mismatched_payId`;
+    const eventIdPE1 = `evt_pe1_${Date.now()}`;
+
+    // Settle Order PE (seeded with mismatched paymentDetails.paymentId on order)
+    const whPayloadPE1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPE,
+            order_id: rzpOrderPEId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPE1 = computeWebhookSignature(whPayloadPE1);
+    const whResPE1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPE1,
+      'x-razorpay-event-id': eventIdPE1
+    }, whPayloadPE1);
+    assert(whResPE1.statusCode === 200, 'Test E (9i): Order PE initial settlement succeeded');
+
+    // Second webhook with new event ID -> reject with HTTP 400 due to mismatched payment identity
+    const eventIdPE2 = `evt_pe2_${Date.now()}`;
+    const whPayloadPE2 = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPE,
+            order_id: rzpOrderPEId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPE2 = computeWebhookSignature(whPayloadPE2);
+    const whResPE2 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPE2,
+      'x-razorpay-event-id': eventIdPE2
+    }, whPayloadPE2);
+    assert(whResPE2.statusCode === 400, 'Test E (9i): Order with mismatched paymentDetails.paymentId rejected with HTTP 400');
+    assert(whResPE2.data.error && (whResPE2.data.error.includes('Inconsistent persisted payment identity') || whResPE2.data.error.includes('already settled with payment ID')), 'Test E (9i): Error confirms mismatched payment identity rejected');
+
+    const dbSnapPE = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(!dbSnapPE.processedWebhookEvents[eventIdPE2], 'Test E (9i): No new webhook event record created');
+
+    // TEST F: Completed order processed payment record missing restaurantId -> HTTP 400
+    console.log('\n  [TEST F]: Completed order processed payment record missing restaurantId rejection');
+    const orderPFRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 66,
+      tableName: 'Table 66',
+      customerPhone: '9876543286',
+      customerName: 'PF User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPFId = orderPFRes.data.id;
+    const payOrderPFRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPFId });
+    const rzpOrderPFId = payOrderPFRes.data.razorpayOrderId;
+    const paymentIdPF = `pay_pf_${Date.now()}_seed_missing_pay_restaurantId`;
+    const eventIdPF1 = `evt_pf1_${Date.now()}`;
+
+    // Settle Order PF
+    const whPayloadPF1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPF,
+            order_id: rzpOrderPFId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPF1 = computeWebhookSignature(whPayloadPF1);
+    const whResPF1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPF1,
+      'x-razorpay-event-id': eventIdPF1
+    }, whPayloadPF1);
+    assert(whResPF1.statusCode === 200, 'Test F (9i): Order PF initial settlement succeeded');
+
+    // Move to completed orders via served kitchen status
+    const servePFRes = await makeRequest('PATCH', `/api/orders/${orderPFId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'served',
+      kitchenStatus: 'served',
+      staffPin: '1234'
+    });
+    assert(servePFRes.statusCode === 200 || servePFRes.statusCode === 204, 'Test F (9i): Order PF archived into completed orders');
+
+    // Second webhook with new event ID -> reject with HTTP 400
+    const eventIdPF2 = `evt_pf2_${Date.now()}`;
+    const whPayloadPF2 = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPF,
+            order_id: rzpOrderPFId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPF2 = computeWebhookSignature(whPayloadPF2);
+    const whResPF2 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPF2,
+      'x-razorpay-event-id': eventIdPF2
+    }, whPayloadPF2);
+    assert(whResPF2.statusCode === 400, 'Test F (9i): Completed order processed payment missing restaurantId rejected with HTTP 400');
+    assert(whResPF2.data.error && whResPF2.data.error.includes('Missing persisted restaurantId'), 'Test F (9i): Error confirms missing restaurantId rejected');
+
+    const dbSnapPF = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(!dbSnapPF.processedWebhookEvents[eventIdPF2], 'Test F (9i): No new webhook event record created');
+
+    // TEST G: Completed order processed payment record with mismatched orderId -> HTTP 400
+    console.log('\n  [TEST G]: Completed order processed payment record with mismatched orderId rejection');
+    // Order PG1 (completed)
+    const orderPG1Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 67,
+      tableName: 'Table 67',
+      customerPhone: '9876543287',
+      customerName: 'PG1 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPG1Id = orderPG1Res.data.id;
+    const payOrderPG1Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPG1Id });
+    const rzpOrderPG1Id = payOrderPG1Res.data.razorpayOrderId;
+    const paymentIdPG1 = `pay_pg1_${Date.now()}`;
+    const eventIdPG1 = `evt_pg1_${Date.now()}`;
+
+    const whPayloadPG1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPG1,
+            order_id: rzpOrderPG1Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPG1 = computeWebhookSignature(whPayloadPG1);
+    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPG1,
+      'x-razorpay-event-id': eventIdPG1
+    }, whPayloadPG1);
+    await makeRequest('PATCH', `/api/orders/${orderPG1Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, { status: 'served', kitchenStatus: 'served', staffPin: '1234' });
+
+    // Order PG2 (completed)
+    const orderPG2Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 68,
+      tableName: 'Table 68',
+      customerPhone: '9876543288',
+      customerName: 'PG2 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPG2Id = orderPG2Res.data.id;
+    const payOrderPG2Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPG2Id });
+    const rzpOrderPG2Id = payOrderPG2Res.data.razorpayOrderId;
+    const paymentIdPG2 = `pay_pg2_${Date.now()}`;
+    const eventIdPG2 = `evt_pg2_${Date.now()}`;
+
+    const whPayloadPG2 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPG2,
+            order_id: rzpOrderPG2Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPG2 = computeWebhookSignature(whPayloadPG2);
+    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPG2,
+      'x-razorpay-event-id': eventIdPG2
+    }, whPayloadPG2);
+    await makeRequest('PATCH', `/api/orders/${orderPG2Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, { status: 'served', kitchenStatus: 'served', staffPin: '1234' });
+
+    // Now attempt to settle/replay order PG2 using paymentIdPG1 (which belongs to PG1!)
+    const eventIdPGClash = `evt_pg_clash_${Date.now()}`;
+    const whPayloadPGClash = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPG1,
+            order_id: rzpOrderPG2Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPGClash = computeWebhookSignature(whPayloadPGClash);
+    const whResPGClash = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPGClash,
+      'x-razorpay-event-id': eventIdPGClash
+    }, whPayloadPGClash);
+    assert(whResPGClash.statusCode === 400, 'Test G (9i): Completed order with mismatched payment orderId rejected with HTTP 400');
+    assert(whResPGClash.data.error && (whResPGClash.data.error.includes('already consumed by order') || whResPGClash.data.error.includes('already settled with payment ID')), 'Test G (9i): Error confirms payment already consumed by different order');
+
+    const dbSnapPG = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(!dbSnapPG.processedWebhookEvents[eventIdPGClash], 'Test G (9i): No new webhook event record created');
+
+    // TEST H: Completed order processed payment record with mismatched restaurantId -> HTTP 400
+    console.log('\n  [TEST H]: Completed order processed payment record with mismatched restaurantId rejection');
+    // Order PH (completed in tiptap-bistro with mismatched restaurantId in processedPayments)
+    const orderPHRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 69,
+      tableName: 'Table 69',
+      customerPhone: '9876543289',
+      customerName: 'PH User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPHId = orderPHRes.data.id;
+    const payOrderPHRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPHId });
+    const rzpOrderPHId = payOrderPHRes.data.razorpayOrderId;
+    const paymentIdPH = `pay_ph_${Date.now()}_seed_mismatched_pay_restaurantId`;
+    const eventIdPH1 = `evt_ph1_${Date.now()}`;
+
+    const whPayloadPH1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPH,
+            order_id: rzpOrderPHId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPH1 = computeWebhookSignature(whPayloadPH1);
+    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPH1,
+      'x-razorpay-event-id': eventIdPH1
+    }, whPayloadPH1);
+    await makeRequest('PATCH', `/api/orders/${orderPHId}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, { status: 'served', kitchenStatus: 'served', staffPin: '1234' });
+
+    // Send second webhook for Order PH with new event ID -> reject with HTTP 400 because processedPayments restaurantId is mismatched
+    const eventIdPH2 = `evt_ph2_${Date.now()}`;
+    const whPayloadPH2 = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPH,
+            order_id: rzpOrderPHId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPH2 = computeWebhookSignature(whPayloadPH2);
+    const whResPHRetry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPH2,
+      'x-razorpay-event-id': eventIdPH2
+    }, whPayloadPH2);
+    assert(whResPHRetry.statusCode === 400 || whResPHRetry.statusCode === 403, 'Test H (9i): Completed payment with mismatched restaurantId rejected');
+    assert(whResPHRetry.data.error && (whResPHRetry.data.error.includes('Cross-tenant') || whResPHRetry.data.error.includes('belongs to restaurant')), 'Test H (9i): Error confirms cross-tenant payment rejection');
+
+    const dbSnapPH = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    assert(!dbSnapPH.processedWebhookEvents[eventIdPH2], 'Test H (9i): No event recorded for rejected request');
+
+    // TEST I: Legitimate matching active-order retry still returns HTTP 200
+    console.log('\n  [TEST I]: Legitimate matching active-order retry returns HTTP 200');
+    const orderPIRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 70,
+      tableName: 'Table 70',
+      customerPhone: '9876543290',
+      customerName: 'PI User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPIId = orderPIRes.data.id;
+    const payOrderPIRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPIId });
+    const rzpOrderPIId = payOrderPIRes.data.razorpayOrderId;
+    const paymentIdPI = `pay_pi_${Date.now()}`;
+    const eventIdPI1 = `evt_pi1_${Date.now()}`;
+
+    const whPayloadPI1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPI,
+            order_id: rzpOrderPIId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPI1 = computeWebhookSignature(whPayloadPI1);
+    const whResPI1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPI1,
+      'x-razorpay-event-id': eventIdPI1
+    }, whPayloadPI1);
+    assert(whResPI1.statusCode === 200, 'Test I (9i): Order PI initial settlement succeeded');
+
+    // Replay with exact same event ID -> HTTP 200 idempotent
+    const whResPIRetry1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPI1,
+      'x-razorpay-event-id': eventIdPI1
+    }, whPayloadPI1);
+    assert(whResPIRetry1.statusCode === 200, 'Test I (9i): Exact same event ID retry returns HTTP 200');
+    assert(whResPIRetry1.data.alreadyProcessed === true, 'Test I (9i): Response confirms alreadyProcessed: true');
+
+    // Replay with new event ID for same payment and order -> HTTP 200 idempotent
+    const eventIdPI2 = `evt_pi2_${Date.now()}`;
+    const whPayloadPI2 = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPI,
+            order_id: rzpOrderPIId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPI2 = computeWebhookSignature(whPayloadPI2);
+    const whResPIRetry2 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPI2,
+      'x-razorpay-event-id': eventIdPI2
+    }, whPayloadPI2);
+    assert(whResPIRetry2.statusCode === 200, 'Test I (9i): New event ID retry on active order returns HTTP 200');
+    assert(whResPIRetry2.data.alreadySettled === true, 'Test I (9i): Response confirms alreadySettled: true');
+
+    // Verify customer spend and loyalty points remain strictly 294 and 29 (zero duplicate increment)
+    const custPICheck = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custPI = (custPICheck.data.customers || []).find(c => c.phone === '9876543290');
+    assert(custPI && custPI.totalSpent === 294, 'Test I (9i): Customer PI spend remains strictly 294 after retries');
+    assert(custPI && custPI.loyaltyPoints === 29, 'Test I (9i): Customer PI loyalty points remain strictly 29 after retries');
+
+    // TEST J: Legitimate matching completed-order retry still returns HTTP 200
+    console.log('\n  [TEST J]: Legitimate matching completed-order retry returns HTTP 200');
+    const orderPJRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 71,
+      tableName: 'Table 71',
+      customerPhone: '9876543291',
+      customerName: 'PJ User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    const orderPJId = orderPJRes.data.id;
+    const payOrderPJRes = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderPJId });
+    const rzpOrderPJId = payOrderPJRes.data.razorpayOrderId;
+    const paymentIdPJ = `pay_pj_${Date.now()}`;
+    const eventIdPJ1 = `evt_pj1_${Date.now()}`;
+
+    const whPayloadPJ1 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPJ,
+            order_id: rzpOrderPJId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPJ1 = computeWebhookSignature(whPayloadPJ1);
+    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPJ1,
+      'x-razorpay-event-id': eventIdPJ1
+    }, whPayloadPJ1);
+    await makeRequest('PATCH', `/api/orders/${orderPJId}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, { status: 'served', kitchenStatus: 'served', staffPin: '1234' });
+
+    // Retry with same event ID -> HTTP 200
+    const whResPJRetry1 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPJ1,
+      'x-razorpay-event-id': eventIdPJ1
+    }, whPayloadPJ1);
+    assert(whResPJRetry1.statusCode === 200, 'Test J (9i): Completed order retry with same event ID returns HTTP 200');
+    assert(whResPJRetry1.data.alreadyProcessed === true, 'Test J (9i): Response confirms alreadyProcessed: true');
+
+    // Retry with new event ID -> HTTP 200
+    const eventIdPJ2 = `evt_pj2_${Date.now()}`;
+    const whPayloadPJ2 = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdPJ,
+            order_id: rzpOrderPJId,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigPJ2 = computeWebhookSignature(whPayloadPJ2);
+    const whResPJRetry2 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigPJ2,
+      'x-razorpay-event-id': eventIdPJ2
+    }, whPayloadPJ2);
+    assert(whResPJRetry2.statusCode === 200, 'Test J (9i): Completed order retry with new event ID returns HTTP 200');
+    assert(whResPJRetry2.data.alreadySettled === true, 'Test J (9i): Response confirms alreadySettled: true');
+
+    // Verify customer spend and loyalty points remain strictly 294 and 29
+    const custPJCheck = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custPJ = (custPJCheck.data.customers || []).find(c => c.phone === '9876543291');
+    assert(custPJ && custPJ.totalSpent === 294, 'Test J (9i): Customer PJ spend remains strictly 294 after retries');
+    assert(custPJ && custPJ.loyaltyPoints === 29, 'Test J (9i): Customer PJ loyalty points remain strictly 29 after retries');
 
     // ----------------------------------------------------
     // SECTION 10: CUSTOMER UI COMPLETE UTR REMOVAL CHECK
