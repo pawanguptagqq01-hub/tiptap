@@ -91,6 +91,21 @@ async function runPhase10Tests() {
   const { tempDbPath, cleanup, getInitialRaw } = createIsolatedTestDb('phase10-payment');
   const initialHash = crypto.createHash('sha256').update(getInitialRaw()).digest('hex');
 
+  // Seed dedicated test tables 91-98 for Section 9k in isolated temporary database
+  const tempDbObj = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+  for (let tid = 91; tid <= 98; tid++) {
+    if (!tempDbObj.restaurants['tiptap-bistro'].tables.find(t => t.id === tid)) {
+      tempDbObj.restaurants['tiptap-bistro'].tables.push({
+        id: tid,
+        name: `Table ${tid}`,
+        status: 'free',
+        currentOrderId: null,
+        seatingTime: null
+      });
+    }
+  }
+  fs.writeFileSync(tempDbPath, JSON.stringify(tempDbObj, null, 2));
+
   // Spawn main test server in test mode
   const serverProc = fork('server.js', [], {
     cwd: path.resolve(__dirname, '..'),
@@ -2969,6 +2984,7 @@ async function runPhase10Tests() {
       tableName: 'Table 3',
       customerPhone: '9876543274',
       customerName: 'M4 User',
+      notes: 'Test D Order M4',
       items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
     });
     const orderM4Id = orderM4Res.data.id;
@@ -3007,6 +3023,7 @@ async function runPhase10Tests() {
       tableName: 'Table 4',
       customerPhone: '9876543275',
       customerName: 'M5 User',
+      notes: 'Test D Order M5',
       items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
     });
     const orderM5Id = orderM5Res.data.id;
@@ -4578,7 +4595,7 @@ async function runPhase10Tests() {
     const cust9kK1 = (cust9kK1Check.data.customers || []).find(c => c.phone === '9876543401');
     assert(cust9kK1 && cust9kK1.totalSpent === 294, 'Test K (9k): Customer initial spend is 294');
 
-    // Change order state to isPaid: false via authorized counter PATCH
+    // Change order state to isPaid: false via authorized counter PATCH (deliberate test corruption)
     const patch9kKRes = await makeRequest('PATCH', `/api/orders/${order9kKId}?restaurant=tiptap-bistro`, {
       'x-staff-pin': '1234'
     }, {
@@ -4586,6 +4603,17 @@ async function runPhase10Tests() {
       staffPin: '1234'
     });
     assert(patch9kKRes.statusCode === 200, 'Test K (9k): Order isPaid set to false via authorized PATCH');
+
+    // Capture SNAPSHOT BEFORE rejected replay
+    const dbSnapBeforeK = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateBeforeK = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const payRecordBeforeK = JSON.stringify(dbSnapBeforeK.processedPayments[paymentId9kK]);
+    const evtRecordBeforeK = JSON.stringify(dbSnapBeforeK.processedWebhookEvents[eventId9kK]);
+    const custBeforeK = (stateBeforeK.data.customers || []).find(c => c.phone === '9876543401');
+    const tableBeforeK = (stateBeforeK.data.tables || []).find(t => t.id === 91);
+    const orderBeforeK = (stateBeforeK.data.orders || []).find(o => o.id === order9kKId);
+    assert(tableBeforeK && tableBeforeK.status === 'occupied', 'Test K (9k): Table 91 status is occupied before replay');
+    assert(tableBeforeK && tableBeforeK.currentOrderId === order9kKId, 'Test K (9k): Table 91 currentOrderId bound to order9kKId before replay');
 
     // Replay the exact same event ID and payment ID -> must fail closed with HTTP 400
     const whRes9kKRetry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
@@ -4595,14 +4623,23 @@ async function runPhase10Tests() {
     assert(whRes9kKRetry.statusCode === 400, 'Test K (9k): Same event ID replay on unpaid order rejected with HTTP 400');
     assert(whRes9kKRetry.data.error && whRes9kKRetry.data.error.includes('marked unpaid'), 'Test K (9k): Error confirms unpaid state rejected');
 
-    // Assert zero side effects
-    const dbSnap9kK2 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
-    assert(dbSnap9kK2.processedPayments[paymentId9kK], 'Test K (9k): Existing payment record preserved');
-    assert(dbSnap9kK2.processedWebhookEvents[eventId9kK], 'Test K (9k): Existing event record preserved');
-    const cust9kK2Check = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
-    const cust9kK2 = (cust9kK2Check.data.customers || []).find(c => c.phone === '9876543401');
-    assert(cust9kK2 && cust9kK2.totalSpent === 294, 'Test K (9k): Zero duplicate spend increment on rejection');
-    assert(cust9kK2 && cust9kK2.loyaltyPoints === 29, 'Test K (9k): Zero duplicate loyalty increment on rejection');
+    // Capture SNAPSHOT AFTER rejected replay & verify zero side effects
+    const dbSnapAfterK = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterK = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custAfterK = (stateAfterK.data.customers || []).find(c => c.phone === '9876543401');
+    const tableAfterK = (stateAfterK.data.tables || []).find(t => t.id === 91);
+    const orderAfterK = (stateAfterK.data.orders || []).find(o => o.id === order9kKId);
+
+    assert(JSON.stringify(dbSnapAfterK.processedPayments[paymentId9kK]) === payRecordBeforeK, 'Test K (9k): processedPayments record unchanged');
+    assert(JSON.stringify(dbSnapAfterK.processedWebhookEvents[eventId9kK]) === evtRecordBeforeK, 'Test K (9k): processedWebhookEvents record unchanged');
+    assert(custAfterK && custAfterK.totalSpent === custBeforeK.totalSpent, 'Test K (9k): Customer totalSpent unchanged');
+    assert(custAfterK && custAfterK.loyaltyPoints === custBeforeK.loyaltyPoints, 'Test K (9k): Customer loyaltyPoints unchanged');
+    assert(tableAfterK && tableAfterK.status === tableBeforeK.status, 'Test K (9k): Table status unchanged');
+    assert(tableAfterK && tableAfterK.currentOrderId === tableBeforeK.currentOrderId, 'Test K (9k): Table currentOrderId unchanged');
+    assert(orderAfterK && orderAfterK.isPaid === false, 'Test K (9k): Order payment identity isPaid remains false (deliberate test corruption)');
+    assert(orderAfterK && orderAfterK.paymentStatus === orderBeforeK.paymentStatus, 'Test K (9k): Order paymentStatus unchanged');
+    assert(orderAfterK && orderAfterK.txnId === orderBeforeK.txnId, 'Test K (9k): Order txnId unchanged');
+    assert(orderAfterK && JSON.stringify(orderAfterK.paymentDetails) === JSON.stringify(orderBeforeK.paymentDetails), 'Test K (9k): Order paymentDetails unchanged');
 
     // TEST L: Existing event ID, paymentStatus becomes pending -> HTTP 400
     console.log('\n  [TEST L]: Replay with same event ID when paymentStatus is pending rejection');
@@ -4642,7 +4679,7 @@ async function runPhase10Tests() {
     }, whPayload9kL);
     assert(whRes9kL1.statusCode === 200, 'Test L (9k): Order L initial settlement succeeded');
 
-    // Change paymentStatus to 'pending' via authorized PATCH
+    // Change paymentStatus to 'pending' via authorized PATCH (deliberate test corruption)
     const patch9kLRes = await makeRequest('PATCH', `/api/orders/${order9kLId}?restaurant=tiptap-bistro`, {
       'x-staff-pin': '1234'
     }, {
@@ -4650,6 +4687,17 @@ async function runPhase10Tests() {
       staffPin: '1234'
     });
     assert(patch9kLRes.statusCode === 200, 'Test L (9k): Order paymentStatus set to pending');
+
+    // Capture SNAPSHOT BEFORE rejected replay
+    const dbSnapBeforeL = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateBeforeL = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const payRecordBeforeL = JSON.stringify(dbSnapBeforeL.processedPayments[paymentId9kL]);
+    const evtRecordBeforeL = JSON.stringify(dbSnapBeforeL.processedWebhookEvents[eventId9kL]);
+    const custBeforeL = (stateBeforeL.data.customers || []).find(c => c.phone === '9876543402');
+    const tableBeforeL = (stateBeforeL.data.tables || []).find(t => t.id === 92);
+    const orderBeforeL = (stateBeforeL.data.orders || []).find(o => o.id === order9kLId);
+    assert(tableBeforeL && tableBeforeL.status === 'occupied', 'Test L (9k): Table 92 status is occupied before replay');
+    assert(tableBeforeL && tableBeforeL.currentOrderId === order9kLId, 'Test L (9k): Table 92 currentOrderId bound to order9kLId before replay');
 
     // Replay exact same event ID -> HTTP 400
     const whRes9kLRetry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
@@ -4659,9 +4707,23 @@ async function runPhase10Tests() {
     assert(whRes9kLRetry.statusCode === 400, 'Test L (9k): Same event ID replay with pending paymentStatus rejected with HTTP 400');
     assert(whRes9kLRetry.data.error && whRes9kLRetry.data.error.includes('paymentStatus is'), 'Test L (9k): Error confirms pending paymentStatus rejected');
 
-    const cust9kLCheck = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
-    const cust9kL = (cust9kLCheck.data.customers || []).find(c => c.phone === '9876543402');
-    assert(cust9kL && cust9kL.totalSpent === 294, 'Test L (9k): Zero duplicate spend on rejected replay');
+    // Capture SNAPSHOT AFTER rejected replay & verify zero side effects
+    const dbSnapAfterL = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterL = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custAfterL = (stateAfterL.data.customers || []).find(c => c.phone === '9876543402');
+    const tableAfterL = (stateAfterL.data.tables || []).find(t => t.id === 92);
+    const orderAfterL = (stateAfterL.data.orders || []).find(o => o.id === order9kLId);
+
+    assert(JSON.stringify(dbSnapAfterL.processedPayments[paymentId9kL]) === payRecordBeforeL, 'Test L (9k): processedPayments record unchanged');
+    assert(JSON.stringify(dbSnapAfterL.processedWebhookEvents[eventId9kL]) === evtRecordBeforeL, 'Test L (9k): processedWebhookEvents record unchanged');
+    assert(custAfterL && custAfterL.totalSpent === custBeforeL.totalSpent, 'Test L (9k): Customer totalSpent unchanged');
+    assert(custAfterL && custAfterL.loyaltyPoints === custBeforeL.loyaltyPoints, 'Test L (9k): Customer loyaltyPoints unchanged');
+    assert(tableAfterL && tableAfterL.status === tableBeforeL.status, 'Test L (9k): Table status unchanged');
+    assert(tableAfterL && tableAfterL.currentOrderId === tableBeforeL.currentOrderId, 'Test L (9k): Table currentOrderId unchanged');
+    assert(orderAfterL && orderAfterL.paymentStatus === 'pending', 'Test L (9k): Order paymentStatus remains pending (deliberate test corruption)');
+    assert(orderAfterL && orderAfterL.isPaid === orderBeforeL.isPaid, 'Test L (9k): Order isPaid unchanged');
+    assert(orderAfterL && orderAfterL.txnId === orderBeforeL.txnId, 'Test L (9k): Order txnId unchanged');
+    assert(orderAfterL && JSON.stringify(orderAfterL.paymentDetails) === JSON.stringify(orderBeforeL.paymentDetails), 'Test L (9k): Order paymentDetails unchanged');
 
     // TEST M: Existing event ID, txnId or paymentDetails.paymentId becomes inconsistent -> HTTP 400
     console.log('\n  [TEST M]: Replay with same event ID with inconsistent txnId or paymentDetails rejection');
@@ -4696,13 +4758,26 @@ async function runPhase10Tests() {
       }
     });
     const whSig9kM1 = computeWebhookSignature(whPayload9kM1);
-    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+    const whRes9kM1Init = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
       'x-razorpay-signature': whSig9kM1,
       'x-razorpay-event-id': eventId9kM1
     }, whPayload9kM1);
+    assert(whRes9kM1Init.statusCode === 200, 'Test M1 (9k): Order M1 initial settlement succeeded');
 
-    // Set txnId to null
-    await makeRequest('PATCH', `/api/orders/${order9kM1Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, { txnId: null, staffPin: '1234' });
+    // Set txnId to null (deliberate test corruption)
+    const patch9kM1Res = await makeRequest('PATCH', `/api/orders/${order9kM1Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, { txnId: null, staffPin: '1234' });
+    assert(patch9kM1Res.statusCode === 200, 'Test M1 (9k): Order txnId set to null via authorized PATCH');
+
+    // Capture SNAPSHOT BEFORE rejected replay
+    const dbSnapBeforeM1 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateBeforeM1 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const payRecordBeforeM1 = JSON.stringify(dbSnapBeforeM1.processedPayments[paymentId9kM1]);
+    const evtRecordBeforeM1 = JSON.stringify(dbSnapBeforeM1.processedWebhookEvents[eventId9kM1]);
+    const custBeforeM1 = (stateBeforeM1.data.customers || []).find(c => c.phone === '9876543403');
+    const tableBeforeM1 = (stateBeforeM1.data.tables || []).find(t => t.id === 93);
+    const orderBeforeM1 = (stateBeforeM1.data.orders || []).find(o => o.id === order9kM1Id);
+    assert(tableBeforeM1 && tableBeforeM1.status === 'occupied', 'Test M1 (9k): Table 93 status is occupied before replay');
+    assert(tableBeforeM1 && tableBeforeM1.currentOrderId === order9kM1Id, 'Test M1 (9k): Table 93 currentOrderId bound to order9kM1Id before replay');
 
     // Replay exact same event ID -> HTTP 400
     const whRes9kM1Retry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
@@ -4711,6 +4786,24 @@ async function runPhase10Tests() {
     }, whPayload9kM1);
     assert(whRes9kM1Retry.statusCode === 400, 'Test M1 (9k): Same event ID replay with missing txnId rejected with HTTP 400');
     assert(whRes9kM1Retry.data.error && whRes9kM1Retry.data.error.includes('Missing persisted txnId'), 'Test M1 (9k): Error confirms missing txnId rejected');
+
+    // Capture SNAPSHOT AFTER rejected replay & verify zero side effects
+    const dbSnapAfterM1 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterM1 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custAfterM1 = (stateAfterM1.data.customers || []).find(c => c.phone === '9876543403');
+    const tableAfterM1 = (stateAfterM1.data.tables || []).find(t => t.id === 93);
+    const orderAfterM1 = (stateAfterM1.data.orders || []).find(o => o.id === order9kM1Id);
+
+    assert(JSON.stringify(dbSnapAfterM1.processedPayments[paymentId9kM1]) === payRecordBeforeM1, 'Test M1 (9k): processedPayments record unchanged');
+    assert(JSON.stringify(dbSnapAfterM1.processedWebhookEvents[eventId9kM1]) === evtRecordBeforeM1, 'Test M1 (9k): processedWebhookEvents record unchanged');
+    assert(custAfterM1 && custAfterM1.totalSpent === custBeforeM1.totalSpent, 'Test M1 (9k): Customer totalSpent unchanged');
+    assert(custAfterM1 && custAfterM1.loyaltyPoints === custBeforeM1.loyaltyPoints, 'Test M1 (9k): Customer loyaltyPoints unchanged');
+    assert(tableAfterM1 && tableAfterM1.status === tableBeforeM1.status, 'Test M1 (9k): Table status unchanged');
+    assert(tableAfterM1 && tableAfterM1.currentOrderId === tableBeforeM1.currentOrderId, 'Test M1 (9k): Table currentOrderId unchanged');
+    assert(orderAfterM1 && !orderAfterM1.txnId, 'Test M1 (9k): Order txnId remains null (deliberate test corruption)');
+    assert(orderAfterM1 && orderAfterM1.isPaid === orderBeforeM1.isPaid, 'Test M1 (9k): Order isPaid unchanged');
+    assert(orderAfterM1 && orderAfterM1.paymentStatus === orderBeforeM1.paymentStatus, 'Test M1 (9k): Order paymentStatus unchanged');
+    assert(orderAfterM1 && JSON.stringify(orderAfterM1.paymentDetails) === JSON.stringify(orderBeforeM1.paymentDetails), 'Test M1 (9k): Order paymentDetails unchanged');
 
     // M2: Missing paymentDetails.paymentId
     const order9kM2Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
@@ -4743,16 +4836,29 @@ async function runPhase10Tests() {
       }
     });
     const whSig9kM2 = computeWebhookSignature(whPayload9kM2);
-    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+    const whRes9kM2Init = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
       'x-razorpay-signature': whSig9kM2,
       'x-razorpay-event-id': eventId9kM2
     }, whPayload9kM2);
+    assert(whRes9kM2Init.statusCode === 200, 'Test M2 (9k): Order M2 initial settlement succeeded');
 
-    // Set paymentDetails without paymentId
-    await makeRequest('PATCH', `/api/orders/${order9kM2Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, {
+    // Set paymentDetails without paymentId (deliberate test corruption)
+    const patch9kM2Res = await makeRequest('PATCH', `/api/orders/${order9kM2Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, {
       paymentDetails: { provider: 'test', txnId: paymentId9kM2 },
       staffPin: '1234'
     });
+    assert(patch9kM2Res.statusCode === 200, 'Test M2 (9k): Order paymentDetails updated without paymentId via authorized PATCH');
+
+    // Capture SNAPSHOT BEFORE rejected replay
+    const dbSnapBeforeM2 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateBeforeM2 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const payRecordBeforeM2 = JSON.stringify(dbSnapBeforeM2.processedPayments[paymentId9kM2]);
+    const evtRecordBeforeM2 = JSON.stringify(dbSnapBeforeM2.processedWebhookEvents[eventId9kM2]);
+    const custBeforeM2 = (stateBeforeM2.data.customers || []).find(c => c.phone === '9876543404');
+    const tableBeforeM2 = (stateBeforeM2.data.tables || []).find(t => t.id === 94);
+    const orderBeforeM2 = (stateBeforeM2.data.orders || []).find(o => o.id === order9kM2Id);
+    assert(tableBeforeM2 && tableBeforeM2.status === 'occupied', 'Test M2 (9k): Table 94 status is occupied before replay');
+    assert(tableBeforeM2 && tableBeforeM2.currentOrderId === order9kM2Id, 'Test M2 (9k): Table 94 currentOrderId bound to order9kM2Id before replay');
 
     // Replay exact same event ID -> HTTP 400
     const whRes9kM2Retry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
@@ -4761,6 +4867,24 @@ async function runPhase10Tests() {
     }, whPayload9kM2);
     assert(whRes9kM2Retry.statusCode === 400, 'Test M2 (9k): Same event ID replay with missing paymentDetails.paymentId rejected with HTTP 400');
     assert(whRes9kM2Retry.data.error && whRes9kM2Retry.data.error.includes('Missing persisted paymentDetails.paymentId'), 'Test M2 (9k): Error confirms missing paymentDetails.paymentId rejected');
+
+    // Capture SNAPSHOT AFTER rejected replay & verify zero side effects
+    const dbSnapAfterM2 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterM2 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custAfterM2 = (stateAfterM2.data.customers || []).find(c => c.phone === '9876543404');
+    const tableAfterM2 = (stateAfterM2.data.tables || []).find(t => t.id === 94);
+    const orderAfterM2 = (stateAfterM2.data.orders || []).find(o => o.id === order9kM2Id);
+
+    assert(JSON.stringify(dbSnapAfterM2.processedPayments[paymentId9kM2]) === payRecordBeforeM2, 'Test M2 (9k): processedPayments record unchanged');
+    assert(JSON.stringify(dbSnapAfterM2.processedWebhookEvents[eventId9kM2]) === evtRecordBeforeM2, 'Test M2 (9k): processedWebhookEvents record unchanged');
+    assert(custAfterM2 && custAfterM2.totalSpent === custBeforeM2.totalSpent, 'Test M2 (9k): Customer totalSpent unchanged');
+    assert(custAfterM2 && custAfterM2.loyaltyPoints === custBeforeM2.loyaltyPoints, 'Test M2 (9k): Customer loyaltyPoints unchanged');
+    assert(tableAfterM2 && tableAfterM2.status === tableBeforeM2.status, 'Test M2 (9k): Table status unchanged');
+    assert(tableAfterM2 && tableAfterM2.currentOrderId === tableBeforeM2.currentOrderId, 'Test M2 (9k): Table currentOrderId unchanged');
+    assert(orderAfterM2 && (!orderAfterM2.paymentDetails || !orderAfterM2.paymentDetails.paymentId), 'Test M2 (9k): Order paymentDetails.paymentId remains missing (deliberate test corruption)');
+    assert(orderAfterM2 && orderAfterM2.isPaid === orderBeforeM2.isPaid, 'Test M2 (9k): Order isPaid unchanged');
+    assert(orderAfterM2 && orderAfterM2.paymentStatus === orderBeforeM2.paymentStatus, 'Test M2 (9k): Order paymentStatus unchanged');
+    assert(orderAfterM2 && orderAfterM2.txnId === orderBeforeM2.txnId, 'Test M2 (9k): Order txnId unchanged');
 
     // M3: Conflicting paymentDetails.paymentId
     const order9kM3Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
@@ -4793,16 +4917,29 @@ async function runPhase10Tests() {
       }
     });
     const whSig9kM3 = computeWebhookSignature(whPayload9kM3);
-    await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+    const whRes9kM3Init = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
       'x-razorpay-signature': whSig9kM3,
       'x-razorpay-event-id': eventId9kM3
     }, whPayload9kM3);
+    assert(whRes9kM3Init.statusCode === 200, 'Test M3 (9k): Order M3 initial settlement succeeded');
 
-    // Set conflicting paymentDetails.paymentId
-    await makeRequest('PATCH', `/api/orders/${order9kM3Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, {
+    // Set conflicting paymentDetails.paymentId (deliberate test corruption)
+    const patch9kM3Res = await makeRequest('PATCH', `/api/orders/${order9kM3Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, {
       paymentDetails: { provider: 'test', paymentId: `pay_conflict_${Date.now()}`, txnId: paymentId9kM3 },
       staffPin: '1234'
     });
+    assert(patch9kM3Res.statusCode === 200, 'Test M3 (9k): Order paymentDetails updated with conflicting paymentId via authorized PATCH');
+
+    // Capture SNAPSHOT BEFORE rejected replay
+    const dbSnapBeforeM3 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateBeforeM3 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const payRecordBeforeM3 = JSON.stringify(dbSnapBeforeM3.processedPayments[paymentId9kM3]);
+    const evtRecordBeforeM3 = JSON.stringify(dbSnapBeforeM3.processedWebhookEvents[eventId9kM3]);
+    const custBeforeM3 = (stateBeforeM3.data.customers || []).find(c => c.phone === '9876543405');
+    const tableBeforeM3 = (stateBeforeM3.data.tables || []).find(t => t.id === 95);
+    const orderBeforeM3 = (stateBeforeM3.data.orders || []).find(o => o.id === order9kM3Id);
+    assert(tableBeforeM3 && tableBeforeM3.status === 'occupied', 'Test M3 (9k): Table 95 status is occupied before replay');
+    assert(tableBeforeM3 && tableBeforeM3.currentOrderId === order9kM3Id, 'Test M3 (9k): Table 95 currentOrderId bound to order9kM3Id before replay');
 
     // Replay exact same event ID -> HTTP 400
     const whRes9kM3Retry = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
@@ -4811,6 +4948,24 @@ async function runPhase10Tests() {
     }, whPayload9kM3);
     assert(whRes9kM3Retry.statusCode === 400, 'Test M3 (9k): Same event ID replay with conflicting paymentDetails.paymentId rejected with HTTP 400');
     assert(whRes9kM3Retry.data.error && (whRes9kM3Retry.data.error.includes('Inconsistent persisted payment identity') || whRes9kM3Retry.data.error.includes('already settled with payment ID')), 'Test M3 (9k): Error confirms conflicting payment identity rejected');
+
+    // Capture SNAPSHOT AFTER rejected replay & verify zero side effects
+    const dbSnapAfterM3 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterM3 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custAfterM3 = (stateAfterM3.data.customers || []).find(c => c.phone === '9876543405');
+    const tableAfterM3 = (stateAfterM3.data.tables || []).find(t => t.id === 95);
+    const orderAfterM3 = (stateAfterM3.data.orders || []).find(o => o.id === order9kM3Id);
+
+    assert(JSON.stringify(dbSnapAfterM3.processedPayments[paymentId9kM3]) === payRecordBeforeM3, 'Test M3 (9k): processedPayments record unchanged');
+    assert(JSON.stringify(dbSnapAfterM3.processedWebhookEvents[eventId9kM3]) === evtRecordBeforeM3, 'Test M3 (9k): processedWebhookEvents record unchanged');
+    assert(custAfterM3 && custAfterM3.totalSpent === custBeforeM3.totalSpent, 'Test M3 (9k): Customer totalSpent unchanged');
+    assert(custAfterM3 && custAfterM3.loyaltyPoints === custBeforeM3.loyaltyPoints, 'Test M3 (9k): Customer loyaltyPoints unchanged');
+    assert(tableAfterM3 && tableAfterM3.status === tableBeforeM3.status, 'Test M3 (9k): Table status unchanged');
+    assert(tableAfterM3 && tableAfterM3.currentOrderId === tableBeforeM3.currentOrderId, 'Test M3 (9k): Table currentOrderId unchanged');
+    assert(orderAfterM3 && orderAfterM3.paymentDetails.paymentId === orderBeforeM3.paymentDetails.paymentId, 'Test M3 (9k): Order paymentDetails.paymentId remains conflicting (deliberate test corruption)');
+    assert(orderAfterM3 && orderAfterM3.isPaid === orderBeforeM3.isPaid, 'Test M3 (9k): Order isPaid unchanged');
+    assert(orderAfterM3 && orderAfterM3.paymentStatus === orderBeforeM3.paymentStatus, 'Test M3 (9k): Order paymentStatus unchanged');
+    assert(orderAfterM3 && orderAfterM3.txnId === orderBeforeM3.txnId, 'Test M3 (9k): Order txnId unchanged');
 
     // TEST N: Legitimate same-event retry remains HTTP 200
     console.log('\n  [TEST N]: Legitimate matching same-event retry returns HTTP 200');
