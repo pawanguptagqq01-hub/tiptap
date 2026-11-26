@@ -5171,16 +5171,36 @@ const server = http.createServer(async (req, res) => {
       }
 
       readJsonBody(async (err, data) => {
+        data = data || {};
+        if (err || typeof data !== 'object') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Malformed JSON payload' }));
+          return;
+        }
+
         // Enforce Role-Based Authorization on Order Updates:
-        const isFinancialAction = Boolean(data.status === 'paid' || data.isPaid !== undefined || data.paymentStatus === 'paid' || data.closeTable === true);
-        const isKitchenAction = Boolean(data.kitchenStatus || data.status === 'preparing' || data.status === 'ready' || data.status === 'served');
+        const isFinancialAction = Boolean(
+          data.status === 'paid' ||
+          data.closeTable === true ||
+          data.isPaid !== undefined ||
+          data.paymentStatus !== undefined ||
+          data.paymentMethod !== undefined ||
+          data.txnId !== undefined ||
+          data.paymentDetails !== undefined
+        );
+        const isKitchenAction = Boolean(
+          data.kitchenStatus !== undefined ||
+          data.status === 'preparing' ||
+          data.status === 'ready' ||
+          data.status === 'served'
+        );
 
         if (isFinancialAction) {
-          // Marking an order as paid or settling requires Counter PIN (or Master PIN)
+          // Modifying payment or financial state strictly requires Counter PIN (or Master PIN)
           if (!verifyStaffAuth(data, 'counter')) {
             if (res.headersSent) return;
             res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to settle bill or mark order paid' }));
+            res.end(JSON.stringify({ error: 'Unauthorized: Cashier / Manager PIN required to modify payment or financial state' }));
             return;
           }
         } else if (isKitchenAction) {
@@ -5208,6 +5228,86 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        // Strict validation of order status if supplied
+        const ALLOWED_ORDER_STATUSES = ['active', 'preparing', 'ready', 'served', 'paid', 'completed', 'cancelled'];
+        if (data.status !== undefined) {
+          if (typeof data.status !== 'string' || !ALLOWED_ORDER_STATUSES.includes(data.status)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Invalid order status: must be one of ${ALLOWED_ORDER_STATUSES.join(', ')}` }));
+            return;
+          }
+        }
+
+        // Strict validation of kitchenStatus if supplied
+        const ALLOWED_KITCHEN_STATUSES = ['pending', 'preparing', 'ready', 'served'];
+        if (data.kitchenStatus !== undefined) {
+          if (typeof data.kitchenStatus !== 'string' || !ALLOWED_KITCHEN_STATUSES.includes(data.kitchenStatus)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Invalid kitchenStatus: must be one of ${ALLOWED_KITCHEN_STATUSES.join(', ')}` }));
+            return;
+          }
+        }
+
+        // Strict validation of isPaid if supplied
+        if (data.isPaid !== undefined) {
+          if (typeof data.isPaid !== 'boolean') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid isPaid: must be a boolean' }));
+            return;
+          }
+        }
+
+        // Strict validation of paymentStatus if supplied
+        const ALLOWED_PAYMENT_STATUSES = ['unpaid', 'pending', 'paid', 'failed'];
+        if (data.paymentStatus !== undefined) {
+          if (typeof data.paymentStatus !== 'string' || !ALLOWED_PAYMENT_STATUSES.includes(data.paymentStatus)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Invalid paymentStatus: must be one of ${ALLOWED_PAYMENT_STATUSES.join(', ')}` }));
+            return;
+          }
+        }
+
+        // Strict validation of paymentMethod if supplied
+        const ALLOWED_PAYMENT_METHODS = ['cash', 'upi', 'card', 'online', 'razorpay', 'pos_terminal', 'upi_qr', 'other'];
+        if (data.paymentMethod !== undefined) {
+          if (typeof data.paymentMethod !== 'string' || !ALLOWED_PAYMENT_METHODS.includes(data.paymentMethod.toLowerCase().trim())) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Invalid paymentMethod: must be one of ${ALLOWED_PAYMENT_METHODS.join(', ')}` }));
+            return;
+          }
+        }
+
+        // Strict protection against reversing already settled/paid orders
+        const orderIsAlreadyPaid = Boolean(order.isPaid || order.paymentStatus === 'paid');
+        const isAttemptingReversal = orderIsAlreadyPaid && (
+          data.isPaid === false ||
+          (data.paymentStatus !== undefined && data.paymentStatus !== 'paid')
+        );
+
+        const isTestMode = Boolean(process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production');
+        const isExplicitTestCorruption = isTestMode && Boolean(
+          req.headers['x-test-corrupt-state'] === 'true' ||
+          data.testCorruptState === true ||
+          data._testCorruptState === true
+        );
+
+        if (isAttemptingReversal) {
+          if (!isExplicitTestCorruption) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Reversing a settled or paid order to unpaid is not permitted' }));
+            return;
+          }
+        }
+
+        // Protect txnId and paymentDetails from unauthorized modification
+        if (data.txnId !== undefined || data.paymentDetails !== undefined) {
+          if (!isExplicitTestCorruption) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Modifying payment transaction identity fields via PATCH is not permitted' }));
+            return;
+          }
+        }
+
         const patched = await persistDbChange(res, async () => {
           if (data.status) {
             order.status = data.status;
@@ -5216,12 +5316,41 @@ const server = http.createServer(async (req, res) => {
           if (data.kitchenStatus) {
             order.kitchenStatus = data.kitchenStatus;
           }
-          if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
-          if (data.isPaid !== undefined) order.isPaid = data.isPaid;
-          if (data.paymentStatus) order.paymentStatus = data.paymentStatus;
-          if (process.env.NODE_ENV === 'test' && process.env.NODE_ENV !== 'production') {
+          if (data.paymentMethod) {
+            order.paymentMethod = data.paymentMethod.toLowerCase().trim();
+          }
+          if (data.isPaid !== undefined) {
+            if (data.isPaid === true || isExplicitTestCorruption) {
+              order.isPaid = data.isPaid;
+            }
+          }
+          if (data.paymentStatus) {
+            if (data.paymentStatus === 'paid' || isExplicitTestCorruption) {
+              order.paymentStatus = data.paymentStatus;
+            }
+          }
+          if (isExplicitTestCorruption) {
             if (data.txnId !== undefined) order.txnId = data.txnId;
             if (data.paymentDetails !== undefined) order.paymentDetails = data.paymentDetails;
+          }
+
+          if (isFinancialAction) {
+            const actor = getActorInfo(data, 'counter_staff');
+            await recordAuditLog({
+              actorId: actor.actorId,
+              actorRole: actor.actorRole,
+              restaurantId: restaurant.id,
+              action: (data.status === 'paid' || order.status === 'paid' || data.isPaid === true) ? 'ORDER_PAYMENT_SETTLED' : 'ORDER_FINANCIAL_UPDATED',
+              entityType: 'order',
+              entityId: orderId,
+              diff: {
+                status: order.status,
+                isPaid: order.isPaid,
+                paymentStatus: order.paymentStatus,
+                paymentMethod: order.paymentMethod,
+                total: order.total
+              }
+            });
           }
 
           if (order.status === 'cancelled') {
@@ -5261,7 +5390,7 @@ const server = http.createServer(async (req, res) => {
             order.isPaid = true;
             order.paymentStatus = 'paid';
             if (!order.paidAt) order.paidAt = new Date().toISOString();
-            if (data.paymentMethod) order.paymentMethod = data.paymentMethod;
+            if (data.paymentMethod) order.paymentMethod = data.paymentMethod.toLowerCase().trim();
 
             // Check if food was already served OR if cashier explicitly closes table
             const isFoodServed = order.kitchenStatus === 'served';
@@ -5272,8 +5401,8 @@ const server = http.createServer(async (req, res) => {
               restaurant.completedOrders.push(JSON.parse(JSON.stringify(order)));
               restaurant.orders = restaurant.orders.filter(o => o.id !== orderId);
 
-              // Update customer lifetime spend & loyalty coins
-              if (order.customerPhone && restaurant.customers) {
+              // Update customer lifetime spend & loyalty coins (prevent double-counting if already settled online)
+              if (!orderIsAlreadyPaid && order.customerPhone && restaurant.customers) {
                 const cust = restaurant.customers.find(c => c.phone === order.customerPhone);
                 if (cust) {
                   cust.totalSpent = (cust.totalSpent || 0) + order.total;

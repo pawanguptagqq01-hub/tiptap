@@ -91,9 +91,9 @@ async function runPhase10Tests() {
   const { tempDbPath, cleanup, getInitialRaw } = createIsolatedTestDb('phase10-payment');
   const initialHash = crypto.createHash('sha256').update(getInitialRaw()).digest('hex');
 
-  // Seed dedicated test tables 91-98 for Section 9k in isolated temporary database
+  // Seed dedicated test tables 91-100 for Section 9k and Section 11 in isolated temporary database
   const tempDbObj = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
-  for (let tid = 91; tid <= 98; tid++) {
+  for (let tid = 91; tid <= 100; tid++) {
     if (!tempDbObj.restaurants['tiptap-bistro'].tables.find(t => t.id === tid)) {
       tempDbObj.restaurants['tiptap-bistro'].tables.push({
         id: tid,
@@ -4597,10 +4597,12 @@ async function runPhase10Tests() {
 
     // Change order state to isPaid: false via authorized counter PATCH (deliberate test corruption)
     const patch9kKRes = await makeRequest('PATCH', `/api/orders/${order9kKId}?restaurant=tiptap-bistro`, {
-      'x-staff-pin': '1234'
+      'x-staff-pin': '1234',
+      'x-test-corrupt-state': 'true'
     }, {
       isPaid: false,
-      staffPin: '1234'
+      staffPin: '1234',
+      testCorruptState: true
     });
     assert(patch9kKRes.statusCode === 200, 'Test K (9k): Order isPaid set to false via authorized PATCH');
 
@@ -4681,10 +4683,12 @@ async function runPhase10Tests() {
 
     // Change paymentStatus to 'pending' via authorized PATCH (deliberate test corruption)
     const patch9kLRes = await makeRequest('PATCH', `/api/orders/${order9kLId}?restaurant=tiptap-bistro`, {
-      'x-staff-pin': '1234'
+      'x-staff-pin': '1234',
+      'x-test-corrupt-state': 'true'
     }, {
       paymentStatus: 'pending',
-      staffPin: '1234'
+      staffPin: '1234',
+      testCorruptState: true
     });
     assert(patch9kLRes.statusCode === 200, 'Test L (9k): Order paymentStatus set to pending');
 
@@ -4765,7 +4769,14 @@ async function runPhase10Tests() {
     assert(whRes9kM1Init.statusCode === 200, 'Test M1 (9k): Order M1 initial settlement succeeded');
 
     // Set txnId to null (deliberate test corruption)
-    const patch9kM1Res = await makeRequest('PATCH', `/api/orders/${order9kM1Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, { txnId: null, staffPin: '1234' });
+    const patch9kM1Res = await makeRequest('PATCH', `/api/orders/${order9kM1Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234',
+      'x-test-corrupt-state': 'true'
+    }, {
+      txnId: null,
+      staffPin: '1234',
+      testCorruptState: true
+    });
     assert(patch9kM1Res.statusCode === 200, 'Test M1 (9k): Order txnId set to null via authorized PATCH');
 
     // Capture SNAPSHOT BEFORE rejected replay
@@ -4843,9 +4854,13 @@ async function runPhase10Tests() {
     assert(whRes9kM2Init.statusCode === 200, 'Test M2 (9k): Order M2 initial settlement succeeded');
 
     // Set paymentDetails without paymentId (deliberate test corruption)
-    const patch9kM2Res = await makeRequest('PATCH', `/api/orders/${order9kM2Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, {
+    const patch9kM2Res = await makeRequest('PATCH', `/api/orders/${order9kM2Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234',
+      'x-test-corrupt-state': 'true'
+    }, {
       paymentDetails: { provider: 'test', txnId: paymentId9kM2 },
-      staffPin: '1234'
+      staffPin: '1234',
+      testCorruptState: true
     });
     assert(patch9kM2Res.statusCode === 200, 'Test M2 (9k): Order paymentDetails updated without paymentId via authorized PATCH');
 
@@ -4924,9 +4939,13 @@ async function runPhase10Tests() {
     assert(whRes9kM3Init.statusCode === 200, 'Test M3 (9k): Order M3 initial settlement succeeded');
 
     // Set conflicting paymentDetails.paymentId (deliberate test corruption)
-    const patch9kM3Res = await makeRequest('PATCH', `/api/orders/${order9kM3Id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' }, {
+    const patch9kM3Res = await makeRequest('PATCH', `/api/orders/${order9kM3Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234',
+      'x-test-corrupt-state': 'true'
+    }, {
       paymentDetails: { provider: 'test', paymentId: `pay_conflict_${Date.now()}`, txnId: paymentId9kM3 },
-      staffPin: '1234'
+      staffPin: '1234',
+      testCorruptState: true
     });
     assert(patch9kM3Res.statusCode === 200, 'Test M3 (9k): Order paymentDetails updated with conflicting paymentId via authorized PATCH');
 
@@ -5142,6 +5161,312 @@ async function runPhase10Tests() {
     assert(menuHtml.includes('launchRazorpayCheckout'), 'Customer UI implements official launchRazorpayCheckout()');
     assert(menuHtml.includes('setPaymentStateUI'), 'Customer UI implements real-time state UI handler');
     assert(!menuHtml.includes('1-Tap Instant UPI'), 'Customer UI buttons do not falsely claim direct 1-tap app launch without checkout');
+
+    // ----------------------------------------------------
+    // SECTION 11: PAYMENT STATE AUTHORIZATION & TRANSITION INTEGRITY
+    // ----------------------------------------------------
+    console.log('\n--- 11. PAYMENT STATE AUTHORIZATION & TRANSITION INTEGRITY ---');
+
+    // 11.1: Setup test order on Table 99
+    const orderSec11Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 99,
+      tableName: 'Table 99',
+      customerPhone: '9876543999',
+      customerName: 'Sec11 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // 280 + 14 = 294
+    });
+    assert(orderSec11Res.statusCode === 201, 'Section 11: Setup order created on Table 99');
+    const orderSec11Id = orderSec11Res.data.id;
+
+    // Snapshot state before unauthorized/kitchen attempts
+    const dbSnapBefore11 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateBefore11 = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderBefore11 = (stateBefore11.data.orders || []).find(o => o.id === orderSec11Id);
+    const tableBefore11 = (stateBefore11.data.tables || []).find(t => t.id === 99);
+    const custBefore11 = (stateBefore11.data.customers || []).find(c => c.phone === '9876543999');
+
+    // 11.2: Kitchen PIN cannot set paymentStatus to pending, paid, or another financial state
+    console.log('  [TEST 11.2]: Kitchen PIN cannot modify financial or payment state');
+    // Attempt 1: Kitchen PIN setting paymentStatus: 'pending'
+    const kPinRes1 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '5678'
+    }, {
+      paymentStatus: 'pending',
+      staffPin: '5678'
+    });
+    assert(kPinRes1.statusCode === 401, 'Section 11: Kitchen PIN setting paymentStatus: pending strictly rejected with HTTP 401');
+    assert(kPinRes1.data.error && kPinRes1.data.error.includes('Cashier / Manager PIN required'), 'Section 11: Error confirms counter authorization required');
+
+    // Attempt 2: Kitchen PIN setting paymentStatus: 'paid'
+    const kPinRes2 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '5678'
+    }, {
+      paymentStatus: 'paid',
+      staffPin: '5678'
+    });
+    assert(kPinRes2.statusCode === 401, 'Section 11: Kitchen PIN setting paymentStatus: paid strictly rejected with HTTP 401');
+
+    // Attempt 3: Kitchen PIN setting isPaid: true
+    const kPinRes3 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '5678'
+    }, {
+      isPaid: true,
+      staffPin: '5678'
+    });
+    assert(kPinRes3.statusCode === 401, 'Section 11: Kitchen PIN setting isPaid: true strictly rejected with HTTP 401');
+
+    // Attempt 4: Kitchen PIN updating kitchenStatus AND sneaking paymentStatus
+    const kPinRes4 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '5678'
+    }, {
+      kitchenStatus: 'preparing',
+      paymentStatus: 'paid',
+      staffPin: '5678'
+    });
+    assert(kPinRes4.statusCode === 401, 'Section 11: Kitchen PIN sneaked paymentStatus in kitchen update strictly rejected with HTTP 401');
+
+    // Attempt 5: Kitchen PIN modifying paymentMethod
+    const kPinRes5 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '5678'
+    }, {
+      paymentMethod: 'cash',
+      staffPin: '5678'
+    });
+    assert(kPinRes5.statusCode === 401, 'Section 11: Kitchen PIN modifying paymentMethod strictly rejected with HTTP 401');
+
+    // 11.3: Unauthorized users cannot change isPaid or financial state
+    console.log('  [TEST 11.3]: Unauthorized users cannot modify isPaid or payment state');
+    // No credentials
+    const unauthRes1 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {}, {
+      isPaid: true
+    });
+    assert(unauthRes1.statusCode === 401, 'Section 11: Unauthenticated request to change isPaid strictly rejected with HTTP 401');
+
+    // Invalid PIN
+    const unauthRes2 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '9999'
+    }, {
+      isPaid: true,
+      staffPin: '9999'
+    });
+    assert(unauthRes2.statusCode === 401, 'Section 11: Invalid PIN to change isPaid strictly rejected with HTTP 401');
+
+    // 11.4: Strict type and value validation
+    console.log('  [TEST 11.4]: Invalid types and unsupported payment statuses are rejected');
+    // String isPaid
+    const typeRes1 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      isPaid: 'true',
+      staffPin: '1234'
+    });
+    assert(typeRes1.statusCode === 400, 'Section 11: String isPaid strictly rejected with HTTP 400');
+    assert(typeRes1.data.error && typeRes1.data.error.includes('must be a boolean'), 'Section 11: Error confirms isPaid boolean requirement');
+
+    // Number isPaid
+    const typeRes2 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      isPaid: 1,
+      staffPin: '1234'
+    });
+    assert(typeRes2.statusCode === 400, 'Section 11: Number isPaid strictly rejected with HTTP 400');
+
+    // Invalid paymentStatus
+    const typeRes3 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentStatus: 'fraudulent_status',
+      staffPin: '1234'
+    });
+    assert(typeRes3.statusCode === 400, 'Section 11: Invalid paymentStatus value strictly rejected with HTTP 400');
+
+    // Number paymentStatus
+    const typeRes4 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentStatus: 1234,
+      staffPin: '1234'
+    });
+    assert(typeRes4.statusCode === 400, 'Section 11: Number paymentStatus strictly rejected with HTTP 400');
+
+    // Invalid paymentMethod
+    const typeRes5 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentMethod: 'crypto_token',
+      staffPin: '1234'
+    });
+    assert(typeRes5.statusCode === 400, 'Section 11: Unsupported paymentMethod strictly rejected with HTTP 400');
+
+    // Invalid order status
+    const typeRes6 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'non_existent_status',
+      staffPin: '1234'
+    });
+    assert(typeRes6.statusCode === 400, 'Section 11: Invalid order status strictly rejected with HTTP 400');
+
+    // Invalid kitchenStatus
+    const typeRes7 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      kitchenStatus: 'eating',
+      staffPin: '1234'
+    });
+    assert(typeRes7.statusCode === 400, 'Section 11: Invalid kitchenStatus strictly rejected with HTTP 400');
+
+    // Verify ZERO side effects after all unauthorized and invalid attempts
+    const stateAfterInvalid = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderAfterInvalid = (stateAfterInvalid.data.orders || []).find(o => o.id === orderSec11Id);
+    const tableAfterInvalid = (stateAfterInvalid.data.tables || []).find(t => t.id === 99);
+    const custAfterInvalid = (stateAfterInvalid.data.customers || []).find(c => c.phone === '9876543999');
+
+    assert(orderAfterInvalid && orderAfterInvalid.isPaid === false, 'Section 11: Order isPaid strictly remains false');
+    assert(orderAfterInvalid && orderAfterInvalid.paymentStatus === 'unpaid', 'Section 11: Order paymentStatus strictly remains unpaid');
+    assert(tableAfterInvalid && tableAfterInvalid.status === 'occupied', 'Section 11: Table 99 status unchanged');
+    assert(tableAfterInvalid && tableAfterInvalid.currentOrderId === orderSec11Id, 'Section 11: Table 99 currentOrderId unchanged');
+    assert(custAfterInvalid && custAfterInvalid.totalSpent === custBefore11.totalSpent, 'Section 11: Customer spend unchanged');
+    assert(custAfterInvalid && custAfterInvalid.loyaltyPoints === custBefore11.loyaltyPoints, 'Section 11: Customer loyalty unchanged');
+
+    // 11.5: Settle Order 11 via Valid Razorpay Webhook
+    console.log('  [TEST 11.5]: Valid Razorpay webhook settlement still works');
+    const payOrderSec11Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderSec11Id });
+    assert(payOrderSec11Res.statusCode === 200, 'Section 11: Payment order created');
+    const rzpOrderSec11Id = payOrderSec11Res.data.razorpayOrderId;
+    const paymentIdSec11 = `pay_sec11_${Date.now()}`;
+    const eventIdSec11 = `evt_sec11_${Date.now()}`;
+
+    const whPayloadSec11 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdSec11,
+            order_id: rzpOrderSec11Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigSec11 = computeWebhookSignature(whPayloadSec11);
+    const whResSec11 = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigSec11,
+      'x-razorpay-event-id': eventIdSec11
+    }, whPayloadSec11);
+    assert(whResSec11.statusCode === 200, 'Section 11: Valid Razorpay webhook accepted with HTTP 200');
+    assert(whResSec11.data.settled === true, 'Section 11: Webhook reports settled: true');
+
+    const stateAfterRzp = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderAfterRzp = (stateAfterRzp.data.orders || []).find(o => o.id === orderSec11Id);
+    assert(orderAfterRzp && orderAfterRzp.isPaid === true, 'Section 11: Order isPaid is true after webhook');
+    assert(orderAfterRzp && orderAfterRzp.paymentStatus === 'paid', 'Section 11: Order paymentStatus is paid after webhook');
+    assert(orderAfterRzp && orderAfterRzp.txnId === paymentIdSec11, 'Section 11: Order txnId matches paymentId');
+
+    // 11.6: Ordinary staff cannot reverse a Razorpay-settled order
+    console.log('  [TEST 11.6]: Ordinary staff cannot reverse a Razorpay-settled order');
+    const dbSnapBeforeRev = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateBeforeRev = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const payRecordBeforeRev = JSON.stringify(dbSnapBeforeRev.processedPayments[paymentIdSec11]);
+    const evtRecordBeforeRev = JSON.stringify(dbSnapBeforeRev.processedWebhookEvents[eventIdSec11]);
+    const custBeforeRev = (stateBeforeRev.data.customers || []).find(c => c.phone === '9876543999');
+    const tableBeforeRev = (stateBeforeRev.data.tables || []).find(t => t.id === 99);
+
+    // Attempt 6a: Ordinary staff PATCH setting isPaid: false without test override flag
+    const revRes1 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      isPaid: false,
+      staffPin: '1234'
+    });
+    assert(revRes1.statusCode === 400, 'Section 11: Ordinary staff setting isPaid: false on settled order rejected with HTTP 400');
+    assert(revRes1.data.error && revRes1.data.error.includes('Reversing a settled or paid order'), 'Section 11: Error confirms reversal rejected');
+
+    // Attempt 6b: Ordinary staff PATCH setting paymentStatus: 'pending' without test override flag
+    const revRes2 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentStatus: 'pending',
+      staffPin: '1234'
+    });
+    assert(revRes2.statusCode === 400, 'Section 11: Ordinary staff setting paymentStatus: pending on settled order rejected with HTTP 400');
+
+    // Attempt 6c: Ordinary staff PATCH setting paymentStatus: 'unpaid'
+    const revRes3 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      paymentStatus: 'unpaid',
+      staffPin: '1234'
+    });
+    assert(revRes3.statusCode === 400, 'Section 11: Ordinary staff setting paymentStatus: unpaid on settled order rejected with HTTP 400');
+
+    // Attempt 6d: Ordinary staff modifying txnId on settled order
+    const revRes4 = await makeRequest('PATCH', `/api/orders/${orderSec11Id}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      txnId: null,
+      staffPin: '1234'
+    });
+    assert(revRes4.statusCode === 400, 'Section 11: Ordinary staff clearing txnId on settled order rejected with HTTP 400');
+
+    // Verify ZERO side effects after reversal attempts
+    const dbSnapAfterRev = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const stateAfterRev = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const orderAfterRev = (stateAfterRev.data.orders || []).find(o => o.id === orderSec11Id);
+    const tableAfterRev = (stateAfterRev.data.tables || []).find(t => t.id === 99);
+    const custAfterRev = (stateAfterRev.data.customers || []).find(c => c.phone === '9876543999');
+
+    assert(JSON.stringify(dbSnapAfterRev.processedPayments[paymentIdSec11]) === payRecordBeforeRev, 'Section 11: processedPayments record unchanged after rejected reversals');
+    assert(JSON.stringify(dbSnapAfterRev.processedWebhookEvents[eventIdSec11]) === evtRecordBeforeRev, 'Section 11: processedWebhookEvents record unchanged after rejected reversals');
+    assert(orderAfterRev && orderAfterRev.isPaid === true, 'Section 11: Order isPaid remains strictly true');
+    assert(orderAfterRev && orderAfterRev.paymentStatus === 'paid', 'Section 11: Order paymentStatus remains strictly paid');
+    assert(orderAfterRev && orderAfterRev.txnId === paymentIdSec11, 'Section 11: Order txnId remains strictly unchanged');
+    assert(tableAfterRev && tableAfterRev.status === tableBeforeRev.status, 'Section 11: Table status unchanged');
+    assert(tableAfterRev && tableAfterRev.currentOrderId === tableBeforeRev.currentOrderId, 'Section 11: Table currentOrderId unchanged');
+    assert(custAfterRev && custAfterRev.totalSpent === custBeforeRev.totalSpent, 'Section 11: Customer spend unchanged');
+    assert(custAfterRev && custAfterRev.loyaltyPoints === custBeforeRev.loyaltyPoints, 'Section 11: Customer loyalty unchanged');
+
+    // 11.7: Legitimate authorized cash settlement still works
+    console.log('  [TEST 11.7]: Legitimate authorized cash settlement still works');
+    const orderCashRes = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 100,
+      tableName: 'Table 100',
+      customerPhone: '9876543100',
+      customerName: 'Cash User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }]
+    });
+    assert(orderCashRes.statusCode === 201, 'Section 11: Cash test order placed on Table 100');
+    const orderCashId = orderCashRes.data.id;
+
+    // Authorized counter staff settles order via cash settlement workflow
+    const cashSettleRes = await makeRequest('PATCH', `/api/orders/${orderCashId}?restaurant=tiptap-bistro`, {
+      'x-staff-pin': '1234'
+    }, {
+      status: 'paid',
+      closeTable: true,
+      paymentMethod: 'cash',
+      staffPin: '1234'
+    });
+    assert(cashSettleRes.statusCode === 200, 'Section 11: Authorized counter cash settlement accepted with HTTP 200');
+    assert(cashSettleRes.data.order && cashSettleRes.data.order.isPaid === true, 'Section 11: Cash settled order marked isPaid: true');
+    assert(cashSettleRes.data.order && cashSettleRes.data.order.paymentStatus === 'paid', 'Section 11: Cash settled order paymentStatus marked paid');
+    assert(cashSettleRes.data.order && cashSettleRes.data.order.paymentMethod === 'cash', 'Section 11: Cash settled order paymentMethod marked cash');
+
+    // Verify Table 100 transitioned to cleaning and freed
+    const stateAfterCash = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const table100After = (stateAfterCash.data.tables || []).find(t => t.id === 100);
+    assert(table100After && table100After.status === 'cleaning', 'Section 11: Table 100 transitioned to cleaning');
+    assert(table100After && table100After.currentOrderId === null, 'Section 11: Table 100 currentOrderId cleared');
+
+    // Verify customer lifetime spend updated exactly once for cash settlement
+    const cust100After = (stateAfterCash.data.customers || []).find(c => c.phone === '9876543100');
+    assert(cust100After && cust100After.totalSpent === 294, 'Section 11: Customer spend updated exactly once for cash payment (294)');
+    assert(cust100After && cust100After.loyaltyPoints === 29, 'Section 11: Customer loyalty updated exactly once for cash payment (29)');
 
     console.log('\n================================================================');
     console.log(`🏁 PHASE 10 TEST RESULTS: ${passed} PASSED | ${failed} FAILED`);
