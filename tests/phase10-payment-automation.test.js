@@ -2786,6 +2786,339 @@ async function runPhase10Tests() {
     assert(loserTable && loserTable.currentOrderId === loserOrderId, 'Test G: Loser table still bound to loser order');
 
     // ----------------------------------------------------
+    // SECTION 9h: ACTIVE-ORDER EVENT ID BINDING ON SETTLED PAYMENTS (A THROUGH F)
+    // ----------------------------------------------------
+    console.log('\n--- 9h. ACTIVE-ORDER EVENT ID BINDING ON SETTLED PAYMENTS (A THROUGH F) ---');
+
+    // TEST A: First settlement of a payment, followed by a new event ID for the same payment and same order
+    console.log('\n  [TEST A]: First settlement followed by new event ID binding on same active order');
+    const orderM1Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 56,
+      tableName: 'Table 56',
+      customerPhone: '9876543270',
+      customerName: 'M1 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderM1Id = orderM1Res.data.id;
+    const payOrderM1Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderM1Id });
+    const rzpOrderM1Id = payOrderM1Res.data.razorpayOrderId;
+    const paymentIdM1 = `pay_m1_${Date.now()}`;
+    const eventIdM1A = `evt_m1a_${Date.now()}`;
+
+    const whPayloadM1A = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdM1,
+            order_id: rzpOrderM1Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigM1A = computeWebhookSignature(whPayloadM1A);
+    const whResM1A = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigM1A,
+      'x-razorpay-event-id': eventIdM1A
+    }, whPayloadM1A);
+    assert(whResM1A.statusCode === 200, 'Test A (9h): First settlement succeeds with HTTP 200');
+    assert(whResM1A.data.settled === true, 'Test A (9h): Order M1 settled on first webhook');
+
+    // Now send a SECOND webhook with a NEW event ID for the SAME already-settled payment and order
+    const eventIdM1B = `evt_m1b_${Date.now()}`;
+    const whPayloadM1B = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdM1,
+            order_id: rzpOrderM1Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigM1B = computeWebhookSignature(whPayloadM1B);
+    const whResM1B = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigM1B,
+      'x-razorpay-event-id': eventIdM1B
+    }, whPayloadM1B);
+    assert(whResM1B.statusCode === 200, 'Test A (9h): Second webhook with new event ID on settled payment returns HTTP 200');
+    assert(whResM1B.data.alreadySettled === true, 'Test A (9h): Response confirms order was already settled');
+
+    // Verify eventIdM1B is persisted in the database with all three identity fields
+    const dbSnapM1 = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const persistedEvtM1B = dbSnapM1.processedWebhookEvents[eventIdM1B];
+    assert(persistedEvtM1B, 'Test A (9h): New event ID on already-settled payment is persisted in database');
+    assert(persistedEvtM1B.orderId === orderM1Id, 'Test A (9h): Persisted event record orderId matches orderM1Id');
+    assert(persistedEvtM1B.restaurantId === 'tiptap-bistro', 'Test A (9h): Persisted event record restaurantId matches tiptap-bistro');
+    assert(persistedEvtM1B.paymentId === paymentIdM1, 'Test A (9h): Persisted event record paymentId matches paymentIdM1');
+
+    // Verify customer spend is not duplicated
+    const custM1State = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custM1 = (custM1State.data.customers || []).find(c => c.phone === '9876543270');
+    assert(custM1 && custM1.totalSpent === 294, 'Test A (9h): Customer M1 spend not duplicated (294)');
+    assert(custM1 && custM1.loyaltyPoints === 29, 'Test A (9h): Customer M1 loyalty points not duplicated (29)');
+
+    // TEST B: Reuse that newly persisted event ID against a different order -> HTTP 400
+    console.log('\n  [TEST B]: Reuse newly persisted event ID against different order rejection');
+    const orderM2Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 57,
+      tableName: 'Table 57',
+      customerPhone: '9876543271',
+      customerName: 'M2 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderM2Id = orderM2Res.data.id;
+    const payOrderM2Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderM2Id });
+    const rzpOrderM2Id = payOrderM2Res.data.razorpayOrderId;
+    const paymentIdM2 = `pay_m2_${Date.now()}`;
+
+    const whPayloadM2 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdM2,
+            order_id: rzpOrderM2Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigM2 = computeWebhookSignature(whPayloadM2);
+    const rejectM2Res = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigM2,
+      'x-razorpay-event-id': eventIdM1B // reusing eventIdM1B!
+    }, whPayloadM2);
+    assert(rejectM2Res.statusCode === 400, 'Test B (9h): Reusing eventIdM1B against different order rejected with HTTP 400');
+    assert(rejectM2Res.data.error && rejectM2Res.data.error.includes('ownership mismatch'), 'Test B (9h): Error confirms event ownership mismatch');
+
+    // Verify Order M2 remains unpaid
+    const checkM2State = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${orderM2Id}`);
+    const ordM2Doc = (checkM2State.data.orders || []).find(o => o.id === orderM2Id);
+    assert(ordM2Doc && ordM2Doc.isPaid === false, 'Test B (9h): Order M2 remains strictly unpaid');
+
+    // TEST C: Reuse that event ID against a different restaurant -> rejection
+    console.log('\n  [TEST C]: Reuse event ID against different restaurant cross-tenant rejection');
+    const orderM3Res = await makeRequest('POST', '/api/orders?restaurant=sharma-dhaba', {}, {
+      tableId: 6,
+      tableName: 'Table 6',
+      customerPhone: '9876543272',
+      customerName: 'M3 User',
+      items: [{ id: 'sharma-dhaba_m1', qty: 1 }] // total 294
+    });
+    const orderM3Id = orderM3Res.data.id;
+    const payOrderM3Res = await makeRequest('POST', '/api/create-payment-order?restaurant=sharma-dhaba', {}, { orderId: orderM3Id });
+    const rzpOrderM3Id = payOrderM3Res.data.razorpayOrderId;
+    const paymentIdM3 = `pay_m3_${Date.now()}`;
+
+    const whPayloadM3 = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdM3,
+            order_id: rzpOrderM3Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigM3 = computeWebhookSignature(whPayloadM3);
+    const rejectM3Res = await makeRequest('POST', '/api/payment-webhook?restaurant=sharma-dhaba', {
+      'x-razorpay-signature': whSigM3,
+      'x-razorpay-event-id': eventIdM1B // reusing eventIdM1B across restaurants!
+    }, whPayloadM3);
+    assert(rejectM3Res.statusCode === 400 || rejectM3Res.statusCode === 403, 'Test C (9h): Reusing eventIdM1B against different restaurant rejected');
+    assert(rejectM3Res.data.error && (rejectM3Res.data.error.includes('ownership mismatch') || rejectM3Res.data.error.includes('Cross-tenant')), 'Test C (9h): Error confirms cross-tenant/ownership rejection');
+
+    // Verify Order M3 remains unpaid
+    const checkM3State = await makeRequest('GET', `/api/state?restaurant=sharma-dhaba&orderId=${orderM3Id}`);
+    const ordM3Doc = (checkM3State.data.orders || []).find(o => o.id === orderM3Id);
+    assert(ordM3Doc && ordM3Doc.isPaid === false, 'Test C (9h): sharma-dhaba Order M3 remains strictly unpaid');
+
+    // TEST D: Concurrent requests where one uses already-processed payment and another claims same event ID for different order
+    console.log('\n  [TEST D]: Concurrent already-processed payment vs different order claiming same event ID');
+    // Clear tables 3 and 4
+    const stateBeforeD = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const ordT3 = (stateBeforeD.data.orders || []).find(o => o.tableId === 3 && !o.isPaid);
+    if (ordT3) await makeRequest('DELETE', `/api/orders/${ordT3.id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' });
+    const ordT4 = (stateBeforeD.data.orders || []).find(o => o.tableId === 4 && !o.isPaid);
+    if (ordT4) await makeRequest('DELETE', `/api/orders/${ordT4.id}?restaurant=tiptap-bistro`, { 'x-staff-pin': '1234' });
+
+    // Setup Order M4 (will be pre-settled)
+    const orderM4Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 3,
+      tableName: 'Table 3',
+      customerPhone: '9876543274',
+      customerName: 'M4 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderM4Id = orderM4Res.data.id;
+    const payOrderM4Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderM4Id });
+    const rzpOrderM4Id = payOrderM4Res.data.razorpayOrderId;
+    const paymentIdM4 = `pay_m4_${Date.now()}`;
+    const eventIdM4Init = `evt_m4_init_${Date.now()}`;
+
+    // Settle Order M4 initially
+    const whPayloadM4Init = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdM4,
+            order_id: rzpOrderM4Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigM4Init = computeWebhookSignature(whPayloadM4Init);
+    const whResM4Init = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigM4Init,
+      'x-razorpay-event-id': eventIdM4Init
+    }, whPayloadM4Init);
+    assert(whResM4Init.statusCode === 200, 'Test D (9h): Order M4 initial settlement succeeded');
+
+    // Setup fresh Order M5 (unsettled)
+    const orderM5Res = await makeRequest('POST', '/api/orders?restaurant=tiptap-bistro', {}, {
+      tableId: 4,
+      tableName: 'Table 4',
+      customerPhone: '9876543275',
+      customerName: 'M5 User',
+      items: [{ id: 'tiptap-bistro_m1', qty: 1 }] // total 294
+    });
+    const orderM5Id = orderM5Res.data.id;
+    const payOrderM5Res = await makeRequest('POST', '/api/create-payment-order?restaurant=tiptap-bistro', {}, { orderId: orderM5Id });
+    const rzpOrderM5Id = payOrderM5Res.data.razorpayOrderId;
+    const paymentIdM5 = `pay_m5_${Date.now()}`;
+
+    // Shared race event ID:
+    const eventIdRaceM = `evt_race_m_${Date.now()}`;
+
+    // Request 1: Order M4 with already-processed paymentIdM4 and eventIdRaceM
+    const whPayloadM4Race = JSON.stringify({
+      entity: 'event',
+      event: 'order.paid',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdM4,
+            order_id: rzpOrderM4Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigM4Race = computeWebhookSignature(whPayloadM4Race);
+
+    // Request 2: Order M5 with unsettled paymentIdM5 and eventIdRaceM
+    const whPayloadM5Race = JSON.stringify({
+      entity: 'event',
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: paymentIdM5,
+            order_id: rzpOrderM5Id,
+            amount: 29400,
+            currency: 'INR',
+            status: 'captured',
+            method: 'upi'
+          }
+        }
+      }
+    });
+    const whSigM5Race = computeWebhookSignature(whPayloadM5Race);
+
+    const [raceRes1M, raceRes2M] = await Promise.all([
+      makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+        'x-razorpay-signature': whSigM4Race,
+        'x-razorpay-event-id': eventIdRaceM
+      }, whPayloadM4Race),
+      makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+        'x-razorpay-signature': whSigM5Race,
+        'x-razorpay-event-id': eventIdRaceM
+      }, whPayloadM5Race)
+    ]);
+
+    const winnerResM = raceRes1M.statusCode === 200 ? raceRes1M : (raceRes2M.statusCode === 200 ? raceRes2M : null);
+    const loserResM = raceRes1M.statusCode === 400 ? raceRes1M : (raceRes2M.statusCode === 400 ? raceRes2M : null);
+    assert(winnerResM !== null, 'Test D (9h): Exactly one concurrent request succeeds with HTTP 200');
+    assert(loserResM !== null, 'Test D (9h): Conflicting concurrent request rejected with HTTP 400');
+    assert(loserResM.data.error && (loserResM.data.error.includes('ownership mismatch') || loserResM.data.error.includes('already consumed')), 'Test D (9h): Rejection confirms ownership mismatch or conflicting payment');
+
+    // TEST E: Verify rejected requests do not modify payment records, order state, customer spend, loyalty points, or tables
+    console.log('\n  [TEST E]: Verify rejected request zero side effects on state');
+    const dbSnapRaceM = JSON.parse(fs.readFileSync(tempDbPath, 'utf8'));
+    const finalEvtRaceM = dbSnapRaceM.processedWebhookEvents[eventIdRaceM];
+    assert(finalEvtRaceM, 'Test E (9h): Event record persisted in database');
+
+    const winnerOrderIdM = (raceRes1M.statusCode === 200) ? orderM4Id : orderM5Id;
+    const winnerPaymentIdM = (raceRes1M.statusCode === 200) ? paymentIdM4 : paymentIdM5;
+    const loserOrderIdM = (raceRes1M.statusCode === 200) ? orderM5Id : orderM4Id;
+    const loserPhoneM = (raceRes1M.statusCode === 200) ? '9876543275' : '9876543274';
+
+    assert(finalEvtRaceM.orderId === winnerOrderIdM, 'Test E (9h): Event record strictly bound to winner orderId');
+    assert(finalEvtRaceM.paymentId === winnerPaymentIdM, 'Test E (9h): Event record strictly bound to winner paymentId');
+
+    // If Order M5 lost: verify M5 remains strictly unpaid, customer M5 spend is 0, table 4 occupied
+    if (loserOrderIdM === orderM5Id) {
+      const checkM5State = await makeRequest('GET', `/api/state?restaurant=tiptap-bistro&orderId=${orderM5Id}`);
+      const m5Doc = (checkM5State.data.orders || []).find(o => o.id === orderM5Id);
+      assert(m5Doc && m5Doc.isPaid === false, 'Test E (9h): Loser Order M5 remains unpaid');
+      assert(m5Doc && m5Doc.paymentStatus !== 'paid', 'Test E (9h): Loser Order M5 paymentStatus is not paid');
+
+      const custM5State = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+      const custM5 = (custM5State.data.customers || []).find(c => c.phone === loserPhoneM);
+      assert((custM5 ? custM5.totalSpent : 0) === 0, 'Test E (9h): Loser Customer M5 spend remains 0');
+      assert((custM5 ? custM5.loyaltyPoints : 0) === 0, 'Test E (9h): Loser Customer M5 loyalty points remain 0');
+
+      const tableM5 = (custM5State.data.tables || []).find(t => t.id === 4);
+      assert(tableM5 && tableM5.status === 'occupied', 'Test E (9h): Table 4 remains occupied');
+      assert(tableM5 && tableM5.currentOrderId === orderM5Id, 'Test E (9h): Table 4 still bound to Order M5');
+    }
+
+    // TEST F: Legitimate same-order idempotent retries still return HTTP 200 without duplicate spend or loyalty increments
+    console.log('\n  [TEST F]: Legitimate same-order idempotent retries return HTTP 200 with zero duplicate spend');
+    const retryResFM = await makeRequest('POST', '/api/payment-webhook?restaurant=tiptap-bistro', {
+      'x-razorpay-signature': whSigM1B,
+      'x-razorpay-event-id': eventIdM1B
+    }, whPayloadM1B);
+    assert(retryResFM.statusCode === 200, 'Test F (9h): Idempotent retry with eventIdM1B returns HTTP 200');
+    assert(retryResFM.data.alreadyProcessed === true, 'Test F (9h): Response confirms alreadyProcessed: true');
+
+    const custM1CheckFinal = await makeRequest('GET', '/api/state?restaurant=tiptap-bistro', { 'x-staff-pin': '1234' });
+    const custM1Final = (custM1CheckFinal.data.customers || []).find(c => c.phone === '9876543270');
+    assert(custM1Final && custM1Final.totalSpent === 294, 'Test F (9h): Customer M1 spend remains strictly 294 after retry');
+    assert(custM1Final && custM1Final.loyaltyPoints === 29, 'Test F (9h): Customer M1 loyalty points remain strictly 29 after retry');
+
+    // ----------------------------------------------------
     // SECTION 10: CUSTOMER UI COMPLETE UTR REMOVAL CHECK
     // ----------------------------------------------------
     console.log('\n--- 10. CUSTOMER UI (ZERO MANUAL UTR INPUT) VERIFICATION ---');
