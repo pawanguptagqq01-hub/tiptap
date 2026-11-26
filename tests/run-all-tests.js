@@ -34,7 +34,8 @@ const testSuites = [
   'tests/remediation-phase1.test.js',
   'tests/guest-workflows.test.js',
   'tests/security-remediation-batch1.test.js',
-  'tests/phase8-security-remediation.test.js'
+  'tests/phase8-security-remediation.test.js',
+  'tests/phase10-payment-automation.test.js'
 ];
 
 console.log('================================================================');
